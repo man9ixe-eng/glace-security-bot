@@ -1,0 +1,401 @@
+// src/utils/trelloClient.js
+
+const {
+  TRELLO_KEY,
+  TRELLO_TOKEN,
+  TRELLO_BOARD_ID,
+  TRELLO_LIST_INTERVIEW_ID,
+  TRELLO_LIST_TRAINING_ID,
+  TRELLO_LIST_MASS_SHIFT_ID,
+  TRELLO_LIST_COMPLETED_ID,
+  TRELLO_LABEL_SCHEDULED_ID,
+  TRELLO_LABEL_INTERVIEW_ID,
+  TRELLO_LABEL_TRAINING_ID,
+  TRELLO_LABEL_MASS_SHIFT_ID,
+  TRELLO_LABEL_COMPLETED_ID,
+  TRELLO_LABEL_CANCELED_ID,
+} = require("../config/trello");
+
+/**
+ * Flexible Trello request helper.
+ */
+async function trelloRequest(path, methodOrQuery, maybeQuery) {
+  if (!TRELLO_KEY || !TRELLO_TOKEN) {
+    console.error("[TRELLO] Missing TRELLO_KEY or TRELLO_TOKEN");
+    return { ok: false, status: 0, data: null };
+  }
+
+  let method = "GET";
+  let query = {};
+
+  if (typeof methodOrQuery === "string") {
+    method = methodOrQuery;
+    if (maybeQuery && typeof maybeQuery === "object") query = maybeQuery;
+  } else if (typeof methodOrQuery === "object" && methodOrQuery !== null) {
+    query = methodOrQuery;
+  }
+
+  const url = new URL(`https://api.trello.com/1${path}`);
+  url.searchParams.set("key", TRELLO_KEY);
+  url.searchParams.set("token", TRELLO_TOKEN);
+
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null) {
+      url.searchParams.set(k, String(v));
+    }
+  }
+
+  try {
+    const res = await fetch(url.toString(), { method: String(method).toUpperCase() });
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      // ignore non-JSON
+    }
+
+    if (res.status !== 200 && res.status !== 201) {
+      console.error("[TRELLO] API error", res.status, data);
+      return { ok: false, status: res.status, data };
+    }
+
+    return { ok: true, status: res.status, data };
+  } catch (err) {
+    console.error("[TRELLO] Network error", err);
+    return { ok: false, status: 0, data: null };
+  }
+}
+
+function getListIdForSessionType(sessionType) {
+  switch (sessionType) {
+    case "interview":
+      return TRELLO_LIST_INTERVIEW_ID;
+    case "training":
+      return TRELLO_LIST_TRAINING_ID;
+    case "mass_shift":
+      return TRELLO_LIST_MASS_SHIFT_ID;
+    default:
+      return null;
+  }
+}
+
+function getTypeLabelId(sessionType) {
+  switch (sessionType) {
+    case "interview":
+      return TRELLO_LABEL_INTERVIEW_ID;
+    case "training":
+      return TRELLO_LABEL_TRAINING_ID;
+    case "mass_shift":
+      return TRELLO_LABEL_MASS_SHIFT_ID;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Sort a Trello list by due date (earliest -> latest).
+ * Cards with no due date are pushed to the bottom.
+ *
+ * This works by re-setting each card's "pos" in the desired order.
+ */
+async function sortListByDue(listId) {
+  if (!listId) return false;
+
+  const res = await trelloRequest(`/lists/${listId}/cards`, "GET", {
+    fields: "id,due,name",
+    limit: "1000",
+  });
+
+  if (!res.ok || !Array.isArray(res.data)) {
+    console.error("[TRELLO] sortListByDue: failed to fetch cards", listId, res.status, res.data);
+    return false;
+  }
+
+  const cards = res.data.slice();
+
+  cards.sort((a, b) => {
+    const ad = a.due ? new Date(a.due).getTime() : Number.POSITIVE_INFINITY;
+    const bd = b.due ? new Date(b.due).getTime() : Number.POSITIVE_INFINITY;
+
+    if (ad !== bd) return ad - bd;
+
+    // tie-breaker: stable-ish by name then id
+    const an = String(a.name || "");
+    const bn = String(b.name || "");
+    if (an !== bn) return an.localeCompare(bn);
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
+
+  // Re-position in order. Use numeric positions 1..N.
+  // (Trello supports numeric pos values.)
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const pos = (i + 1) * 1000; // spacing helps Trello avoid collisions
+    const u = await trelloRequest(`/cards/${card.id}`, "PUT", { pos });
+
+    if (!u.ok) {
+      console.error("[TRELLO] sortListByDue: failed to set pos", card.id, u.status, u.data);
+      // continue trying the rest instead of hard failing
+    }
+  }
+
+  console.log("[TRELLO] Sorted list by due:", listId, "cards:", cards.length);
+  return true;
+}
+
+/**
+ * Create a session card on Trello.
+ *
+ * Returns:
+ *   { ok: true, id, url, listId } on success
+ *   { ok: false } on failure
+ */
+async function createSessionCard({ sessionType, dueISO, cardName, cardDesc }) {
+  const listId = getListIdForSessionType(sessionType);
+  if (!listId) {
+    console.error("[TRELLO] Unknown or unconfigured session type:", sessionType);
+    return { ok: false };
+  }
+
+  const typeLabelId = getTypeLabelId(sessionType);
+  const labelIds = [typeLabelId, TRELLO_LABEL_SCHEDULED_ID].filter(Boolean);
+
+  const name = String(cardName || "").trim();
+  const desc = String(cardDesc || "").trim();
+
+  if (!name) {
+    console.error("[TRELLO] createSessionCard: missing cardName");
+    return { ok: false };
+  }
+
+  const params = {
+    idList: listId,
+    name,
+    desc,
+    pos: "bottom",
+    due: dueISO || null,
+  };
+
+  if (labelIds.length > 0) {
+    params.idLabels = labelIds.join(",");
+  }
+
+  const result = await trelloRequest("/cards", "POST", params);
+
+  if (!result.ok) {
+    console.error("[TRELLO] Failed to create card:", result.status, result.data);
+    return { ok: false };
+  }
+
+  const url = (result.data && (result.data.shortUrl || result.data.url)) || null;
+  const id = (result.data && result.data.id) || null;
+
+  // ✅ Auto-sort the target list after adding
+  await sortListByDue(listId);
+
+  return { ok: true, id, url, listId };
+}
+
+/**
+ * Helper to describe how far from due time an action happened.
+ */
+function describeTimeDiff(dueISO) {
+  if (!dueISO) return "";
+
+  const dueTime = new Date(dueISO).getTime();
+  if (Number.isNaN(dueTime)) return "";
+
+  const now = Date.now();
+  const diffMinutes = Math.round((now - dueTime) / 60000);
+
+  if (diffMinutes > 0) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} after scheduled time`;
+  } else if (diffMinutes < 0) {
+    const m = Math.abs(diffMinutes);
+    return `${m} minute${m === 1 ? "" : "s"} before scheduled time`;
+  } else {
+    return "exactly on time";
+  }
+}
+
+/**
+ * Cancel a session card by Trello card ID or shortlink.
+ * - REMOVE SCHEDULED / COMPLETED
+ * - ADD CANCELED
+ * - Keep type labels
+ * - Mark due as complete
+ * - Move to COMPLETED list (top) if configured
+ * - Append minutes-from-due info to description
+ * - ✅ Auto-sorts source and destination lists
+ */
+async function cancelSessionCard({ cardId, reason }) {
+  if (!cardId) return false;
+
+  const cardRes = await trelloRequest(`/cards/${cardId}`, "GET", {
+    fields: "idLabels,desc,due,idList",
+  });
+
+  if (!cardRes.ok || !cardRes.data) {
+    console.error("[TRELLO] cancelSessionCard: failed to load card", cardId, cardRes.status, cardRes.data);
+    return false;
+  }
+
+  const card = cardRes.data;
+  const fromListId = card.idList;
+
+  const currentLabels = Array.isArray(card.idLabels) ? card.idLabels.slice() : [];
+
+  const labelSet = new Set(currentLabels);
+  if (TRELLO_LABEL_SCHEDULED_ID) labelSet.delete(TRELLO_LABEL_SCHEDULED_ID);
+  if (TRELLO_LABEL_COMPLETED_ID) labelSet.delete(TRELLO_LABEL_COMPLETED_ID);
+  if (TRELLO_LABEL_CANCELED_ID) labelSet.add(TRELLO_LABEL_CANCELED_ID);
+  const newLabels = Array.from(labelSet);
+
+  const timeDiffStr = describeTimeDiff(card.due);
+
+  const descLines = [];
+  if (card.desc && card.desc.trim().length > 0) descLines.push(card.desc.trim(), "");
+
+  descLines.push("❌ Session canceled.");
+  if (reason && reason.trim().length > 0) descLines.push(`Reason: ${reason.trim()}`);
+  if (timeDiffStr) descLines.push(`⏱️ Canceled ${timeDiffStr}.`);
+
+  const res1 = await trelloRequest(`/cards/${cardId}`, "PUT", {
+    idLabels: newLabels.length > 0 ? newLabels.join(",") : undefined,
+    dueComplete: "true",
+    desc: descLines.join("\n"),
+  });
+
+  if (!res1.ok) {
+    console.error("[TRELLO] cancelSessionCard: failed to update card", cardId, res1.status, res1.data);
+    return false;
+  }
+
+  let toListId = fromListId;
+
+  // Move to Completed list if configured
+  if (TRELLO_LIST_COMPLETED_ID) {
+    const moveRes = await trelloRequest(`/cards/${cardId}`, "PUT", {
+      idList: TRELLO_LIST_COMPLETED_ID,
+      pos: "top",
+    });
+    if (moveRes.ok) toListId = TRELLO_LIST_COMPLETED_ID;
+  }
+
+  // ✅ Auto-sort affected lists
+  if (fromListId) await sortListByDue(fromListId);
+  if (toListId && toListId !== fromListId) await sortListByDue(toListId);
+
+  console.log("[TRELLO] Canceled + moved card:", cardId);
+  return true;
+}
+
+/**
+ * Mark a session card as completed.
+ * - REMOVE SCHEDULED / CANCELED
+ * - ADD COMPLETED
+ * - Keep type labels
+ * - Mark due as complete
+ * - Move to COMPLETED list (top) if configured
+ * - Append minutes-from-due info to description
+ * - ✅ Auto-sorts source and destination lists
+ */
+async function completeSessionCard({ cardId }) {
+  if (!cardId) return false;
+
+  const cardRes = await trelloRequest(`/cards/${cardId}`, "GET", {
+    fields: "idLabels,desc,due,idList",
+  });
+
+  if (!cardRes.ok || !cardRes.data) {
+    console.error("[TRELLO] completeSessionCard: failed to load card", cardId, cardRes.status, cardRes.data);
+    return false;
+  }
+
+  const card = cardRes.data;
+  const fromListId = card.idList;
+
+  const currentLabels = Array.isArray(card.idLabels) ? card.idLabels.slice() : [];
+
+  const labelSet = new Set(currentLabels);
+  if (TRELLO_LABEL_SCHEDULED_ID) labelSet.delete(TRELLO_LABEL_SCHEDULED_ID);
+  if (TRELLO_LABEL_CANCELED_ID) labelSet.delete(TRELLO_LABEL_CANCELED_ID);
+  if (TRELLO_LABEL_COMPLETED_ID) labelSet.add(TRELLO_LABEL_COMPLETED_ID);
+  const newLabels = Array.from(labelSet);
+
+  const timeDiffStr = describeTimeDiff(card.due);
+
+  const descLines = [];
+  if (card.desc && card.desc.trim().length > 0) descLines.push(card.desc.trim(), "");
+
+  descLines.push("✅ Session marked complete.");
+  if (timeDiffStr) descLines.push(`⏱️ Completed ${timeDiffStr}.`);
+
+  const res1 = await trelloRequest(`/cards/${cardId}`, "PUT", {
+    idLabels: newLabels.length > 0 ? newLabels.join(",") : undefined,
+    dueComplete: "true",
+    desc: descLines.join("\n"),
+  });
+
+  if (!res1.ok) {
+    console.error("[TRELLO] completeSessionCard: failed to update card", cardId, res1.status, res1.data);
+    return false;
+  }
+
+  let toListId = fromListId;
+
+  if (TRELLO_LIST_COMPLETED_ID) {
+    const moveRes = await trelloRequest(`/cards/${cardId}`, "PUT", {
+      idList: TRELLO_LIST_COMPLETED_ID,
+      pos: "top",
+    });
+    if (moveRes.ok) toListId = TRELLO_LIST_COMPLETED_ID;
+  }
+
+  // ✅ Auto-sort affected lists
+  if (fromListId) await sortListByDue(fromListId);
+  if (toListId && toListId !== fromListId) await sortListByDue(toListId);
+
+  console.log("[TRELLO] Marked card complete:", cardId);
+  return true;
+}
+
+/**
+ * Move a card directly to Completed list (if configured).
+ * ✅ Auto-sorts source + destination.
+ */
+async function moveToCompletedList(cardId) {
+  if (!cardId || !TRELLO_LIST_COMPLETED_ID) return false;
+
+  const cardRes = await trelloRequest(`/cards/${cardId}`, "GET", {
+    fields: "idList",
+  });
+
+  const fromListId = cardRes.ok && cardRes.data ? cardRes.data.idList : null;
+
+  const res = await trelloRequest(`/cards/${cardId}`, "PUT", {
+    idList: TRELLO_LIST_COMPLETED_ID,
+    pos: "top",
+  });
+
+  if (!res.ok) {
+    console.error("[TRELLO] moveToCompletedList: failed", cardId, res.status, res.data);
+    return false;
+  }
+
+  if (fromListId) await sortListByDue(fromListId);
+  await sortListByDue(TRELLO_LIST_COMPLETED_ID);
+
+  console.log("[TRELLO] Moved card to completed list:", cardId);
+  return true;
+}
+
+module.exports = {
+  trelloRequest,
+  createSessionCard,
+  cancelSessionCard,
+  completeSessionCard,
+  moveToCompletedList,
+  sortListByDue, // exported in case you want to call it from other commands later
+};

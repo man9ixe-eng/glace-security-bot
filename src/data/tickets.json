@@ -1,0 +1,10 @@
+{
+  "counters": {
+    "corporate": 0,
+    "ingame": 0,
+    "kick": 0,
+    "ban": 0,
+    "pban": 0
+  },
+  "open": {}
+}

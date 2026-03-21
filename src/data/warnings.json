@@ -1,0 +1,72 @@
+{
+  "540171432462647307": {
+    "1440694879125504292": [
+      {
+        "moderatorId": "AUTOMOD",
+        "moderatorTag": "AutoMod",
+        "reason": "AutoMod: message spam",
+        "timestamp": 1763576279648
+      },
+      {
+        "moderatorId": "AUTOMOD",
+        "moderatorTag": "AutoMod",
+        "reason": "AutoMod: message spam",
+        "timestamp": 1763576280982
+      },
+      {
+        "moderatorId": "AUTOMOD",
+        "moderatorTag": "AutoMod",
+        "reason": "AutoMod: message spam",
+        "timestamp": 1763576281380
+      }
+    ],
+    "298295566658437131": [
+      {
+        "moderatorId": "525890709841117187",
+        "moderatorTag": "man9ixe",
+        "reason": "Rule 12 - No drama /arguing.",
+        "timestamp": 1765091539821
+      }
+    ],
+    "1380240665904152732": [
+      {
+        "moderatorId": "525890709841117187",
+        "moderatorTag": "man9ixe",
+        "reason": "Rule 4 - Use Channels Correctly - Post content only in the appropriate channels as indicated by their names and descriptions. Off-topic conversations and misuse of channels should be avoided to keep the server organized. Read <#1408033195139666002>  before opening a ticket.",
+        "timestamp": 1767654319174
+      }
+    ],
+    "1011791559177556190": [
+      {
+        "moderatorId": "1116095323325079672",
+        "moderatorTag": "hvousetour",
+        "reason": "Rule 6 - No offensive language/use of offensive language.",
+        "timestamp": 1767751181234
+      }
+    ],
+    "1052513700327727155": [
+      {
+        "moderatorId": "1360489482343813224",
+        "moderatorTag": "zvkeify",
+        "reason": "Rule 1 - Keep all communication respectful to maintain a positive and welcoming environment.",
+        "timestamp": 1768969357415
+      }
+    ],
+    "1409045344548818949": [
+      {
+        "moderatorId": "1360489482343813224",
+        "moderatorTag": "zvkeify",
+        "reason": "test",
+        "timestamp": 1768969475803
+      }
+    ],
+    "525890709841117187": [
+      {
+        "moderatorId": "1116095323325079672",
+        "moderatorTag": "tonightimvight",
+        "reason": "Testing.",
+        "timestamp": 1768969480838
+      }
+    ]
+  }
+}
