@@ -6,8 +6,7 @@ const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
 const BOARD_ID = process.env.STAFF_JOURNEY_BOARD_ID;
 
 // =========================
-// RANK -> LIST / LABEL / TEAM
-// Add more env vars as you create them
+// RANK CONFIG
 // =========================
 const RANK_CONFIG = {
   "Leadership Intern": {
@@ -15,7 +14,8 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_LEADERSHIP_INTERN,
     teamLabel: process.env.LABEL_INTERN,
   },
-  Supervisor: {
+
+  "Supervisor": {
     listId: process.env.SUPERVISOR_LIST_ID,
     rankLabel: process.env.LABEL_SUPERVISOR,
     teamLabel: process.env.LABEL_MANAGEMENT,
@@ -30,6 +30,7 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_HOTEL_MANAGER,
     teamLabel: process.env.LABEL_MANAGEMENT,
   },
+
   "Executive Manager": {
     listId: process.env.EXECUTIVE_MANAGER_LIST_ID,
     rankLabel: process.env.LABEL_EXECUTIVE_MANAGER,
@@ -40,6 +41,7 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_CORPORATE_INTERN,
     teamLabel: process.env.LABEL_SENIOR_MANAGEMENT,
   },
+
   "Junior Corporate": {
     listId: process.env.JUNIOR_CORPORATE_LIST_ID,
     rankLabel: process.env.LABEL_JUNIOR_CORPORATE,
@@ -55,6 +57,7 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_HEAD_CORPORATE,
     teamLabel: process.env.LABEL_CORPORATE,
   },
+
   "Board Of Directors": {
     listId: process.env.BOARD_OF_DIRECTORS_LIST_ID,
     rankLabel: process.env.LABEL_BOARD_OF_DIRECTORS,
@@ -65,6 +68,7 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_PRESIDENTIAL_INTERN,
     teamLabel: process.env.LABEL_CORPORATE_BOARD,
   },
+
   "Chief Executive Officer": {
     listId: process.env.CHIEF_EXECUTIVE_OFFICER_LIST_ID,
     rankLabel: process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
@@ -75,7 +79,7 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_VICE_PRESIDENT,
     teamLabel: process.env.LABEL_PRESIDENTIAL,
   },
-  President: {
+  "President": {
     listId: process.env.PRESIDENT_LIST_ID,
     rankLabel: process.env.LABEL_PRESIDENT,
     teamLabel: process.env.LABEL_PRESIDENTIAL,
@@ -109,20 +113,38 @@ const ALL_TEAM_LABELS = [
 ].filter(Boolean);
 
 // =========================
-// DATE HELPERS
+// HELPERS
 // =========================
+function getTodayMmDdYyyy() {
+  return new Date().toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
 function parseMmDdYyyy(dateStr) {
-  const [mm, dd, yyyy] = dateStr.split("/").map(Number);
+  if (!dateStr || typeof dateStr !== "string") return null;
+
+  const parts = dateStr.split("/");
+  if (parts.length !== 3) return null;
+
+  const [mm, dd, yyyy] = parts.map(Number);
+  if (!mm || !dd || !yyyy) return null;
+
   return { mm, dd, yyyy };
 }
 
 function localNoonFromMmDdYyyy(dateStr) {
-  const { mm, dd, yyyy } = parseMmDdYyyy(dateStr);
-  return new Date(yyyy, mm - 1, dd, 12, 0, 0, 0);
+  const parsed = parseMmDdYyyy(dateStr);
+  if (!parsed) return null;
+  return new Date(parsed.yyyy, parsed.mm - 1, parsed.dd, 12, 0, 0, 0);
 }
 
 function formatPrettyDate(dateStr) {
   const d = localNoonFromMmDdYyyy(dateStr);
+  if (!d) return null;
+
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -132,19 +154,30 @@ function formatPrettyDate(dateStr) {
 
 function formatDueNextMonth(dateStr) {
   const d = localNoonFromMmDdYyyy(dateStr);
+  if (!d) return null;
+
+  const originalDay = d.getDate();
   d.setMonth(d.getMonth() + 1);
+
+  if (d.getDate() !== originalDay) {
+    d.setDate(0);
+    d.setHours(12, 0, 0, 0);
+  }
+
   return d.toISOString();
 }
 
-function diffDurationString(fromPrettyDate, toDateStr) {
-  const from = new Date(fromPrettyDate);
-  const to = localNoonFromMmDdYyyy(toDateStr);
+function durationBetweenPrettyAndInput(prettyStartDate, newDateStr) {
+  const start = new Date(prettyStartDate);
+  const end = localNoonFromMmDdYyyy(newDateStr);
+
+  if (Number.isNaN(start.getTime()) || !end) return null;
 
   let months =
-    (to.getFullYear() - from.getFullYear()) * 12 +
-    (to.getMonth() - from.getMonth());
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth());
 
-  if (to.getDate() < from.getDate()) {
+  if (end.getDate() < start.getDate()) {
     months -= 1;
   }
 
@@ -152,32 +185,22 @@ function diffDurationString(fromPrettyDate, toDateStr) {
     return months === 1 ? "1 month" : `${months} months`;
   }
 
-  let days = Math.round((to - from) / (1000 * 60 * 60 * 24));
-  if (days <= 0) days = 1;
+  let days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+  if (days < 1) days = 1;
 
   return days === 1 ? "1 day" : `${days} days`;
 }
 
-// =========================
-// DESCRIPTION HELPERS
-// Expects lines like:
-// - **Dec 7, 2025 - Leadership Intern**
-// - **Mar 21, 2026 - Supervisor**
-// and finalizes last unfinished line
-// =========================
-function normalizeDescription(desc) {
-  if (!desc || !desc.trim()) return [];
+function normalizeLines(desc) {
+  if (!desc || typeof desc !== "string") return [];
   return desc
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 }
 
-function extractLineData(line) {
-  // Matches:
-  // - **Dec 7, 2025 - Leadership Intern**
-  // - **Dec 7, 2025 - Leadership Intern - 3 months**
-  const match = line.match(/^- \*\*(.+?) - (.+?)(?: - (\d+ month|\d+ months|\d+ day|\d+ days))?\*\*$/);
+function parseJourneyLine(line) {
+  const match = line.match(/^- \*\*(.+?) - (.+?)(?: - (.+?))?\*\*$/);
   if (!match) return null;
 
   return {
@@ -187,31 +210,29 @@ function extractLineData(line) {
   };
 }
 
-function finalizeLastRankLine(desc, newDateStr) {
-  const lines = normalizeDescription(desc);
+function finalizePreviousRankLine(desc, newDateStr) {
+  const lines = normalizeLines(desc);
   if (lines.length === 0) return "";
 
   const lastIndex = lines.length - 1;
-  const parsed = extractLineData(lines[lastIndex]);
+  const parsed = parseJourneyLine(lines[lastIndex]);
 
   if (!parsed) return lines.join("\n");
   if (parsed.duration) return lines.join("\n");
 
-  const duration = diffDurationString(parsed.startDate, newDateStr);
+  const duration = durationBetweenPrettyAndInput(parsed.startDate, newDateStr);
+  if (!duration) return lines.join("\n");
+
   lines[lastIndex] = `- **${parsed.startDate} - ${parsed.rank} - ${duration}**`;
-
   return lines.join("\n");
 }
 
-function appendNewRankLine(desc, newPrettyDate, newRank) {
-  const lines = normalizeDescription(desc);
-  lines.push(`- **${newPrettyDate} - ${newRank}**`);
+function appendNewRankLine(desc, prettyDate, rank) {
+  const lines = normalizeLines(desc);
+  lines.push(`- **${prettyDate} - ${rank}**`);
   return lines.join("\n");
 }
 
-// =========================
-// TRELLO HELPERS
-// =========================
 async function trelloGet(url, params = {}) {
   return axios.get(url, {
     params: {
@@ -242,19 +263,29 @@ async function trelloPost(url, params = {}) {
   });
 }
 
+async function trelloDelete(url, params = {}) {
+  return axios.delete(url, {
+    params: {
+      key: TRELLO_KEY,
+      token: TRELLO_TOKEN,
+      ...params,
+    },
+  });
+}
+
 async function findStaffCardByUsername(username) {
   const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/cards`, {
-    fields: "name,id,idLabels,desc,idList,closed",
+    fields: "id,name,desc,idLabels,idList,closed,pos",
   });
 
   const lower = username.toLowerCase();
 
-  const card = res.data.find((c) => {
-    if (c.closed) return false;
-    return c.name.toLowerCase().startsWith(`${lower} - `);
-  });
-
-  return card || null;
+  return (
+    res.data.find((card) => {
+      if (card.closed) return false;
+      return card.name.toLowerCase().startsWith(`${lower} - `);
+    }) || null
+  );
 }
 
 // =========================
@@ -274,14 +305,14 @@ module.exports = {
       o.setName("promoter").setDescription("Promoter username").setRequired(true)
     )
     .addStringOption((o) =>
-      o.setName("date").setDescription("MM/DD/YYYY").setRequired(true)
+      o.setName("date").setDescription("MM/DD/YYYY").setRequired(false)
     ),
 
   async execute(interaction) {
     const username = interaction.options.getString("username");
     const newRank = interaction.options.getString("rank");
     const promoter = interaction.options.getString("promoter");
-    const date = interaction.options.getString("date");
+    const date = interaction.options.getString("date") || getTodayMmDdYyyy();
 
     const rankConfig = RANK_CONFIG[newRank];
 
@@ -294,7 +325,7 @@ module.exports = {
 
     if (!rankConfig) {
       return interaction.reply({
-        content: `❌ Rank "${newRank}" is not configured in promotion.js yet.`,
+        content: `❌ Rank "${newRank}" is not configured.`,
         ephemeral: true,
       });
     }
@@ -306,43 +337,46 @@ module.exports = {
       });
     }
 
+    const prettyDate = formatPrettyDate(date);
+    const dueDate = formatDueNextMonth(date);
+
+    if (!prettyDate || !dueDate) {
+      return interaction.reply({
+        content: "❌ Invalid date. Use MM/DD/YYYY.",
+        ephemeral: true,
+      });
+    }
+
     try {
       const card = await findStaffCardByUsername(username);
 
       if (!card) {
         return interaction.reply({
-          content: '❌ Oops, it seems you have not used the /enroll command.',
+          content: "❌ Oops, it seems you have not used the /enroll command.",
           ephemeral: true,
         });
       }
 
-      const prettyDate = formatPrettyDate(date);
-      const dueDate = formatDueNextMonth(date);
+      const finalizedDesc = finalizePreviousRankLine(card.desc || "", date);
+      const updatedDesc = appendNewRankLine(finalizedDesc, prettyDate, newRank);
 
-      // 1) finalize previous line
-      const finalizedDesc = finalizeLastRankLine(card.desc || "", date);
-
-      // 2) append new line
-      const newDesc = appendNewRankLine(finalizedDesc, prettyDate, newRank);
-
-      // 3) update description + move list + due date
       await trelloPut(`https://api.trello.com/1/cards/${card.id}`, {
         idList: rankConfig.listId,
-        desc: newDesc,
         due: dueDate,
+        desc: updatedDesc,
         pos: "bottom",
       });
 
-      // 4) remove old rank/team labels
-      const toRemove = card.idLabels.filter(
+      const labelsToRemove = (card.idLabels || []).filter(
         (id) => ALL_RANK_LABELS.includes(id) || ALL_TEAM_LABELS.includes(id)
       );
 
-      for (const labelId of toRemove) {
-        await trelloPut(`https://api.trello.com/1/cards/${card.id}/idLabels/${labelId}`);
+      for (const labelId of labelsToRemove) {
+        await trelloDelete(
+          `https://api.trello.com/1/cards/${card.id}/idLabels/${labelId}`
+        );
       }
 
-      // 5) add new rank + team labels
       await trelloPost(`https://api.trello.com/1/cards/${card.id}/idLabels`, {
         value: rankConfig.rankLabel,
       });
@@ -351,7 +385,6 @@ module.exports = {
         value: rankConfig.teamLabel,
       });
 
-      // 6) comment
       await trelloPost(`https://api.trello.com/1/cards/${card.id}/actions/comments`, {
         text: `Promoted to **${newRank}** by **${promoter}**`,
       });
