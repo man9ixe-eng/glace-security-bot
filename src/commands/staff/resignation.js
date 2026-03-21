@@ -4,10 +4,11 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("add-resignation")
     .setDescription("Resign a staff member")
-    .addStringOption(opt => opt.setName("username").setRequired(true)),
+    .addStringOption(opt =>
+      opt.setName("username").setDescription("User").setRequired(true)
+    ),
 
   async execute(interaction) {
-    const username = interaction.options.getString("username");
-    await interaction.reply(`📉 ${username} resigned`);
-  }
+    await interaction.reply("Resignation command working 📉");
+  },
 };
