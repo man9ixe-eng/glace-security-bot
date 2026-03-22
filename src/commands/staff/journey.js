@@ -27,23 +27,6 @@ const ACTIVE_RANK_LIST_IDS = [
   process.env.PRESIDENT_LIST_ID,
 ].filter(Boolean);
 
-const RANK_LABEL_MAP = {
-  "Leadership Intern": process.env.LABEL_LEADERSHIP_INTERN,
-  "Supervisor": process.env.LABEL_SUPERVISOR,
-  "Assistant Manager": process.env.LABEL_ASSISTANT_MANAGER,
-  "Hotel Manager": process.env.LABEL_HOTEL_MANAGER,
-  "Executive Manager": process.env.LABEL_EXECUTIVE_MANAGER,
-  "Corporate Intern": process.env.LABEL_CORPORATE_INTERN,
-  "Junior Corporate": process.env.LABEL_JUNIOR_CORPORATE,
-  "Senior Corporate": process.env.LABEL_SENIOR_CORPORATE,
-  "Head Corporate": process.env.LABEL_HEAD_CORPORATE,
-  "Board Of Directors": process.env.LABEL_BOARD_OF_DIRECTORS,
-  "Presidential Intern": process.env.LABEL_PRESIDENTIAL_INTERN,
-  "Chief Executive Officer": process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
-  "Vice President": process.env.LABEL_VICE_PRESIDENT,
-  "President": process.env.LABEL_PRESIDENT,
-};
-
 // =========================
 // API HELPERS
 // =========================
@@ -353,7 +336,6 @@ module.exports = {
 
         const username = getUsernameFromCardName(card.name);
         const currentRank = getCurrentRankFromDesc(card.desc || "");
-        const rankLabelId = RANK_LABEL_MAP[currentRank] || null;
 
         const dedupeKey = `${username.toLowerCase()}|${currentRank.toLowerCase()}|${totalMonths}`;
         if (seen.has(dedupeKey)) continue;
@@ -364,7 +346,6 @@ module.exports = {
           username,
           currentRank,
           months: totalMonths,
-          rankLabelId,
         });
       }
 
@@ -395,12 +376,6 @@ module.exports = {
           await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
             value: LABEL_HAPPY_MONTHS,
           });
-
-          if (entry.rankLabelId) {
-            await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
-              value: entry.rankLabelId,
-            });
-          }
 
           posted.push(entry);
         } catch (cardErr) {
