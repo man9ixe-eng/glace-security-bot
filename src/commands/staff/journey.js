@@ -27,7 +27,6 @@ const ACTIVE_RANK_LIST_IDS = [
   process.env.PRESIDENT_LIST_ID,
 ].filter(Boolean);
 
-// Rank -> label mapping
 const RANK_LABEL_MAP = {
   "Leadership Intern": process.env.LABEL_LEADERSHIP_INTERN,
   "Supervisor": process.env.LABEL_SUPERVISOR,
@@ -327,7 +326,6 @@ module.exports = {
 
       await clearMonthlyMilestonesList();
 
-      // Rename the list instead of making a header card
       await trelloPut(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}`, {
         name: getTodayListName(),
       });
@@ -336,6 +334,7 @@ module.exports = {
       const todayParts = getNYParts();
       const dueIso = getTodayDueESTIso();
 
+      const seen = new Set();
       const eligible = [];
 
       for (const card of allCards) {
@@ -356,6 +355,10 @@ module.exports = {
         const currentRank = getCurrentRankFromDesc(card.desc || "");
         const rankLabelId = RANK_LABEL_MAP[currentRank] || null;
 
+        const dedupeKey = `${username.toLowerCase()}|${currentRank.toLowerCase()}|${totalMonths}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
         eligible.push({
           sourceCard: card,
           username,
@@ -370,45 +373,58 @@ module.exports = {
         return a.username.localeCompare(b.username);
       });
 
-      let copied = 0;
+      const posted = [];
+      const failed = [];
 
       for (const entry of eligible) {
-        const milestoneName = buildMilestoneCardName(
-          entry.username,
-          entry.months,
-          entry.currentRank
-        );
+        try {
+          const milestoneName = buildMilestoneCardName(
+            entry.username,
+            entry.months,
+            entry.currentRank
+          );
 
-        const newCard = await trelloPost("https://api.trello.com/1/cards", {
-          idList: MONTHLY_MILESTONES_LIST_ID,
-          name: milestoneName,
-          desc: entry.sourceCard.desc || "",
-          due: dueIso,
-          pos: "bottom",
-        });
-
-        await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
-          value: LABEL_HAPPY_MONTHS,
-        });
-
-        if (entry.rankLabelId) {
-          await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
-            value: entry.rankLabelId,
+          const newCard = await trelloPost("https://api.trello.com/1/cards", {
+            idList: MONTHLY_MILESTONES_LIST_ID,
+            name: milestoneName,
+            desc: entry.sourceCard.desc || "",
+            due: dueIso,
+            pos: "bottom",
           });
-        }
 
-        copied += 1;
+          await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
+            value: LABEL_HAPPY_MONTHS,
+          });
+
+          if (entry.rankLabelId) {
+            await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
+              value: entry.rankLabelId,
+            });
+          }
+
+          posted.push(entry);
+        } catch (cardErr) {
+          console.error(
+            "[STAFF JOURNEY CARD ERROR]",
+            entry.username,
+            entry.currentRank,
+            cardErr.response?.data || cardErr.message || cardErr
+          );
+          failed.push(`${entry.username} (${entry.currentRank})`);
+        }
       }
 
       const header = getTodayHeaderText();
 
-      if (eligible.length === 0) {
-        return interaction.reply({
-          content: `${header}\n=========================\n\nNo monthly milestones today.`,
-        });
+      if (posted.length === 0) {
+        let msg = `${header}\n=========================\n\nNo monthly milestones were posted today.`;
+        if (failed.length > 0) {
+          msg += `\n\nFailed:\n${failed.join("\n")}`;
+        }
+        return interaction.reply({ content: msg });
       }
 
-      const body = eligible
+      const body = posted
         .map(
           (entry) =>
             `${entry.username} - ${entry.currentRank} - ${entry.months} ${
@@ -417,9 +433,13 @@ module.exports = {
         )
         .join("\n\n");
 
-      await interaction.reply({
-        content: `${header}\n=========================\n\n${body}`,
-      });
+      let content = `${header}\n=========================\n\n${body}`;
+
+      if (failed.length > 0) {
+        content += `\n\nFailed:\n${failed.join("\n")}`;
+      }
+
+      await interaction.reply({ content });
     } catch (err) {
       console.error("[STAFF JOURNEY ERROR]", err.response?.data || err.message || err);
       await interaction.reply("❌ Trello error while generating monthly milestones");
