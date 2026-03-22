@@ -2,27 +2,29 @@ const {
   SlashCommandBuilder,
   PermissionFlagsBits,
   ChannelType,
+  EmbedBuilder,
 } = require("discord.js");
 
 const ANNOUNCE_CHANNEL_ID = process.env.STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID;
 const PROMOTION_PING_ROLE_ID = process.env.STAFF_JOURNEY_PROMOTION_PING_ROLE_ID;
 
-// You can customize these to your actual rank emojis
+// Put your REAL custom emoji mentions here if you want them.
+// If you do not know them yet, leave as empty strings.
 const RANK_EMOJIS = {
-  "Leadership Intern": "<:intern_team:1476916258036514800>",
-  "Supervisor": "<:management_team:1476916258036514810>",
+  "Leadership Intern": "",
+  "Supervisor": "",
   "Assistant Manager": "<:manager_team:1476916258036514837>",
-  "Hotel Manager": "<:manager_team:1476916258036514837>",
-  "Executive Manager": "<:senior_management_team:1476916258036514845>",
-  "Corporate Intern": "<:senior_management_team:1476916258036514845>",
-  "Junior Corporate": "<:corporate_team:1476916258036514855>",
-  "Senior Corporate": "<:corporate_team:1476916258036514855>",
-  "Head Corporate": "<:corporate_team:1476916258036514855>",
-  "Board Of Directors": "<:corporate_board_team:1476916258036514865>",
-  "Presidential Intern": "<:corporate_board_team:1476916258036514865>",
-  "Chief Executive Officer": "<:presidential_team:1476916258036514875>",
-  "Vice President": "<:presidential_team:1476916258036514875>",
-  "President": "<:presidential_team:1476916258036514875>",
+  "Hotel Manager": "",
+  "Executive Manager": "",
+  "Corporate Intern": "",
+  "Junior Corporate": "",
+  "Senior Corporate": "",
+  "Head Corporate": "",
+  "Board Of Directors": "",
+  "Presidential Intern": "",
+  "Chief Executive Officer": "",
+  "Vice President": "",
+  "President": "",
 };
 
 function clean(text) {
@@ -31,13 +33,13 @@ function clean(text) {
 
 function rankDisplay(rank) {
   const emoji = RANK_EMOJIS[rank];
-  return emoji ? `${emoji} **${rank}**` : `**${rank}**`;
+  return emoji ? `${emoji} ${rank}` : rank;
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("announce-promotion")
-    .setDescription("Post a promotion announcement in the Staff Journey announcements channel")
+    .setDescription("Post a clean promotion announcement")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((o) =>
       o.setName("username")
@@ -56,12 +58,12 @@ module.exports = {
     )
     .addUserOption((o) =>
       o.setName("member")
-        .setDescription("Member to mention in the announcement")
+        .setDescription("Member to mention")
         .setRequired(false)
     )
     .addStringOption((o) =>
       o.setName("message")
-        .setDescription("Personal message / blurb")
+        .setDescription("Personal message")
         .setRequired(false)
     )
     .addStringOption((o) =>
@@ -79,21 +81,21 @@ module.exports = {
         });
       }
 
-      const targetChannel = await interaction.client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+      const channel = await interaction.client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
 
-      if (!targetChannel) {
+      if (!channel) {
         return interaction.reply({
-          content: "❌ Announcement channel could not be found.",
+          content: "❌ Announcement channel not found.",
           ephemeral: true,
         });
       }
 
       if (
-        targetChannel.type !== ChannelType.GuildText &&
-        targetChannel.type !== ChannelType.GuildAnnouncement
+        channel.type !== ChannelType.GuildText &&
+        channel.type !== ChannelType.GuildAnnouncement
       ) {
         return interaction.reply({
-          content: "❌ Announcement channel is not a valid text channel.",
+          content: "❌ Announcement channel is not a text channel.",
           ephemeral: true,
         });
       }
@@ -105,28 +107,61 @@ module.exports = {
       const message = clean(interaction.options.getString("message"));
       const trelloLink = clean(interaction.options.getString("trello_link"));
 
-      const mentionLine = member ? `Mentions: ${member}\n` : "";
-      const trelloLine = trelloLink ? `[${username}](${trelloLink})\n` : "";
-      const pingLine = PROMOTION_PING_ROLE_ID ? `|| <@&${PROMOTION_PING_ROLE_ID}> ||` : "";
+      const embed = new EmbedBuilder()
+        .setTitle("🎉 Promotion")
+        .setDescription(
+          `Please congratulate **${username}** on their promotion to **${rankDisplay(rank)}**!`
+        )
+        .addFields(
+          {
+            name: "Promoter",
+            value: `${promoter}`,
+            inline: true,
+          }
+        )
+        .setColor(0x8f63d2)
+        .setFooter({
+          text: "Glace Hotels • Staff Journey",
+        })
+        .setTimestamp();
 
-      const blurbBlock = message
-        ? `> ${message}\n> \n> Promoter - ${promoter}`
-        : `> Promoter - ${promoter}`;
+      if (message) {
+        embed.addFields({
+          name: "Message",
+          value: message,
+          inline: false,
+        });
+      }
 
-      const content =
-`# 🎉 **PROMOTION** 🎉
--# -
+      if (trelloLink) {
+        embed.addFields({
+          name: "Card",
+          value: `[View Trello Card](${trelloLink})`,
+          inline: false,
+        });
+      }
 
-Please congratulate **${username}** on their promotion to ${rankDisplay(rank)}!
+      const lines = [];
 
-${blurbBlock}
+      if (member) {
+        lines.push(`${member}`);
+      }
 
-${mentionLine}${trelloLine}${pingLine}`.trim();
+      if (PROMOTION_PING_ROLE_ID) {
+        lines.push(`||<@&${PROMOTION_PING_ROLE_ID}>||`);
+      }
 
-      await targetChannel.send({ content });
+      await channel.send({
+        content: lines.join("\n") || undefined,
+        embeds: [embed],
+        allowedMentions: {
+          users: member ? [member.id, promoter.id] : [promoter.id],
+          roles: PROMOTION_PING_ROLE_ID ? [PROMOTION_PING_ROLE_ID] : [],
+        },
+      });
 
       await interaction.reply({
-        content: `✅ Promotion announcement posted in ${targetChannel}.`,
+        content: `✅ Promotion announcement posted in ${channel}.`,
         ephemeral: true,
       });
     } catch (err) {
