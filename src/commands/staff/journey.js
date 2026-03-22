@@ -10,7 +10,6 @@ const PROMOTIONS_LIST_ID = process.env.PROMOTIONS_LIST_ID;
 const RESIGNITIONS_LIST_ID = process.env.RESIGNITIONS_LIST_ID;
 const LABEL_HAPPY_MONTHS = process.env.LABEL_HAPPY_MONTHS;
 
-// Active staff rank lists only
 const ACTIVE_RANK_LIST_IDS = [
   process.env.LEADERSHIP_INTERN_LIST_ID,
   process.env.SUPERVISOR_LIST_ID,
@@ -29,7 +28,7 @@ const ACTIVE_RANK_LIST_IDS = [
 ].filter(Boolean);
 
 // =========================
-// HELPERS
+// API HELPERS
 // =========================
 async function trelloGet(url, params = {}) {
   return axios.get(url, {
@@ -61,29 +60,9 @@ async function trelloPut(url, params = {}) {
   });
 }
 
-function normalizeLines(desc) {
-  if (!desc || typeof desc !== "string") return [];
-  return desc
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function parseJourneyLine(line) {
-  const match = line.match(/^- \*\*(.+?) - (.+?)(?: - (.+?))?\*\*$/);
-  if (!match) return null;
-
-  return {
-    startDate: match[1],
-    rank: match[2],
-    duration: match[3] || null,
-  };
-}
-
-function getNYNow() {
-  return new Date();
-}
-
+// =========================
+// DATE / TIME HELPERS
+// =========================
 function getNYParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -93,16 +72,12 @@ function getNYParts(date = new Date()) {
   });
 
   const parts = formatter.formatToParts(date);
+
   return {
     year: Number(parts.find((p) => p.type === "year")?.value),
     month: Number(parts.find((p) => p.type === "month")?.value),
     day: Number(parts.find((p) => p.type === "day")?.value),
   };
-}
-
-function getNYDateKey(date = new Date()) {
-  const { year, month, day } = getNYParts(date);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function getNYMonthDayHeader(date = new Date()) {
@@ -175,12 +150,72 @@ function monthsBetween(startDate, todayParts) {
   return months;
 }
 
+// =========================
+// DESCRIPTION HELPERS
+// =========================
+function normalizeLines(desc) {
+  if (!desc || typeof desc !== "string") return [];
+  return desc
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function parseJourneyLine(line) {
+  if (!line || typeof line !== "string") return null;
+
+  // supports:
+  // - **Aug 21, 2025 - President**
+  // - _**Aug 21, 2025  - President**_
+  // - **Aug 21, 2025 - President - 5 months**
+  let cleaned = line.trim();
+
+  cleaned = cleaned
+    .replace(/^-+\s*/, "")
+    .replace(/^_+/, "")
+    .replace(/_+$/, "")
+    .replace(/^\*+/, "")
+    .replace(/\*+$/, "")
+    .trim();
+
+  const parts = cleaned.split(/\s+-\s+/).map((p) => p.trim()).filter(Boolean);
+
+  if (parts.length < 2) return null;
+
+  return {
+    startDate: parts[0],
+    rank: parts[1],
+    duration: parts[2] || null,
+  };
+}
+
 function getCurrentRankFromDesc(desc) {
   const lines = normalizeLines(desc);
   if (lines.length === 0) return "Unknown Rank";
 
-  const parsed = parseJourneyLine(lines[lines.length - 1]);
-  return parsed?.rank || "Unknown Rank";
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const parsed = parseJourneyLine(lines[i]);
+    if (parsed?.rank) return parsed.rank;
+  }
+
+  return "Unknown Rank";
+}
+
+function getFirstPromotionDateFromDesc(desc) {
+  const lines = normalizeLines(desc);
+  if (lines.length === 0) return null;
+
+  for (const line of lines) {
+    const parsed = parseJourneyLine(line);
+    if (!parsed?.startDate) continue;
+
+    const date = new Date(parsed.startDate);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  return null;
 }
 
 function getUsernameFromCardName(name) {
@@ -192,6 +227,9 @@ function buildMilestoneCardName(username, months, rank) {
   return `${username} - ${months} ${months === 1 ? "Month" : "Months"} - ${rank}`;
 }
 
+// =========================
+// BOARD HELPERS
+// =========================
 async function getAllBoardCards() {
   const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/cards`, {
     fields: "id,name,desc,idList,closed,due,idLabels",
@@ -201,7 +239,7 @@ async function getAllBoardCards() {
 
 async function clearMonthlyMilestonesList() {
   const res = await trelloGet(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}/cards`, {
-    fields: "id,name,closed",
+    fields: "id,closed",
   });
 
   for (const card of res.data || []) {
@@ -218,12 +256,11 @@ async function hasAlreadyPostedToday() {
     fields: "id,name,due,closed",
   });
 
-  const todayKey = getNYDateKey();
+  const header = getTodayHeaderText();
 
   return (res.data || []).some((card) => {
     if (card.closed) return false;
-    if (!card.due) return false;
-    return card.due.slice(0, 10) === todayKey;
+    return card.name === header;
   });
 }
 
@@ -233,7 +270,7 @@ async function hasAlreadyPostedToday() {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("staff-journey")
-    .setDescription("Generate today's monthly milestone cards and post the daily journey list"),
+    .setDescription("Generate today's monthly milestone cards and post the journey list"),
 
   async execute(interaction) {
     if (!BOARD_ID || !MONTHLY_MILESTONES_LIST_ID || !LABEL_HAPPY_MONTHS) {
@@ -267,14 +304,8 @@ module.exports = {
         if (card.idList === PROMOTIONS_LIST_ID) continue;
         if (card.idList === RESIGNITIONS_LIST_ID) continue;
 
-        const lines = normalizeLines(card.desc || "");
-        if (lines.length === 0) continue;
-
-        const firstParsed = parseJourneyLine(lines[0]);
-        if (!firstParsed) continue;
-
-        const firstPromotionDate = new Date(firstParsed.startDate);
-        if (Number.isNaN(firstPromotionDate.getTime())) continue;
+        const firstPromotionDate = getFirstPromotionDateFromDesc(card.desc || "");
+        if (!firstPromotionDate) continue;
 
         if (!shouldCelebrateToday(firstPromotionDate, todayParts)) continue;
 
@@ -297,6 +328,19 @@ module.exports = {
         return a.username.localeCompare(b.username);
       });
 
+      // Header card
+      const headerCard = await trelloPost("https://api.trello.com/1/cards", {
+        idList: MONTHLY_MILESTONES_LIST_ID,
+        name: getTodayHeaderText(),
+        desc: "Auto-generated daily milestone post.",
+        due: dueIso,
+        pos: "top",
+      });
+
+      await trelloPost(`https://api.trello.com/1/cards/${headerCard.data.id}/idLabels`, {
+        value: LABEL_HAPPY_MONTHS,
+      });
+
       let copied = 0;
 
       for (const entry of eligible) {
@@ -306,16 +350,15 @@ module.exports = {
           entry.currentRank
         );
 
-        const copyRes = await trelloPost("https://api.trello.com/1/cards", {
+        const newCard = await trelloPost("https://api.trello.com/1/cards", {
           idList: MONTHLY_MILESTONES_LIST_ID,
-          idCardSource: entry.sourceCard.id,
-          keepFromSource: "desc",
           name: milestoneName,
+          desc: entry.sourceCard.desc || "",
           due: dueIso,
           pos: "bottom",
         });
 
-        await trelloPost(`https://api.trello.com/1/cards/${copyRes.data.id}/idLabels`, {
+        await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
           value: LABEL_HAPPY_MONTHS,
         });
 
