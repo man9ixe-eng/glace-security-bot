@@ -27,6 +27,24 @@ const ACTIVE_RANK_LIST_IDS = [
   process.env.PRESIDENT_LIST_ID,
 ].filter(Boolean);
 
+// Rank -> label mapping
+const RANK_LABEL_MAP = {
+  "Leadership Intern": process.env.LABEL_LEADERSHIP_INTERN,
+  "Supervisor": process.env.LABEL_SUPERVISOR,
+  "Assistant Manager": process.env.LABEL_ASSISTANT_MANAGER,
+  "Hotel Manager": process.env.LABEL_HOTEL_MANAGER,
+  "Executive Manager": process.env.LABEL_EXECUTIVE_MANAGER,
+  "Corporate Intern": process.env.LABEL_CORPORATE_INTERN,
+  "Junior Corporate": process.env.LABEL_JUNIOR_CORPORATE,
+  "Senior Corporate": process.env.LABEL_SENIOR_CORPORATE,
+  "Head Corporate": process.env.LABEL_HEAD_CORPORATE,
+  "Board Of Directors": process.env.LABEL_BOARD_OF_DIRECTORS,
+  "Presidential Intern": process.env.LABEL_PRESIDENTIAL_INTERN,
+  "Chief Executive Officer": process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
+  "Vice President": process.env.LABEL_VICE_PRESIDENT,
+  "President": process.env.LABEL_PRESIDENT,
+};
+
 // =========================
 // API HELPERS
 // =========================
@@ -80,6 +98,12 @@ function getNYParts(date = new Date()) {
   };
 }
 
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
 function getNYMonthDayHeader(date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -88,8 +112,22 @@ function getNYMonthDayHeader(date = new Date()) {
   }).format(date);
 }
 
+function getNYFullDateForList(date = new Date()) {
+  const parts = getNYParts(date);
+  const monthName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "long",
+  }).format(date);
+
+  return `${monthName} ${ordinal(parts.day)}, ${parts.year}`;
+}
+
 function getTodayHeaderText() {
   return `[ ${getNYMonthDayHeader()} | Monthly Staff Journey ]`;
+}
+
+function getTodayListName() {
+  return `Milestones - ${getNYFullDateForList()}`;
 }
 
 function getNYOffsetString(now = new Date()) {
@@ -164,10 +202,6 @@ function normalizeLines(desc) {
 function parseJourneyLine(line) {
   if (!line || typeof line !== "string") return null;
 
-  // supports:
-  // - **Aug 21, 2025 - President**
-  // - _**Aug 21, 2025  - President**_
-  // - **Aug 21, 2025 - President - 5 months**
   let cleaned = line.trim();
 
   cleaned = cleaned
@@ -253,14 +287,15 @@ async function clearMonthlyMilestonesList() {
 
 async function hasAlreadyPostedToday() {
   const res = await trelloGet(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}/cards`, {
-    fields: "id,name,due,closed",
+    fields: "id,due,closed",
   });
 
-  const header = getTodayHeaderText();
+  const duePrefix = getTodayDueESTIso().slice(0, 10);
 
   return (res.data || []).some((card) => {
     if (card.closed) return false;
-    return card.name === header;
+    if (!card.due) return false;
+    return card.due.slice(0, 10) === duePrefix;
   });
 }
 
@@ -292,6 +327,11 @@ module.exports = {
 
       await clearMonthlyMilestonesList();
 
+      // Rename the list instead of making a header card
+      await trelloPut(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}`, {
+        name: getTodayListName(),
+      });
+
       const allCards = await getAllBoardCards();
       const todayParts = getNYParts();
       const dueIso = getTodayDueESTIso();
@@ -314,31 +354,20 @@ module.exports = {
 
         const username = getUsernameFromCardName(card.name);
         const currentRank = getCurrentRankFromDesc(card.desc || "");
+        const rankLabelId = RANK_LABEL_MAP[currentRank] || null;
 
         eligible.push({
           sourceCard: card,
           username,
           currentRank,
           months: totalMonths,
+          rankLabelId,
         });
       }
 
       eligible.sort((a, b) => {
         if (b.months !== a.months) return b.months - a.months;
         return a.username.localeCompare(b.username);
-      });
-
-      // Header card
-      const headerCard = await trelloPost("https://api.trello.com/1/cards", {
-        idList: MONTHLY_MILESTONES_LIST_ID,
-        name: getTodayHeaderText(),
-        desc: "Auto-generated daily milestone post.",
-        due: dueIso,
-        pos: "top",
-      });
-
-      await trelloPost(`https://api.trello.com/1/cards/${headerCard.data.id}/idLabels`, {
-        value: LABEL_HAPPY_MONTHS,
       });
 
       let copied = 0;
@@ -362,10 +391,16 @@ module.exports = {
           value: LABEL_HAPPY_MONTHS,
         });
 
+        if (entry.rankLabelId) {
+          await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
+            value: entry.rankLabelId,
+          });
+        }
+
         copied += 1;
       }
 
-      const header = `[ ${getNYMonthDayHeader()} | Monthly Staff Journey ]`;
+      const header = getTodayHeaderText();
 
       if (eligible.length === 0) {
         return interaction.reply({
