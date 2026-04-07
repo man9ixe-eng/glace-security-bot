@@ -8,23 +8,8 @@ const {
 const ANNOUNCE_CHANNEL_ID = process.env.STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID;
 const PROMOTION_PING_ROLE_ID = process.env.STAFF_JOURNEY_PROMOTION_PING_ROLE_ID;
 
-// Put your REAL custom emoji mentions here if you want them.
-// If you do not know them yet, leave as empty strings.
 const RANK_EMOJIS = {
-  "Leadership Intern": "",
-  "Supervisor": "",
   "Assistant Manager": "<:manager_team:1476916258036514837>",
-  "Hotel Manager": "",
-  "Executive Manager": "",
-  "Corporate Intern": "",
-  "Junior Corporate": "",
-  "Senior Corporate": "",
-  "Head Corporate": "",
-  "Board Of Directors": "",
-  "Presidential Intern": "",
-  "Chief Executive Officer": "",
-  "Vice President": "",
-  "President": "",
 };
 
 function clean(text) {
@@ -33,7 +18,7 @@ function clean(text) {
 
 function rankDisplay(rank) {
   const emoji = RANK_EMOJIS[rank];
-  return emoji ? `${emoji} ${rank}` : rank;
+  return emoji ? `${emoji} **${rank}**` : `**${rank}**`;
 }
 
 module.exports = {
@@ -42,60 +27,38 @@ module.exports = {
     .setDescription("Post a clean promotion announcement")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((o) =>
-      o.setName("username")
-        .setDescription("Promoted username")
-        .setRequired(true)
+      o.setName("username").setDescription("Promoted username").setRequired(true)
     )
     .addStringOption((o) =>
-      o.setName("rank")
-        .setDescription("New rank")
-        .setRequired(true)
+      o.setName("rank").setDescription("New rank").setRequired(true)
     )
     .addUserOption((o) =>
-      o.setName("promoter")
-        .setDescription("Promoter to mention")
-        .setRequired(true)
+      o.setName("promoter").setDescription("Promoter").setRequired(true)
     )
     .addUserOption((o) =>
-      o.setName("member")
-        .setDescription("Member to mention")
-        .setRequired(false)
+      o.setName("member").setDescription("Member mention").setRequired(false)
     )
     .addStringOption((o) =>
-      o.setName("message")
-        .setDescription("Personal message")
-        .setRequired(false)
+      o.setName("message").setDescription("Personal message").setRequired(false)
     )
     .addStringOption((o) =>
-      o.setName("trello_link")
-        .setDescription("Trello card link")
-        .setRequired(false)
+      o.setName("trello_link").setDescription("Trello card").setRequired(false)
     ),
 
   async execute(interaction) {
     try {
       if (!ANNOUNCE_CHANNEL_ID) {
         return interaction.reply({
-          content: "❌ Missing STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID env.",
+          content: "❌ Missing STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID",
           ephemeral: true,
         });
       }
 
       const channel = await interaction.client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
 
-      if (!channel) {
+      if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
         return interaction.reply({
-          content: "❌ Announcement channel not found.",
-          ephemeral: true,
-        });
-      }
-
-      if (
-        channel.type !== ChannelType.GuildText &&
-        channel.type !== ChannelType.GuildAnnouncement
-      ) {
-        return interaction.reply({
-          content: "❌ Announcement channel is not a text channel.",
+          content: "❌ Invalid announcement channel.",
           ephemeral: true,
         });
       }
@@ -107,53 +70,53 @@ module.exports = {
       const message = clean(interaction.options.getString("message"));
       const trelloLink = clean(interaction.options.getString("trello_link"));
 
+      // =========================
+      // BIGGER / CLEANER EMBED
+      // =========================
       const embed = new EmbedBuilder()
-        .setTitle("🎉 Promotion")
+        .setTitle("🎉 PROMOTION")
+        .setColor(0x8f63d2)
         .setDescription(
-          `Please congratulate **${username}** on their promotion to **${rankDisplay(rank)}**!`
+          `Please congratulate **${username}** on their promotion to ${rankDisplay(rank)}!`
         )
         .addFields(
           {
-            name: "Promoter",
-            value: `${promoter}`,
-            inline: true,
+            name: "━━━━━━━━━━━━━━━━━━━━",
+            value: message
+              ? `> ${message}\n> \n> **Promoter:** ${promoter}`
+              : `> **Promoter:** ${promoter}`,
+            inline: false,
           }
         )
-        .setColor(0x8f63d2)
         .setFooter({
           text: "Glace Hotels • Staff Journey",
         })
         .setTimestamp();
 
-      if (message) {
-        embed.addFields({
-          name: "Message",
-          value: message,
-          inline: false,
-        });
-      }
-
       if (trelloLink) {
         embed.addFields({
-          name: "Card",
-          value: `[View Trello Card](${trelloLink})`,
+          name: "🔗 Trello Card",
+          value: `[Click to View](${trelloLink})`,
           inline: false,
         });
       }
 
-      const lines = [];
+      // =========================
+      // MESSAGE STRUCTURE
+      // =========================
+      const bottomPings = [];
 
       if (member) {
-        lines.push(`${member}`);
+        bottomPings.push(`${member}`);
       }
 
       if (PROMOTION_PING_ROLE_ID) {
-        lines.push(`||<@&${PROMOTION_PING_ROLE_ID}>||`);
+        bottomPings.push(`||<@&${PROMOTION_PING_ROLE_ID}>||`);
       }
 
       await channel.send({
-        content: lines.join("\n") || undefined,
         embeds: [embed],
+        content: bottomPings.join("\n") || undefined,
         allowedMentions: {
           users: member ? [member.id, promoter.id] : [promoter.id],
           roles: PROMOTION_PING_ROLE_ID ? [PROMOTION_PING_ROLE_ID] : [],
@@ -161,9 +124,10 @@ module.exports = {
       });
 
       await interaction.reply({
-        content: `✅ Promotion announcement posted in ${channel}.`,
+        content: `✅ Promotion posted in ${channel}.`,
         ephemeral: true,
       });
+
     } catch (err) {
       console.error("[ANNOUNCE PROMOTION ERROR]", err);
       await interaction.reply({

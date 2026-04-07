@@ -1,9 +1,20 @@
-const { SlashCommandBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  ChannelType,
+  EmbedBuilder,
+} = require("discord.js");
 const axios = require("axios");
 
 const TRELLO_KEY = process.env.TRELLO_KEY;
 const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
 const BOARD_ID = process.env.STAFF_JOURNEY_BOARD_ID;
+
+const PROMOTIONS_LIST_ID = process.env.PROMOTIONS_LIST_ID;
+const LABEL_RECENTLY_PROMOTED = process.env.LABEL_RECENTLY_PROMOTED;
+
+const ANNOUNCE_CHANNEL_ID = process.env.STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID;
+const PROMOTION_PING_ROLE_ID = process.env.STAFF_JOURNEY_PROMOTION_PING_ROLE_ID;
+const GH_LOGO_URL = process.env.GH_LOGO_URL;
 
 // =========================
 // RANK CONFIG
@@ -14,7 +25,6 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_LEADERSHIP_INTERN,
     teamLabel: process.env.LABEL_INTERN,
   },
-
   "Supervisor": {
     listId: process.env.SUPERVISOR_LIST_ID,
     rankLabel: process.env.LABEL_SUPERVISOR,
@@ -30,7 +40,6 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_HOTEL_MANAGER,
     teamLabel: process.env.LABEL_MANAGEMENT,
   },
-
   "Executive Manager": {
     listId: process.env.EXECUTIVE_MANAGER_LIST_ID,
     rankLabel: process.env.LABEL_EXECUTIVE_MANAGER,
@@ -41,7 +50,6 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_CORPORATE_INTERN,
     teamLabel: process.env.LABEL_SENIOR_MANAGEMENT,
   },
-
   "Junior Corporate": {
     listId: process.env.JUNIOR_CORPORATE_LIST_ID,
     rankLabel: process.env.LABEL_JUNIOR_CORPORATE,
@@ -57,7 +65,6 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_HEAD_CORPORATE,
     teamLabel: process.env.LABEL_CORPORATE,
   },
-
   "Board Of Directors": {
     listId: process.env.BOARD_OF_DIRECTORS_LIST_ID,
     rankLabel: process.env.LABEL_BOARD_OF_DIRECTORS,
@@ -68,7 +75,6 @@ const RANK_CONFIG = {
     rankLabel: process.env.LABEL_PRESIDENTIAL_INTERN,
     teamLabel: process.env.LABEL_CORPORATE_BOARD,
   },
-
   "Chief Executive Officer": {
     listId: process.env.CHIEF_EXECUTIVE_OFFICER_LIST_ID,
     rankLabel: process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
@@ -113,7 +119,7 @@ const ALL_TEAM_LABELS = [
 ].filter(Boolean);
 
 // =========================
-// HELPERS
+// DATE HELPERS
 // =========================
 function getTodayMmDdYyyy() {
   return new Date().toLocaleDateString("en-US", {
@@ -125,7 +131,6 @@ function getTodayMmDdYyyy() {
 
 function parseMmDdYyyy(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return null;
-
   const parts = dateStr.split("/");
   if (parts.length !== 3) return null;
 
@@ -191,6 +196,9 @@ function durationBetweenPrettyAndInput(prettyStartDate, newDateStr) {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
+// =========================
+// DESCRIPTION HELPERS
+// =========================
 function normalizeLines(desc) {
   if (!desc || typeof desc !== "string") return [];
   return desc
@@ -233,6 +241,9 @@ function appendNewRankLine(desc, prettyDate, rank) {
   return lines.join("\n");
 }
 
+// =========================
+// TRELLO HELPERS
+// =========================
 async function trelloGet(url, params = {}) {
   return axios.get(url, {
     params: {
@@ -275,7 +286,7 @@ async function trelloDelete(url, params = {}) {
 
 async function findStaffCardByUsername(username) {
   const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/cards`, {
-    fields: "id,name,desc,idLabels,idList,closed,pos",
+    fields: "id,name,desc,idLabels,idList,closed,pos,shortUrl",
   });
 
   const lower = username.toLowerCase();
@@ -288,37 +299,183 @@ async function findStaffCardByUsername(username) {
   );
 }
 
+async function findPromotionCard(username, rank, date) {
+  const res = await trelloGet(`https://api.trello.com/1/lists/${PROMOTIONS_LIST_ID}/cards`, {
+    fields: "id,name,desc,due,closed,pos,idLabels",
+  });
+
+  const expectedName = `${username} - ${rank} - ${date}`.toLowerCase();
+
+  return (
+    (res.data || []).find((card) => {
+      return !card.closed && (card.name || "").toLowerCase() === expectedName;
+    }) || null
+  );
+}
+
+async function ensureLabelOnCard(cardId, labelId) {
+  if (!labelId) return;
+  await trelloPost(`https://api.trello.com/1/cards/${cardId}/idLabels`, {
+    value: labelId,
+  });
+}
+
+// =========================
+// ANNOUNCEMENT HELPERS
+// =========================
+function getTeamFromRank(rank) {
+  switch (rank) {
+    case "Leadership Intern":
+      return "intern";
+    case "Supervisor":
+    case "Assistant Manager":
+    case "Hotel Manager":
+      return "management";
+    case "Executive Manager":
+    case "Corporate Intern":
+      return "senior_management";
+    case "Junior Corporate":
+    case "Senior Corporate":
+    case "Head Corporate":
+      return "corporate";
+    case "Board Of Directors":
+    case "Presidential Intern":
+      return "corporate_board";
+    case "Chief Executive Officer":
+    case "Vice President":
+    case "President":
+      return "presidential";
+    default:
+      return "default";
+  }
+}
+
+function getTeamColor(team) {
+  switch (team) {
+    case "intern":
+      return 0xe76bf3;
+    case "management":
+      return 0x6a00ff;
+    case "senior_management":
+      return 0x22c55e;
+    case "corporate":
+      return 0xdc2626;
+    case "corporate_board":
+      return 0xf97316;
+    case "presidential":
+      return 0xfacc15;
+    default:
+      return 0x8f63d2;
+  }
+}
+
+async function sendPromotionAnnouncement(client, {
+  username,
+  rank,
+  promoterUser,
+  memberUser,
+  message,
+  trelloLink,
+}) {
+  if (!ANNOUNCE_CHANNEL_ID) return false;
+
+  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+  if (!channel) return false;
+  if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) {
+    return false;
+  }
+
+  const team = getTeamFromRank(rank);
+  const color = getTeamColor(team);
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎉 PROMOTION")
+    .setColor(color)
+    .setDescription(`Please congratulate **${username}** on their promotion to **${rank}**!`)
+    .addFields({
+      name: "━━━━━━━━━━━━━━━━━━━━",
+      value: message
+        ? `> ${message}\n> \n> **Promoter:** ${promoterUser}`
+        : `> **Promoter:** ${promoterUser}`,
+      inline: false,
+    })
+    .setFooter({ text: "Glace Hotels • Staff Journey" })
+    .setTimestamp();
+
+  if (GH_LOGO_URL) {
+    embed.setThumbnail(GH_LOGO_URL);
+  }
+
+  if (trelloLink) {
+    embed.addFields({
+      name: "🔗 Trello Card",
+      value: `[View Promotion Card](${trelloLink})`,
+      inline: false,
+    });
+  }
+
+  const bottom = [];
+  if (memberUser) bottom.push(`${memberUser}`);
+  if (PROMOTION_PING_ROLE_ID) bottom.push(`||<@&${PROMOTION_PING_ROLE_ID}>||`);
+
+  await channel.send({
+    embeds: [embed],
+    content: bottom.join("\n") || undefined,
+    allowedMentions: {
+      users: memberUser ? [memberUser.id, promoterUser.id] : [promoterUser.id],
+      roles: PROMOTION_PING_ROLE_ID ? [PROMOTION_PING_ROLE_ID] : [],
+    },
+  });
+
+  return true;
+}
+
 // =========================
 // COMMAND
 // =========================
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("add-promotion")
-    .setDescription("Promote a staff member in Staff Journey")
+    .setDescription("Promote a staff member, reuse/create promo card, and auto-post announcement")
     .addStringOption((o) =>
       o.setName("username").setDescription("Username").setRequired(true)
     )
     .addStringOption((o) =>
       o.setName("rank").setDescription("New rank").setRequired(true)
     )
-    .addStringOption((o) =>
-      o.setName("promoter").setDescription("Promoter username").setRequired(true)
+    .addUserOption((o) =>
+      o.setName("promoter").setDescription("Promoter").setRequired(true)
     )
     .addStringOption((o) =>
       o.setName("date").setDescription("MM/DD/YYYY").setRequired(false)
+    )
+    .addUserOption((o) =>
+      o.setName("member").setDescription("Member mention in announcement").setRequired(false)
+    )
+    .addStringOption((o) =>
+      o.setName("message").setDescription("Announcement message").setRequired(false)
     ),
 
   async execute(interaction) {
     const username = interaction.options.getString("username");
     const newRank = interaction.options.getString("rank");
-    const promoter = interaction.options.getString("promoter");
+    const promoterUser = interaction.options.getUser("promoter");
     const date = interaction.options.getString("date") || getTodayMmDdYyyy();
+    const memberUser = interaction.options.getUser("member");
+    const announceMessage = interaction.options.getString("message")?.trim() || "";
 
     const rankConfig = RANK_CONFIG[newRank];
 
     if (!BOARD_ID) {
       return interaction.reply({
         content: "❌ Missing STAFF_JOURNEY_BOARD_ID env.",
+        ephemeral: true,
+      });
+    }
+
+    if (!PROMOTIONS_LIST_ID || !LABEL_RECENTLY_PROMOTED) {
+      return interaction.reply({
+        content: "❌ Missing PROMOTIONS_LIST_ID or LABEL_RECENTLY_PROMOTED env.",
         ephemeral: true,
       });
     }
@@ -347,6 +504,13 @@ module.exports = {
       });
     }
 
+    const stepStatus = {
+      mainCard: false,
+      mainLabels: false,
+      promoCard: false,
+      announcement: false,
+    };
+
     try {
       const card = await findStaffCardByUsername(username);
 
@@ -357,6 +521,7 @@ module.exports = {
         });
       }
 
+      // main staff card
       const finalizedDesc = finalizePreviousRankLine(card.desc || "", date);
       const updatedDesc = appendNewRankLine(finalizedDesc, prettyDate, newRank);
 
@@ -366,15 +531,14 @@ module.exports = {
         desc: updatedDesc,
         pos: "bottom",
       });
+      stepStatus.mainCard = true;
 
       const labelsToRemove = (card.idLabels || []).filter(
         (id) => ALL_RANK_LABELS.includes(id) || ALL_TEAM_LABELS.includes(id)
       );
 
       for (const labelId of labelsToRemove) {
-        await trelloDelete(
-          `https://api.trello.com/1/cards/${card.id}/idLabels/${labelId}`
-        );
+        await trelloDelete(`https://api.trello.com/1/cards/${card.id}/idLabels/${labelId}`);
       }
 
       await trelloPost(`https://api.trello.com/1/cards/${card.id}/idLabels`, {
@@ -386,13 +550,74 @@ module.exports = {
       });
 
       await trelloPost(`https://api.trello.com/1/cards/${card.id}/actions/comments`, {
-        text: `Promoted to **${newRank}** by **${promoter}**`,
+        text: `Promoted to **${newRank}** by **${promoterUser.username}**`,
       });
 
-      await interaction.reply(`✅ Promoted ${username} to ${newRank}`);
+      stepStatus.mainLabels = true;
+
+      // promo card: reuse existing if same username/rank/date
+      const promoCardName = `${username} - ${newRank} - ${date}`;
+
+      let promoCard = await findPromotionCard(username, newRank, date);
+
+      if (promoCard) {
+        await trelloPut(`https://api.trello.com/1/cards/${promoCard.id}`, {
+          name: promoCardName,
+          desc: updatedDesc,
+          due: dueDate,
+          pos: "bottom",
+          closed: false,
+        });
+
+        await ensureLabelOnCard(promoCard.id, LABEL_RECENTLY_PROMOTED);
+      } else {
+        const createdPromoCard = await trelloPost("https://api.trello.com/1/cards", {
+          idList: PROMOTIONS_LIST_ID,
+          name: promoCardName,
+          desc: updatedDesc,
+          due: dueDate,
+          pos: "bottom",
+        });
+
+        promoCard = createdPromoCard.data;
+        await ensureLabelOnCard(promoCard.id, LABEL_RECENTLY_PROMOTED);
+      }
+
+      stepStatus.promoCard = true;
+
+      // announce
+      const refreshedCard = await trelloGet(`https://api.trello.com/1/cards/${card.id}`, {
+        fields: "shortUrl,name",
+      });
+
+      const announced = await sendPromotionAnnouncement(interaction.client, {
+        username,
+        rank: newRank,
+        promoterUser,
+        memberUser,
+        message: announceMessage,
+        trelloLink: refreshedCard.data?.shortUrl || card.shortUrl || "",
+      });
+
+      stepStatus.announcement = announced;
+
+      let summary = `✅ Promoted ${username} to ${newRank}.\n\n`;
+      summary += `Main staff card updated: ${stepStatus.mainCard ? "✅" : "❌"}\n`;
+      summary += `Main labels applied: ${stepStatus.mainLabels ? "✅" : "❌"}\n`;
+      summary += `Promotion card updated/created: ${stepStatus.promoCard ? "✅" : "❌"}\n`;
+      summary += `Announcement posted: ${stepStatus.announcement ? "✅" : "❌"}`;
+
+      await interaction.reply({ content: summary, ephemeral: true });
     } catch (err) {
       console.error("[PROMOTION ERROR]", err.response?.data || err.message || err);
-      await interaction.reply("❌ Promotion Trello error");
+
+      let summary = `❌ Promotion finished with an error.\n\n`;
+      summary += `Main staff card updated: ${stepStatus.mainCard ? "✅" : "❌"}\n`;
+      summary += `Main labels applied: ${stepStatus.mainLabels ? "✅" : "❌"}\n`;
+      summary += `Promotion card updated/created: ${stepStatus.promoCard ? "✅" : "❌"}\n`;
+      summary += `Announcement posted: ${stepStatus.announcement ? "✅" : "❌"}`;
+
+      await interaction.reply({ content: summary, ephemeral: true });
     }
   },
 };
