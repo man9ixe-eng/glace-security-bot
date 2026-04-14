@@ -1,40 +1,37 @@
 // src/config/roles.js
-// Map your existing Discord roles to the 7-tier system.
+// Map your existing Discord roles to the activity/quota tiers.
 
 module.exports = {
-  // Optional: user IDs that should always count as Tier 7 (top power)
   OWNER_IDS: [
-    // If you want yourself always Tier 7, put your user ID here as a string:
-    // "",
+    // "123456789012345678",
   ],
 
-  // Tier 2: Junior Staff
   JUNIOR_STAFF_ROLE_IDS: [
-    "1412715521496846407",
+    '1412715521496846407',
   ],
 
-  // Tier 3: Intern
   INTERN_ROLE_IDS: [
-    "1412712811695706112",
+    '1412712811695706112',
   ],
 
-  // Tier 4: Management
   MANAGEMENT_ROLE_IDS: [
-    "1412712793798606960",
+    '1412712793798606960',
   ],
 
-  // Tier 5: Senior Management
   SENIOR_MANAGEMENT_ROLE_IDS: [
-    "1412712773099454495",
+    '1412712773099454495',
   ],
 
-  // Tier 6: Corporate
   CORPORATE_ROLE_IDS: [
-    "1412712767907037305",
+    '1412712767907037305',
   ],
 
-  // Tier 7: Presidential
+  CORPORATE_BOARD_ROLE_IDS: [
+    // Add your Board of Directors / Corporate Board role ID here if you want exact-ID matching.
+    // 'ROLE_ID_HERE',
+  ],
+
   PRESIDENTIAL_ROLE_IDS: [
-    "1412712646305779823",
+    '1412712646305779823',
   ],
 };

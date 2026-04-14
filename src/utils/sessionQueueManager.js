@@ -7,6 +7,7 @@ const {
   EmbedBuilder,
 } = require('discord.js');
 const { trelloRequest } = require('./trelloClient');
+const { recordHostedSession } = require('./activityTracker');
 
 // In-memory registry of active queues, keyed by Trello card shortId.
 const queues = new Map();
@@ -211,6 +212,53 @@ function formatDiscordRelativeFromDue(dueString) {
 
   const epochSeconds = Math.floor(due.getTime() / 1000);
   return `<t:${epochSeconds}:R>`;
+}
+
+async function resolveGuildDisplayName(client, guildId, userId, fallback = null) {
+  if (!userId) return fallback || 'Unknown';
+
+  try {
+    if (guildId) {
+      const guild = await client.guilds.fetch(guildId).catch(() => null);
+      const member = guild
+        ? await guild.members.fetch(userId).catch(() => null)
+        : null;
+
+      if (member) {
+        return member.displayName || member.user?.globalName || member.user?.username || fallback || `Unknown (${userId})`;
+      }
+    }
+
+    const user = await client.users.fetch(userId);
+    return user.globalName || user.username || fallback || `Unknown (${userId})`;
+  } catch {
+    return fallback || `Unknown (${userId})`;
+  }
+}
+
+function getLogEmbedStyle(sessionType) {
+  switch (sessionType) {
+    case 'training':
+      return {
+        title: 'Training Session | Log',
+        color: 0xf44336,
+      };
+    case 'interview':
+      return {
+        title: 'Interview Session | Log',
+        color: 0xffc107,
+      };
+    case 'massshift':
+      return {
+        title: 'Mass Shift Session | Log',
+        color: 0x9c27b0,
+      };
+    default:
+      return {
+        title: 'Session | Log',
+        color: 0x6cb2eb,
+      };
+  }
 }
 
 /**
@@ -738,32 +786,6 @@ async function postLiveAttendeesForQueue(client, queue) {
 async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   const { recordAttendance = false } = options;
 
-  async function getServerDisplayName(userId, guildId) {
-    try {
-      if (guildId) {
-        const guild = await client.guilds.fetch(guildId).catch(() => null);
-        const member = guild
-          ? await guild.members.fetch(userId).catch(() => null)
-          : null;
-
-        if (member) {
-          return (
-            member.displayName ||
-            member.nickname ||
-            member.user?.globalName ||
-            member.user?.username ||
-            `Unknown (${userId})`
-          );
-        }
-      }
-
-      const user = await client.users.fetch(userId);
-      return user.globalName || user.username || `Unknown (${userId})`;
-    } catch {
-      return `Unknown (${userId})`;
-    }
-  }
-
   const shortId = extractShortId(cardOptionOrShortId);
   if (!shortId) {
     console.warn('[LOG] Could not parse shortId from', cardOptionOrShortId);
@@ -823,7 +845,12 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   async function usernamesFromEntries(entries) {
     const results = [];
     for (const entry of entries) {
-      const displayName = await getServerDisplayName(entry.userId, queue.guildId);
+      const displayName = await resolveGuildDisplayName(
+        client,
+        queue.guildId,
+        entry.userId,
+        `Unknown (${entry.userId})`,
+      );
       results.push(displayName);
     }
     return results;
@@ -845,13 +872,18 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
 
   const fields = [];
 
-  const hostDisplayName = queue.hostId
-    ? await getServerDisplayName(queue.hostId, queue.guildId)
+  const resolvedHostName = queue.hostId
+    ? await resolveGuildDisplayName(
+        client,
+        queue.guildId,
+        queue.hostId,
+        queue.hostName || 'Unknown',
+      )
     : queue.hostName || 'Unknown';
 
   fields.push({
     name: 'Host',
-    value: hostDisplayName,
+    value: resolvedHostName,
   });
 
   fields.push({
@@ -901,31 +933,26 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   const now = new Date();
   const loggedAt = now.toLocaleString('en-US', { timeZone: 'America/Toronto' });
 
-  const logMeta = {
-    training: {
-      title: 'Training Session | Log',
-      color: 0xf44336,
-    },
-    interview: {
-      title: 'Interview Session | Log',
-      color: 0xffc107,
-    },
-    massshift: {
-      title: 'Mass Shift Session | Log',
-      color: 0x9c27b0,
-    },
-  }[queue.sessionType] || {
-    title: 'Session | Log',
-    color: 0x6cb2eb,
-  };
+  const logStyle = getLogEmbedStyle(queue.sessionType);
 
   const logEmbed = new EmbedBuilder()
-    .setTitle(logMeta.title)
+    .setTitle(logStyle.title)
     .setDescription(`Logged at **${loggedAt}**`)
     .addFields(fields)
-    .setColor(logMeta.color);
+    .setColor(logStyle.color);
 
   await logChannel.send({ embeds: [logEmbed] });
+
+  if (queue.hostId) {
+    recordHostedSession({
+      userId: queue.hostId,
+      shortId,
+      sessionType: queue.sessionType,
+      guildId: queue.guildId || null,
+      timestamp: Date.now(),
+      cancelled: !recordAttendance,
+    });
+  }
 
   if (
     recordAttendance &&
