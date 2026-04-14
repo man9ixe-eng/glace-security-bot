@@ -738,6 +738,32 @@ async function postLiveAttendeesForQueue(client, queue) {
 async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   const { recordAttendance = false } = options;
 
+  async function getServerDisplayName(userId, guildId) {
+    try {
+      if (guildId) {
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        const member = guild
+          ? await guild.members.fetch(userId).catch(() => null)
+          : null;
+
+        if (member) {
+          return (
+            member.displayName ||
+            member.nickname ||
+            member.user?.globalName ||
+            member.user?.username ||
+            `Unknown (${userId})`
+          );
+        }
+      }
+
+      const user = await client.users.fetch(userId);
+      return user.globalName || user.username || `Unknown (${userId})`;
+    } catch {
+      return `Unknown (${userId})`;
+    }
+  }
+
   const shortId = extractShortId(cardOptionOrShortId);
   if (!shortId) {
     console.warn('[LOG] Could not parse shortId from', cardOptionOrShortId);
@@ -797,12 +823,8 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   async function usernamesFromEntries(entries) {
     const results = [];
     for (const entry of entries) {
-      try {
-        const user = await client.users.fetch(entry.userId);
-        results.push(user.username);
-      } catch {
-        results.push(`Unknown (${entry.userId})`);
-      }
+      const displayName = await getServerDisplayName(entry.userId, queue.guildId);
+      results.push(displayName);
     }
     return results;
   }
@@ -823,9 +845,13 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
 
   const fields = [];
 
+  const hostDisplayName = queue.hostId
+    ? await getServerDisplayName(queue.hostId, queue.guildId)
+    : queue.hostName || 'Unknown';
+
   fields.push({
     name: 'Host',
-    value: queue.hostId ? `<@${queue.hostId}>` : queue.hostName || 'Unknown',
+    value: hostDisplayName,
   });
 
   fields.push({
@@ -875,11 +901,29 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   const now = new Date();
   const loggedAt = now.toLocaleString('en-US', { timeZone: 'America/Toronto' });
 
+  const logMeta = {
+    training: {
+      title: 'Training Session | Log',
+      color: 0xf44336,
+    },
+    interview: {
+      title: 'Interview Session | Log',
+      color: 0xffc107,
+    },
+    massshift: {
+      title: 'Mass Shift Session | Log',
+      color: 0x9c27b0,
+    },
+  }[queue.sessionType] || {
+    title: 'Session | Log',
+    color: 0x6cb2eb,
+  };
+
   const logEmbed = new EmbedBuilder()
-    .setTitle('Session Attendees Logged')
+    .setTitle(logMeta.title)
     .setDescription(`Logged at **${loggedAt}**`)
     .addFields(fields)
-    .setColor(0x6cb2eb);
+    .setColor(logMeta.color);
 
   await logChannel.send({ embeds: [logEmbed] });
 
