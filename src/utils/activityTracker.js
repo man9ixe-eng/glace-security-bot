@@ -56,7 +56,6 @@ function normalizeStoreShape(parsed) {
   if (!Array.isArray(parsed.hostedSessions)) parsed.hostedSessions = [];
   if (!Array.isArray(parsed.supportSessions)) parsed.supportSessions = [];
 
-  // Backward compatibility with older format
   if (Array.isArray(parsed.sessions) && parsed.hostedSessions.length === 0) {
     parsed.hostedSessions = parsed.sessions.map((entry) => ({
       userId: entry.userId,
@@ -328,68 +327,31 @@ function addDaysToLocalDate(year, month, day, offsetDays) {
 }
 
 function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
-  const now = new Date();
-  const parts = getTimeZoneParts(now, timeZone);
-
-  // Monday = 0, Tuesday = 1, ..., Sunday = 6
-  const daysSinceMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
-
-  const mondayLocal = addDaysToLocalDate(
-    parts.year,
-    parts.month,
-    parts.day,
-    -daysSinceMonday + (offsetWeeks * 7),
-  );
-
-  const nextMondayLocal = addDaysToLocalDate(
-    mondayLocal.year,
-    mondayLocal.month,
-    mondayLocal.day,
-    7,
-  );
-
-  const sundayLocal = addDaysToLocalDate(
-    mondayLocal.year,
-    mondayLocal.month,
-    mondayLocal.day,
-    6,
-  );
-
-  const startMs = zonedLocalToUtc(
-    {
-      ...mondayLocal,
-      hour: 0,
-      minute: 0,
-      second: 0,
-      millisecond: 0,
-    },
+  return getWeekRangeForDate(
+    new Date(Date.now() + offsetWeeks * 7 * 24 * 60 * 60 * 1000),
     timeZone,
   );
-
-  const nextStartMs = zonedLocalToUtc(
-    {
-      ...nextMondayLocal,
-      hour: 0,
-      minute: 0,
-      second: 0,
-      millisecond: 0,
-    },
-    timeZone,
-  );
-
-  return {
-    startMs,
-    endMs: nextStartMs - 1,
-    startLocal: mondayLocal,
-    endLocal: sundayLocal,
-  };
 }
 
 function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
   const parts = getTimeZoneParts(date, timeZone);
 
-  // Monday = 0, Tuesday = 1, ..., Sunday = 6
-  const daysSinceMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
+  const localNoonUtc = zonedLocalToUtc(
+    {
+      year: parts.year,
+      month: parts.month,
+      day: parts.day,
+      hour: 12,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    },
+    timeZone,
+  );
+
+  const localNoon = new Date(localNoonUtc);
+  const localWeekday = getTimeZoneParts(localNoon, timeZone).weekday;
+  const daysSinceMonday = localWeekday === 0 ? 6 : localWeekday - 1;
 
   const mondayLocal = addDaysToLocalDate(
     parts.year,
@@ -398,13 +360,6 @@ function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
     -daysSinceMonday,
   );
 
-  const nextMondayLocal = addDaysToLocalDate(
-    mondayLocal.year,
-    mondayLocal.month,
-    mondayLocal.day,
-    7,
-  );
-
   const sundayLocal = addDaysToLocalDate(
     mondayLocal.year,
     mondayLocal.month,
@@ -423,20 +378,20 @@ function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
     timeZone,
   );
 
-  const nextStartMs = zonedLocalToUtc(
+  const endMs = zonedLocalToUtc(
     {
-      ...nextMondayLocal,
-      hour: 0,
-      minute: 0,
-      second: 0,
-      millisecond: 0,
+      ...sundayLocal,
+      hour: 23,
+      minute: 59,
+      second: 59,
+      millisecond: 999,
     },
     timeZone,
   );
 
   return {
     startMs,
-    endMs: nextStartMs - 1,
+    endMs,
     startLocal: mondayLocal,
     endLocal: sundayLocal,
   };
@@ -444,8 +399,7 @@ function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
 
 function getWeekKeyForDate(date, timeZone = TIME_ZONE) {
   const range = getWeekRangeForDate(date, timeZone);
-  const parts = getTimeZoneParts(new Date(range.startMs), timeZone);
-  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+  return `${range.startLocal.year}-${String(range.startLocal.month).padStart(2, '0')}-${String(range.startLocal.day).padStart(2, '0')}`;
 }
 
 function runWeeklyMaintenance() {
@@ -622,7 +576,7 @@ async function backfillFromLogChannel(client) {
         if (loweredName.includes('host')) {
           hostIds = extractIdsFromFieldValue(field.value);
           continue;
-         }
+        }
 
         const roleKey = mapFieldNameToRoleKey(field.name);
         if (!roleKey) continue;
@@ -744,31 +698,44 @@ function hasMetQuota(summary, quotaProfile) {
 }
 
 function formatRangeLabel(range) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIME_ZONE,
+  const monthFormatter = new Intl.DateTimeFormat('en-US', {
     month: 'long',
-    day: 'numeric',
-    year: 'numeric',
+    timeZone: 'UTC',
   });
 
-  // Force midday to avoid timezone shifting backward
-  const startDate = new Date(range.startMs + 12 * 60 * 60 * 1000);
-  const endDate = new Date(range.endMs - 12 * 60 * 60 * 1000);
+  const startUtc = new Date(Date.UTC(
+    range.startLocal.year,
+    range.startLocal.month - 1,
+    range.startLocal.day,
+    12, 0, 0,
+  ));
 
-  const startLabel = formatter.format(startDate);
-  const endLabel = formatter.format(endDate);
+  const endUtc = new Date(Date.UTC(
+    range.endLocal.year,
+    range.endLocal.month - 1,
+    range.endLocal.day,
+    12, 0, 0,
+  ));
+
+  const startLabel = `${monthFormatter.format(startUtc)} ${range.startLocal.day}, ${range.startLocal.year}`;
+  const endLabel = `${monthFormatter.format(endUtc)} ${range.endLocal.day}, ${range.endLocal.year}`;
 
   return `${startLabel} to ${endLabel}`;
 }
 
-function formatWeekWindowShort(range, timeZone = TIME_ZONE) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+function formatWeekWindowShort(range) {
+  const start = range.startLocal;
+  const end = range.endLocal;
+
+  const monthFormatter = new Intl.DateTimeFormat('en-US', {
     month: 'short',
-    day: 'numeric',
+    timeZone: 'UTC',
   });
 
-  return `${formatter.format(new Date(range.startMs))} - ${formatter.format(new Date(range.endMs))}`;
+  const startUtc = new Date(Date.UTC(start.year, start.month - 1, start.day, 12, 0, 0));
+  const endUtc = new Date(Date.UTC(end.year, end.month - 1, end.day, 12, 0, 0));
+
+  return `${monthFormatter.format(startUtc)} ${start.day} - ${monthFormatter.format(endUtc)} ${end.day}`;
 }
 
 module.exports = {
