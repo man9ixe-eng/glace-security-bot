@@ -10,14 +10,73 @@ const {
   formatRangeLabel,
 } = require('../../utils/activityTracker');
 
-function formatQuotaLine(quotaProfile) {
-  const q = quotaProfile.quota;
-  const parts = [`${q.total} total`];
+const TEAM_EMOJIS = {
+  intern: ':intern_team:',
+  management: ':manager_team:',
+  senior_management: ':senior_team:',
+  corporate: ':corp_team:',
+  corporate_board: ':board_team:',
+  presidential: ':pres_team:',
+};
 
-  if (q.minInterview > 0) parts.push(`${q.minInterview} interview`);
-  if (q.minTraining > 0) parts.push(`${q.minTraining} training`);
+function getTeamEmoji(profile) {
+  return TEAM_EMOJIS[profile?.key] || '🔹';
+}
 
-  return parts.join(' • ');
+function getModeLabel(profile) {
+  return profile?.isCorporatePlus ? 'Host' : 'Attendee';
+}
+
+function buildDetailedQuota(profile) {
+  const q = profile.quota;
+  const lines = [`${profile.label}: ${q.total} Sessions`, ''];
+
+  if (profile.key === 'intern') {
+    lines.push('1 Interview');
+    lines.push('1 Training');
+    lines.push('- Must be balanced.');
+    return lines;
+  }
+
+  if (profile.key === 'management') {
+    lines.push('1 Interview');
+    lines.push('2 Training');
+    lines.push('or');
+    lines.push('2 Interview');
+    lines.push('1 Training');
+    lines.push('- Must be balanced.');
+    return lines;
+  }
+
+  if (profile.key === 'senior_management') {
+    lines.push('2 Interview');
+    lines.push('2 Training');
+    lines.push('- Must be balanced.');
+    return lines;
+  }
+
+  if (profile.key === 'corporate') {
+    lines.push('2 Hosted Interview');
+    lines.push('2 Hosted Training');
+    lines.push('- Must be balanced.');
+    return lines;
+  }
+
+  if (profile.key === 'corporate_board') {
+    lines.push('1 Hosted Interview');
+    lines.push('1 Hosted Training');
+    lines.push('- Must be balanced.');
+    return lines;
+  }
+
+  if (profile.key === 'presidential') {
+    lines.push('1 Hosted Session');
+    return lines;
+  }
+
+  if ((q.minInterview || 0) > 0) lines.push(`${q.minInterview} Interview`);
+  if ((q.minTraining || 0) > 0) lines.push(`${q.minTraining} Training`);
+  return lines;
 }
 
 function box(lines) {
@@ -25,7 +84,7 @@ function box(lines) {
 }
 
 function buildProgressBar(current, required, size = 5) {
-  if (!required || required <= 0) return '█████';
+  if (!required || required <= 0) return '░'.repeat(size);
   const ratio = Math.max(0, Math.min(1, current / required));
   const filled = Math.round(ratio * size);
   return `${'█'.repeat(filled)}${'░'.repeat(size - filled)}`;
@@ -53,6 +112,10 @@ function buildQuotaProgressLines(source, quota) {
   }
 
   return lines;
+}
+
+function getSupportTrainerCount(summary) {
+  return summary.roles.trainer || 0;
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
@@ -92,9 +155,11 @@ async function buildActivityEmbed(interaction, targetMember) {
       {
         name: '🏨 Quota',
         value: box([
-          quotaProfile.label,
-          `Type: ${quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular'}`,
-          `Required: ${formatQuotaLine(quotaProfile)}`,
+          `**${getTeamEmoji(quotaProfile)} ${quotaProfile.label}**`,
+          '',
+          `Mode: ${getModeLabel(quotaProfile)}`,
+          '',
+          ...buildDetailedQuota(quotaProfile),
         ]),
       },
       {
@@ -108,7 +173,7 @@ async function buildActivityEmbed(interaction, targetMember) {
           '',
           ...buildQuotaProgressLines(currentSource, quotaProfile.quota),
           '',
-          `Status: ${met ? '✅ Met' : '❌ Below'}`,
+          `Status: ${met ? '✅ Below cleared / Met' : '❌ Below'}`.replace('Below cleared / ', ''),
         ]),
         inline: true,
       },
@@ -171,7 +236,7 @@ async function buildActivityEmbed(interaction, targetMember) {
           `Co-Host: ${current.support.roles.cohost || 0}`,
           `Overseer: ${current.support.roles.overseer || 0}`,
           `Interviewer: ${current.support.roles.interviewer || 0}`,
-          `Trainer: ${current.support.roles.trainer || 0}`,
+          `Trainer: ${getSupportTrainerCount(current.support)}`,
           `Supervisor: ${current.support.roles.supervisor || 0}`,
           `Spectator: ${current.support.roles.spectator || 0}`,
         ]),
@@ -183,7 +248,7 @@ async function buildActivityEmbed(interaction, targetMember) {
           `Co-Host: ${last.support.roles.cohost || 0}`,
           `Overseer: ${last.support.roles.overseer || 0}`,
           `Interviewer: ${last.support.roles.interviewer || 0}`,
-          `Trainer: ${last.support.roles.trainer || 0}`,
+          `Trainer: ${getSupportTrainerCount(last.support)}`,
           `Supervisor: ${last.support.roles.supervisor || 0}`,
           `Spectator: ${last.support.roles.spectator || 0}`,
         ]),
