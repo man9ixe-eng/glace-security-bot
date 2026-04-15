@@ -12,14 +12,32 @@ const {
 
 function formatQuotaLine(quotaProfile) {
   const quota = quotaProfile.quota;
-  const base = [`${quota.total} total`];
-  if ((quota.minInterview || 0) > 0) base.push(`${quota.minInterview} interview`);
-  if ((quota.minTraining || 0) > 0) base.push(`${quota.minTraining} training`);
-  return base.join(' • ');
+  const parts = [`${quota.total} total`];
+
+  if ((quota.minInterview || 0) > 0) {
+    parts.push(`${quota.minInterview} interview`);
+  }
+
+  if ((quota.minTraining || 0) > 0) {
+    parts.push(`${quota.minTraining} training`);
+  }
+
+  return parts.join(' • ');
 }
 
-function buildSectionBox(lines) {
-  return `╭────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────╯`;
+function statBlock(lines) {
+  return lines.join('\n');
+}
+
+function buildCorporateSupportTypeTotals(summary) {
+  const interviewerCount = summary.roles.interviewer || 0;
+  const trainerCount = summary.roles.trainer || 0;
+
+  return {
+    interviews: interviewerCount,
+    trainings: trainerCount,
+    total: summary.total || 0,
+  };
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
@@ -30,10 +48,13 @@ async function buildActivityEmbed(interaction, targetMember) {
 
   const currentRange = getWeekRange(0, TIME_ZONE);
   const lastRange = getWeekRange(-1, TIME_ZONE);
+
   const activity = getUserActivity(targetMember.id);
   const current = summarizeActivity(activity, currentRange);
   const last = summarizeActivity(activity, lastRange);
-  const metQuota = hasMetQuota(current, quotaProfile);
+
+  const metCurrentQuota = hasMetQuota(current, quotaProfile);
+  const metLastQuota = hasMetQuota(last, quotaProfile);
 
   const displayName =
     targetMember.displayName ||
@@ -41,100 +62,114 @@ async function buildActivityEmbed(interaction, targetMember) {
     targetMember.user?.username ||
     targetMember.username;
 
-  const quotaSource = quotaProfile.quota.mode === 'hosted' ? current.hosted : current.support;
-  const lastQuotaSource = quotaProfile.quota.mode === 'hosted' ? last.hosted : last.support;
+  const quotaSource =
+    quotaProfile.quota.mode === 'hosted' ? current.hosted : current.support;
+
+  const lastQuotaSource =
+    quotaProfile.quota.mode === 'hosted' ? last.hosted : last.support;
 
   const embed = new EmbedBuilder()
-    .setColor(metQuota ? 0xf7b2ff : 0xffc5d9)
-    .setTitle(`✨ ${displayName} • Activity Panel`)
+    .setColor(metCurrentQuota ? 0x1d4ed8 : 0x2563eb)
+    .setTitle(`${displayName} • Activity Overview`)
     .setDescription(
-      `Weekly tracking resets every **Monday at 12:00 AM ${TIME_ZONE}** and ends every **Sunday at 11:59 PM ${TIME_ZONE}**.\n` +
-      `Current tracked week: **${formatRangeLabel(currentRange, TIME_ZONE)}**`,
+      `**Week Window**\n${formatRangeLabel(currentRange)}\n\n` +
+        `Tracking resets every Monday at **12:00 AM ${TIME_ZONE}** and ends every Sunday at **11:59 PM ${TIME_ZONE}**.`
     )
     .addFields(
       {
-        name: '🌸 Quota Tier',
-        value: buildSectionBox([
-          `${quotaProfile.label}`,
-          `Quota Type: ${quotaProfile.quota.mode === 'hosted' ? 'Hosted Sessions' : 'Regular Sessions'}`,
-          `Required: ${formatQuotaLine(quotaProfile)}`,
+        name: 'Quota Profile',
+        value: statBlock([
+          `**Tier:** ${quotaProfile.label}`,
+          `**Quota Type:** ${
+            quotaProfile.quota.mode === 'hosted'
+              ? 'Hosted Sessions'
+              : 'Regular Sessions'
+          }`,
+          `**Requirement:** ${formatQuotaLine(quotaProfile)}`,
         ]),
       },
       {
-        name: '💫 Current Week',
-        value: buildSectionBox([
-          `Interviews: **${quotaSource.interview}**`,
-          `Trainings: **${quotaSource.training}**`,
-          `Total: **${quotaSource.total}**`,
-          `Status: ${metQuota ? '✅ Met quota' : '❌ Below quota'}`,
+        name: 'Current Week',
+        value: statBlock([
+          `**Interviews:** ${quotaSource.interview}`,
+          `**Trainings:** ${quotaSource.training}`,
+          `**Total:** ${quotaSource.total}`,
+          `**Status:** ${metCurrentQuota ? '✅ Met quota' : '❌ Below quota'}`,
         ]),
         inline: true,
       },
       {
-        name: '🫧 Last Week',
-        value: buildSectionBox([
-          `Interviews: **${lastQuotaSource.interview}**`,
-          `Trainings: **${lastQuotaSource.training}**`,
-          `Total: **${lastQuotaSource.total}**`,
+        name: 'Last Week',
+        value: statBlock([
+          `**Interviews:** ${lastQuotaSource.interview}`,
+          `**Trainings:** ${lastQuotaSource.training}`,
+          `**Total:** ${lastQuotaSource.total}`,
+          `**Status:** ${metLastQuota ? '✅ Met quota' : '❌ Below quota'}`,
         ]),
         inline: true,
-      },
+      }
     )
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))
     .setFooter({
-      text: 'Hosted sessions count for Corporate+ quota. Regular helper roles count for non-Corporate quotas.',
-    });
+      text: 'Glace Hotels Activity System',
+    })
+    .setTimestamp();
 
   if (quotaProfile.isCorporatePlus) {
-  embed.data.fields[1].value = buildSectionBox([
-    `Interviews Hosted: **${current.hosted.interview}**`,
-    `Trainings Hosted: **${current.hosted.training}**`,
-    `Total Hosted: **${current.hosted.total}**`,
-    `Status: ${metQuota ? '✅ Met quota' : '❌ Below quota'}`,
-  ]);
+    const currentHelpTotals = buildCorporateSupportTypeTotals(current.support);
+    const lastHelpTotals = buildCorporateSupportTypeTotals(last.support);
 
-  embed.data.fields[2].value = buildSectionBox([
-    `Interviews: **${last.hosted.interview}**`,
-    `Trainings: **${last.hosted.training}**`,
-    `Total: **${last.hosted.total}**`,
-    `Status: ${hasMetQuota(last, quotaProfile) ? '✅ Met quota' : '❌ Below quota'}`,
-  ]);
+    embed.data.fields[1].value = statBlock([
+      `**Hosted Interviews:** ${current.hosted.interview}`,
+      `**Hosted Trainings:** ${current.hosted.training}`,
+      `**Total Hosted:** ${current.hosted.total}`,
+      `**Status:** ${metCurrentQuota ? '✅ Met quota' : '❌ Below quota'}`,
+    ]);
 
-  embed.addFields(
-    {
-      name: '🏨 Helped Sessions',
-      value: buildSectionBox([
-        `Interviews: **${current.support.interview || 0}**`,
-        `Trainings: **${current.support.training || 0}**`,
-        `Total Attended / Non-hosted: **${current.support.total}**`,
-      ]),
-    },
-    {
-      name: '🤝 This Week | Attended Breakdown',
-      value: buildSectionBox([
-        `Co-Host: **${current.support.roles.cohost || 0}**`,
-        `Overseer: **${current.support.roles.overseer || 0}**`,
-        `Interviewer: **${current.support.roles.interviewer || 0}**`,
-        `Trainer: **${current.support.roles.trainer || 0}**`,
-        `Supervisor: **${current.support.roles.supervisor || 0}**`,
-        `Spectator: **${current.support.roles.spectator || 0}**`,
-        `Total Help Sessions: **${current.support.total}**`,
-      ]),
-    },
-    {
-      name: '🌙 Last Week | Attended Breakdown',
-      value: buildSectionBox([
-        `Co-Host: **${last.support.roles.cohost || 0}**`,
-        `Overseer: **${last.support.roles.overseer || 0}**`,
-        `Interviewer: **${last.support.roles.interviewer || 0}**`,
-        `Trainer: **${last.support.roles.trainer || 0}**`,
-        `Supervisor: **${last.support.roles.supervisor || 0}**`,
-        `Spectator: **${last.support.roles.spectator || 0}**`,
-        `Total Help Sessions: **${last.support.total}**`,
-      ]),
-    }
-  );
-}
+    embed.data.fields[2].value = statBlock([
+      `**Hosted Interviews:** ${last.hosted.interview}`,
+      `**Hosted Trainings:** ${last.hosted.training}`,
+      `**Total Hosted:** ${last.hosted.total}`,
+      `**Status:** ${metLastQuota ? '✅ Met quota' : '❌ Below quota'}`,
+    ]);
+
+    embed.addFields(
+      {
+        name: 'Support Sessions',
+        value: statBlock([
+          `**Interviews:** ${currentHelpTotals.interviews}`,
+          `**Trainings:** ${currentHelpTotals.trainings}`,
+          `**Total Non-Hosted:** ${currentHelpTotals.total}`,
+        ]),
+      },
+      {
+        name: 'This Week Support Breakdown',
+        value: statBlock([
+          `**Co-Host:** ${current.support.roles.cohost || 0}`,
+          `**Overseer:** ${current.support.roles.overseer || 0}`,
+          `**Interviewer:** ${current.support.roles.interviewer || 0}`,
+          `**Trainer:** ${current.support.roles.trainer || 0}`,
+          `**Supervisor:** ${current.support.roles.supervisor || 0}`,
+          `**Spectator:** ${current.support.roles.spectator || 0}`,
+          `**Total Support Sessions:** ${current.support.total}`,
+        ]),
+        inline: true,
+      },
+      {
+        name: 'Last Week Support Breakdown',
+        value: statBlock([
+          `**Co-Host:** ${last.support.roles.cohost || 0}`,
+          `**Overseer:** ${last.support.roles.overseer || 0}`,
+          `**Interviewer:** ${last.support.roles.interviewer || 0}`,
+          `**Trainer:** ${last.support.roles.trainer || 0}`,
+          `**Supervisor:** ${last.support.roles.supervisor || 0}`,
+          `**Spectator:** ${last.support.roles.spectator || 0}`,
+          `**Total Support Sessions:** ${last.support.total}`,
+        ]),
+        inline: true,
+      }
+    );
+  }
 
   return embed;
 }

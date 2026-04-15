@@ -4,7 +4,7 @@ const activityCommand = require('./activity');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('viewactivity')
-    .setDescription("View another member's activity panel.")
+    .setDescription("View another member's activity overview.")
     .addUserOption((option) =>
       option
         .setName('player')

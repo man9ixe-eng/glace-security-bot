@@ -11,7 +11,9 @@ const {
 } = require('../../utils/activityTracker');
 
 function summarizeAgainstQuota(summary, quotaProfile) {
-  const source = quotaProfile.quota.mode === 'hosted' ? summary.hosted : summary.support;
+  const source =
+    quotaProfile.quota.mode === 'hosted' ? summary.hosted : summary.support;
+
   const parts = [`${source.total}/${quotaProfile.quota.total} total`];
 
   if ((quotaProfile.quota.minInterview || 0) > 0) {
@@ -69,28 +71,31 @@ module.exports = {
     const shown = missing.slice(0, 25);
 
     const embed = new EmbedBuilder()
-      .setColor(0xffd6ea)
-      .setTitle('🫧 Activity List • Below Quota')
+      .setColor(0x1d4ed8)
+      .setTitle('Activity List • Below Quota')
       .setDescription(
         missing.length
           ? shown
               .map(({ member, quotaProfile, summary }) => {
-                const modeLabel = quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular';
-                return `• **${member.displayName}** — ${quotaProfile.label} — ${modeLabel}: ${summarizeAgainstQuota(summary, quotaProfile)}`;
+                const modeLabel =
+                  quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular';
+
+                return `• **${member.displayName || member.user.username}** — ${quotaProfile.label} — ${modeLabel}: ${summarizeAgainstQuota(summary, quotaProfile)}`;
               })
               .join('\n')
-          : 'Everyone with a tracked Team role has met quota for the current week.',
+          : 'All Glace Interns+ have met quota for the current week.',
       )
       .addFields({
-        name: '📅 Week Window',
-        value: `${formatRangeLabel(currentRange, TIME_ZONE)}\nMonday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`,
+        name: 'Week Window',
+        value: `${formatRangeLabel(currentRange)}\nMonday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`,
       })
       .setFooter({
         text:
           missing.length > shown.length
             ? `Showing ${shown.length} of ${missing.length} members below quota.`
             : `${missing.length} members below quota.`,
-      });
+      })
+      .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
   },
