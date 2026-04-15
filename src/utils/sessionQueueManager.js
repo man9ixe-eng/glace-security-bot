@@ -486,7 +486,9 @@ async function openQueueForCard(interaction, cardOption) {
     headerTitle,
     headerBottom,
     '',
-    hostId ? `📌  Host: <@${hostId}>` : `📌  Host: ${hostName || 'Unknown'}`,
+    hostId
+  ? `📌  Host: <@${hostId}> (${hostId}) • ${hostName || 'Unknown'}`
+  : `📌  Host: ${hostName || 'Unknown'}`
     startsIn ? `📌  Starts: ${startsIn}` : null,
     timeText ? `📌  Time: ${timeText}` : null,
     '',

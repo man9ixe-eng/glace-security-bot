@@ -3,6 +3,8 @@
   "supportSessions": [],
   "meta": {
     "currentWeekKey": "2026-04-13",
-    "lastMaintenanceAt": 0
+    "lastMaintenanceAt": 1776248473403,
+    "previousWeekKey": null,
+    "lastBackfillAt": 0
   }
 }
