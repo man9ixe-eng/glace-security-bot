@@ -21,7 +21,38 @@ function formatQuotaLine(quotaProfile) {
 }
 
 function box(lines) {
-  return `╭────────────────────╮\n${lines.map(l => `│ ${l}`).join('\n')}\n╰────────────────────╯`;
+  return `╭────────────────────╮\n${lines.map((l) => `│ ${l}`).join('\n')}\n╰────────────────────╯`;
+}
+
+function buildProgressBar(current, required, size = 5) {
+  if (!required || required <= 0) return '█████';
+  const ratio = Math.max(0, Math.min(1, current / required));
+  const filled = Math.round(ratio * size);
+  return `${'█'.repeat(filled)}${'░'.repeat(size - filled)}`;
+}
+
+function buildQuotaProgressLines(source, quota) {
+  const totalRequired = quota.total || 0;
+  const interviewRequired = quota.minInterview || 0;
+  const trainingRequired = quota.minTraining || 0;
+
+  const lines = [
+    `Progress: ${buildProgressBar(source.total, totalRequired)} ${source.total}/${totalRequired}`,
+  ];
+
+  if (interviewRequired > 0) {
+    lines.push(
+      `Interviews: ${buildProgressBar(source.interview, interviewRequired)} ${source.interview}/${interviewRequired}`,
+    );
+  }
+
+  if (trainingRequired > 0) {
+    lines.push(
+      `Trainings: ${buildProgressBar(source.training, trainingRequired)} ${source.training}/${trainingRequired}`,
+    );
+  }
+
+  return lines;
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
@@ -55,8 +86,7 @@ async function buildActivityEmbed(interaction, targetMember) {
     .setColor(met ? 0x1e3a8a : 0x3b82f6)
     .setTitle(`💠 ${name} • Weekly Activity`)
     .setDescription(
-      `📅 **Week:** ${formatRangeLabel(currentRange)}\n` +
-      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`
+      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`,
     )
     .addFields(
       {
@@ -70,9 +100,13 @@ async function buildActivityEmbed(interaction, targetMember) {
       {
         name: '📊 Current Week',
         value: box([
+          `📅 ${formatRangeLabel(currentRange)}`,
+          '',
           `Interviews: ${currentSource.interview}`,
           `Trainings: ${currentSource.training}`,
           `Total: ${currentSource.total}`,
+          '',
+          ...buildQuotaProgressLines(currentSource, quotaProfile.quota),
           '',
           `Status: ${met ? '✅ Met' : '❌ Below'}`,
         ]),
@@ -81,9 +115,13 @@ async function buildActivityEmbed(interaction, targetMember) {
       {
         name: '📁 Last Week',
         value: box([
+          `📅 ${formatRangeLabel(lastRange)}`,
+          '',
           `Interviews: ${lastSource.interview}`,
           `Trainings: ${lastSource.training}`,
           `Total: ${lastSource.total}`,
+          '',
+          ...buildQuotaProgressLines(lastSource, quotaProfile.quota),
           '',
           `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
         ]),
@@ -93,20 +131,27 @@ async function buildActivityEmbed(interaction, targetMember) {
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))
     .setFooter({ text: 'Glace Hotels | Activity System' });
 
-  // 🔷 CORPORATE+
   if (quotaProfile.isCorporatePlus) {
     embed.data.fields[1].value = box([
+      `📅 ${formatRangeLabel(currentRange)}`,
+      '',
       `Hosted Interviews: ${current.hosted.interview}`,
       `Hosted Trainings: ${current.hosted.training}`,
       `Total Hosted: ${current.hosted.total}`,
+      '',
+      ...buildQuotaProgressLines(current.hosted, quotaProfile.quota),
       '',
       `Status: ${met ? '✅ Met' : '❌ Below'}`,
     ]);
 
     embed.data.fields[2].value = box([
+      `📅 ${formatRangeLabel(lastRange)}`,
+      '',
       `Hosted Interviews: ${last.hosted.interview}`,
       `Hosted Trainings: ${last.hosted.training}`,
       `Total Hosted: ${last.hosted.total}`,
+      '',
+      ...buildQuotaProgressLines(last.hosted, quotaProfile.quota),
       '',
       `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
     ]);
@@ -143,7 +188,7 @@ async function buildActivityEmbed(interaction, targetMember) {
           `Spectator: ${last.support.roles.spectator || 0}`,
         ]),
         inline: true,
-      }
+      },
     );
   }
 
