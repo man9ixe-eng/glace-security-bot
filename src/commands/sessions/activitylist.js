@@ -1,7 +1,7 @@
-
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const {
   TIME_ZONE,
+  backfillFromLogChannel,
   getQuotaProfileForMember,
   getUserActivity,
   getWeekRange,
@@ -13,12 +13,15 @@ const {
 function summarizeAgainstQuota(summary, quotaProfile) {
   const source = quotaProfile.quota.mode === 'hosted' ? summary.hosted : summary.support;
   const parts = [`${source.total}/${quotaProfile.quota.total} total`];
+
   if ((quotaProfile.quota.minInterview || 0) > 0) {
     parts.push(`${source.interview}/${quotaProfile.quota.minInterview} interview`);
   }
+
   if ((quotaProfile.quota.minTraining || 0) > 0) {
     parts.push(`${source.training}/${quotaProfile.quota.minTraining} training`);
   }
+
   return parts.join(' • ');
 }
 
@@ -29,6 +32,7 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
+    await backfillFromLogChannel(interaction.client);
 
     const members = await interaction.guild.members.fetch();
     const currentRange = getWeekRange(0, TIME_ZONE);
@@ -42,6 +46,7 @@ module.exports = {
 
       const activity = getUserActivity(member.id);
       const summary = summarizeActivity(activity, currentRange);
+
       if (hasMetQuota(summary, quotaProfile)) continue;
 
       missing.push({
@@ -55,6 +60,7 @@ module.exports = {
       if (a.quotaProfile.label !== b.quotaProfile.label) {
         return a.quotaProfile.label.localeCompare(b.quotaProfile.label);
       }
+
       return (a.member.displayName || a.member.user.username).localeCompare(
         b.member.displayName || b.member.user.username,
       );

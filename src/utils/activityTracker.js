@@ -1,7 +1,7 @@
-
 const fs = require('node:fs');
 const path = require('node:path');
 const rolesConfig = require('../config/roles');
+
 let quotaSettings;
 try {
   quotaSettings = require('./quotaSettings');
@@ -11,10 +11,13 @@ try {
 
 const DATA_PATH = path.join(__dirname, '..', 'data', 'activityLogs.json');
 const TIME_ZONE = 'America/New_York';
+const SESSION_LOG_CHANNEL_ID =
+  process.env.SESSION_LOG_CHANNEL_ID || '1452217561935777884';
 
 function ensureStore() {
   const dir = path.dirname(DATA_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
   if (!fs.existsSync(DATA_PATH)) {
     fs.writeFileSync(
       DATA_PATH,
@@ -24,7 +27,9 @@ function ensureStore() {
           supportSessions: [],
           meta: {
             currentWeekKey: getWeekKeyForDate(new Date()),
+            previousWeekKey: null,
             lastMaintenanceAt: Date.now(),
+            lastBackfillAt: 0,
           },
         },
         null,
@@ -41,7 +46,9 @@ function normalizeStoreShape(parsed) {
       supportSessions: [],
       meta: {
         currentWeekKey: getWeekKeyForDate(new Date()),
+        previousWeekKey: null,
         lastMaintenanceAt: Date.now(),
+        lastBackfillAt: 0,
       },
     };
   }
@@ -49,7 +56,7 @@ function normalizeStoreShape(parsed) {
   if (!Array.isArray(parsed.hostedSessions)) parsed.hostedSessions = [];
   if (!Array.isArray(parsed.supportSessions)) parsed.supportSessions = [];
 
-  // Backward compatibility for old format: { sessions: [...] }
+  // Backward compatibility with older format
   if (Array.isArray(parsed.sessions) && parsed.hostedSessions.length === 0) {
     parsed.hostedSessions = parsed.sessions.map((entry) => ({
       userId: entry.userId,
@@ -68,8 +75,17 @@ function normalizeStoreShape(parsed) {
   if (!parsed.meta.currentWeekKey) {
     parsed.meta.currentWeekKey = getWeekKeyForDate(new Date());
   }
+
+  if (!Object.prototype.hasOwnProperty.call(parsed.meta, 'previousWeekKey')) {
+    parsed.meta.previousWeekKey = null;
+  }
+
   if (!parsed.meta.lastMaintenanceAt) {
     parsed.meta.lastMaintenanceAt = Date.now();
+  }
+
+  if (!parsed.meta.lastBackfillAt) {
+    parsed.meta.lastBackfillAt = 0;
   }
 
   return parsed;
@@ -313,13 +329,14 @@ function addDaysToLocalDate(year, month, day, offsetDays) {
 
 function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
   const now = new Date();
-  const nowParts = getTimeZoneParts(now, timeZone);
-  const daysSinceMonday = (nowParts.weekday + 6) % 7;
+  const currentParts = getTimeZoneParts(now, timeZone);
+  const daysSinceMonday = (currentParts.weekday + 6) % 7;
+
   const mondayLocal = addDaysToLocalDate(
-    nowParts.year,
-    nowParts.month,
-    nowParts.day,
-    (offsetWeeks * 7) - daysSinceMonday,
+    currentParts.year,
+    currentParts.month,
+    currentParts.day,
+    -daysSinceMonday + (offsetWeeks * 7),
   );
 
   const nextMondayLocal = addDaysToLocalDate(
@@ -333,6 +350,41 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
     { ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
     timeZone,
   );
+
+  const nextStartMs = zonedLocalToUtc(
+    { ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    timeZone,
+  );
+
+  return {
+    startMs,
+    endMs: nextStartMs - 1,
+  };
+}
+
+function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
+  const parts = getTimeZoneParts(date, timeZone);
+  const daysSinceMonday = (parts.weekday + 6) % 7;
+
+  const mondayLocal = addDaysToLocalDate(
+    parts.year,
+    parts.month,
+    parts.day,
+    -daysSinceMonday,
+  );
+
+  const nextMondayLocal = addDaysToLocalDate(
+    mondayLocal.year,
+    mondayLocal.month,
+    mondayLocal.day,
+    7,
+  );
+
+  const startMs = zonedLocalToUtc(
+    { ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    timeZone,
+  );
+
   const nextStartMs = zonedLocalToUtc(
     { ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
     timeZone,
@@ -348,29 +400,6 @@ function getWeekKeyForDate(date, timeZone = TIME_ZONE) {
   const range = getWeekRangeForDate(date, timeZone);
   const parts = getTimeZoneParts(new Date(range.startMs), timeZone);
   return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
-}
-
-function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
-  const nowParts = getTimeZoneParts(date, timeZone);
-  const daysSinceMonday = (nowParts.weekday + 6) % 7;
-  const mondayLocal = addDaysToLocalDate(
-    nowParts.year,
-    nowParts.month,
-    nowParts.day,
-    -daysSinceMonday,
-  );
-  const nextMondayLocal = addDaysToLocalDate(mondayLocal.year, mondayLocal.month, mondayLocal.day, 7);
-
-  const startMs = zonedLocalToUtc(
-    { ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
-    timeZone,
-  );
-  const nextStartMs = zonedLocalToUtc(
-    { ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
-    timeZone,
-  );
-
-  return { startMs, endMs: nextStartMs - 1 };
 }
 
 function runWeeklyMaintenance() {
@@ -407,6 +436,7 @@ function recordHostedSession({
   cancelled = false,
 }) {
   if (!userId || !shortId || !sessionType) return false;
+
   runWeeklyMaintenance();
   const data = readStore();
 
@@ -437,12 +467,16 @@ function recordSupportSession({
   cancelled = false,
 }) {
   if (!userId || !shortId || !sessionType || !roleKey) return false;
+
   runWeeklyMaintenance();
   const data = readStore();
 
   upsertByKeys(
     data.supportSessions,
-    (entry) => entry.userId === userId && entry.shortId === shortId && entry.roleKey === roleKey,
+    (entry) =>
+      entry.userId === userId &&
+      entry.shortId === shortId &&
+      entry.roleKey === roleKey,
     {
       userId,
       shortId,
@@ -456,6 +490,144 @@ function recordSupportSession({
 
   writeStore(data);
   return true;
+}
+
+function extractIdsFromFieldValue(value) {
+  const text = String(value || '');
+  const ids = new Set();
+
+  const mentionMatches = [...text.matchAll(/<@!?(\d{17,20})>/g)];
+  for (const match of mentionMatches) ids.add(match[1]);
+
+  const rawMatches = [...text.matchAll(/\b(\d{17,20})\b/g)];
+  for (const match of rawMatches) ids.add(match[1]);
+
+  return [...ids];
+}
+
+function detectSessionTypeFromEmbed(embed) {
+  const title = String(embed.title || '').toLowerCase();
+  const description = String(embed.description || '').toLowerCase();
+
+  if (title.includes('interview') || description.includes('interview')) return 'interview';
+  if (title.includes('training') || description.includes('training')) return 'training';
+  if (title.includes('mass shift') || title.includes('massshift')) return 'massshift';
+
+  return null;
+}
+
+function mapFieldNameToRoleKey(fieldName) {
+  const name = String(fieldName || '').toLowerCase();
+
+  if (name.includes('co-host') || name.includes('cohost')) return 'cohost';
+  if (name.includes('overseer')) return 'overseer';
+  if (name.includes('interviewer')) return 'interviewer';
+  if (name.includes('trainer')) return 'interviewer';
+  if (name.includes('attendees')) return 'interviewer';
+  if (name.includes('spectator')) return 'spectator';
+  if (name.includes('supervisor')) return 'supervisor';
+
+  return null;
+}
+
+async function backfillFromLogChannel(client) {
+  if (!client) return;
+
+  runWeeklyMaintenance();
+  const data = readStore();
+  const now = Date.now();
+
+  if (now - (data.meta.lastBackfillAt || 0) < 5 * 60 * 1000) {
+    return;
+  }
+
+  const channel = await client.channels.fetch(SESSION_LOG_CHANNEL_ID).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    data.meta.lastBackfillAt = now;
+    writeStore(data);
+    return;
+  }
+
+  let before;
+  let scanned = 0;
+
+  while (scanned < 500) {
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!batch || batch.size === 0) break;
+
+    for (const message of batch.values()) {
+      scanned += 1;
+
+      const embed = message.embeds?.[0];
+      if (!embed) continue;
+
+      const sessionType = detectSessionTypeFromEmbed(embed);
+      if (!sessionType) continue;
+
+      const shortId = message.id;
+      const timestamp = message.createdTimestamp;
+
+      let hostIds = [];
+      const supportEntries = [];
+
+      for (const field of embed.fields || []) {
+        const loweredName = String(field.name || '').toLowerCase();
+
+        if (loweredName === 'host') {
+          hostIds = extractIdsFromFieldValue(field.value);
+          continue;
+        }
+
+        const roleKey = mapFieldNameToRoleKey(field.name);
+        if (!roleKey) continue;
+
+        const ids = extractIdsFromFieldValue(field.value);
+        for (const userId of ids) {
+          supportEntries.push({ userId, roleKey });
+        }
+      }
+
+      for (const userId of hostIds) {
+        upsertByKeys(
+          data.hostedSessions,
+          (entry) => entry.userId === userId && entry.shortId === shortId,
+          {
+            userId,
+            shortId,
+            sessionType,
+            guildId: message.guildId || null,
+            timestamp,
+            cancelled: false,
+          },
+        );
+      }
+
+      for (const entry of supportEntries) {
+        upsertByKeys(
+          data.supportSessions,
+          (existing) =>
+            existing.userId === entry.userId &&
+            existing.shortId === shortId &&
+            existing.roleKey === entry.roleKey,
+          {
+            userId: entry.userId,
+            shortId,
+            sessionType,
+            roleKey: entry.roleKey,
+            guildId: message.guildId || null,
+            timestamp,
+            cancelled: false,
+          },
+        );
+      }
+    }
+
+    before = batch.last()?.id;
+    if (!before) break;
+  }
+
+  data.meta.lastBackfillAt = now;
+  writeStore(data);
 }
 
 function getAllActivity() {
@@ -514,12 +686,14 @@ function summarizeActivity(activity, range) {
 
 function hasMetQuota(summary, quotaProfile) {
   if (!quotaProfile || !quotaProfile.quota) return false;
+
   const quota = quotaProfile.quota;
   const source = quota.mode === 'hosted' ? summary.hosted : summary.support;
 
   if (source.total < (quota.total || 0)) return false;
   if ((quota.minInterview || 0) > 0 && source.interview < quota.minInterview) return false;
   if ((quota.minTraining || 0) > 0 && source.training < quota.minTraining) return false;
+
   return true;
 }
 
@@ -554,7 +728,9 @@ function formatWeekWindowShort(range, timeZone = TIME_ZONE) {
 module.exports = {
   DATA_PATH,
   TIME_ZONE,
+  SESSION_LOG_CHANNEL_ID,
   runWeeklyMaintenance,
+  backfillFromLogChannel,
   recordHostedSession,
   recordSupportSession,
   getAllActivity,

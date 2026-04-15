@@ -1,7 +1,7 @@
-
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const {
   TIME_ZONE,
+  backfillFromLogChannel,
   getQuotaProfileForMember,
   getUserActivity,
   getWeekRange,
@@ -18,32 +18,13 @@ function formatQuotaLine(quotaProfile) {
   return base.join(' • ');
 }
 
-function formatSupportRoles(summary) {
-  const labels = [
-    ['cohost', 'Co-Host'],
-    ['overseer', 'Overseer'],
-    ['interviewer', 'Main Role'],
-    ['supervisor', 'Supervisor'],
-    ['spectator', 'Spectator'],
-  ];
-
-  const parts = labels
-    .map(([key, label]) => `${label}: **${summary.roles[key] || 0}**`)
-    .join('\n');
-
-  return (
-    `${parts}\n` +
-    `Interviews: **${summary.interview}**\n` +
-    `Trainings: **${summary.training}**\n` +
-    `Total Help Sessions: **${summary.total}**`
-  );
-}
-
 function buildSectionBox(lines) {
   return `╭────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────╯`;
 }
 
-function buildActivityEmbed(member, targetMember) {
+async function buildActivityEmbed(interaction, targetMember) {
+  await backfillFromLogChannel(interaction.client);
+
   const quotaProfile = getQuotaProfileForMember(targetMember);
   if (!quotaProfile) return null;
 
@@ -100,7 +81,9 @@ function buildActivityEmbed(member, targetMember) {
       },
     )
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))
-    .setFooter({ text: 'Hosted sessions count for Corporate+ quota. Regular helper roles count for non-Corporate quotas.' });
+    .setFooter({
+      text: 'Hosted sessions count for Corporate+ quota. Regular helper roles count for non-Corporate quotas.',
+    });
 
   if (quotaProfile.isCorporatePlus) {
     embed.addFields(
@@ -147,7 +130,7 @@ module.exports = {
     .setDescription('View your current and previous week activity.'),
 
   async execute(interaction) {
-    const embed = buildActivityEmbed(interaction.member, interaction.member);
+    const embed = await buildActivityEmbed(interaction, interaction.member);
 
     if (!embed) {
       await interaction.reply({

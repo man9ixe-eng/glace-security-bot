@@ -843,18 +843,18 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
   );
 
   async function usernamesFromEntries(entries) {
-    const results = [];
-    for (const entry of entries) {
-      const displayName = await resolveGuildDisplayName(
-        client,
-        queue.guildId,
-        entry.userId,
-        `Unknown (${entry.userId})`,
-      );
-      results.push(displayName);
-    }
-    return results;
+  const results = [];
+  for (const entry of entries) {
+    const displayName = await resolveGuildDisplayName(
+      client,
+      queue.guildId,
+      entry.userId,
+      `Unknown (${entry.userId})`,
+    );
+    results.push(`<@${entry.userId}> (${entry.userId}) • ${displayName}`);
   }
+  return results;
+}
 
   const [
     cohostNames,
@@ -882,9 +882,11 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     : queue.hostName || 'Unknown';
 
   fields.push({
-    name: 'Host',
-    value: resolvedHostName,
-  });
+  name: 'Host',
+  value: queue.hostId
+    ? `<@${queue.hostId}> (${queue.hostId}) • ${resolvedHostName}`
+    : resolvedHostName,
+});
 
   fields.push({
     name: 'Co-Host',

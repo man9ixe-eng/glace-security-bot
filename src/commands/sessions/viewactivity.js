@@ -1,11 +1,10 @@
-
 const { SlashCommandBuilder } = require('discord.js');
 const activityCommand = require('./activity');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('viewactivity')
-    .setDescription('View another member\'s activity panel.')
+    .setDescription("View another member's activity panel.")
     .addUserOption((option) =>
       option
         .setName('player')
@@ -24,7 +23,8 @@ module.exports = {
       return;
     }
 
-    const embed = activityCommand.buildActivityEmbed(interaction.member, target);
+    const embed = await activityCommand.buildActivityEmbed(interaction, target);
+
     if (!embed) {
       await interaction.reply({
         content: 'That user does not have a quota-tracked Team role on this server.',
