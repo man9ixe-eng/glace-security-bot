@@ -329,42 +329,55 @@ function addDaysToLocalDate(year, month, day, offsetDays) {
 
 function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
   const now = new Date();
-  const currentParts = getTimeZoneParts(now, timeZone);
-  const daysSinceMonday = currentParts.weekday === 0 ? 6 : currentParts.weekday - 1;
+  const parts = getTimeZoneParts(now, timeZone);
+
+  // Monday-based index: Mon=0 ... Sun=6
+  const daysSinceMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
 
   const mondayLocal = addDaysToLocalDate(
-    currentParts.year,
-    currentParts.month,
-    currentParts.day,
+    parts.year,
+    parts.month,
+    parts.day,
     -daysSinceMonday + (offsetWeeks * 7),
   );
 
-  const nextMondayLocal = addDaysToLocalDate(
+  const sundayLocal = addDaysToLocalDate(
     mondayLocal.year,
     mondayLocal.month,
     mondayLocal.day,
-    7,
+    6,
   );
 
   const startMs = zonedLocalToUtc(
-    { ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    {
+      ...mondayLocal,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    },
     timeZone,
   );
 
-  const nextStartMs = zonedLocalToUtc(
-    { ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+  const endMs = zonedLocalToUtc(
+    {
+      ...sundayLocal,
+      hour: 23,
+      minute: 59,
+      second: 59,
+      millisecond: 999,
+    },
     timeZone,
   );
 
-  return {
-    startMs,
-    endMs: nextStartMs - 1,
-  };
+  return { startMs, endMs };
 }
 
 function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
   const parts = getTimeZoneParts(date, timeZone);
-  const daysSinceMonday = (parts.weekday + 6) % 7;
+
+  // Monday-based index: Mon=0 ... Sun=6
+  const daysSinceMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
 
   const mondayLocal = addDaysToLocalDate(
     parts.year,
@@ -373,27 +386,36 @@ function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
     -daysSinceMonday,
   );
 
-  const nextMondayLocal = addDaysToLocalDate(
+  const sundayLocal = addDaysToLocalDate(
     mondayLocal.year,
     mondayLocal.month,
     mondayLocal.day,
-    7,
+    6,
   );
 
   const startMs = zonedLocalToUtc(
-    { ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    {
+      ...mondayLocal,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    },
     timeZone,
   );
 
-  const nextStartMs = zonedLocalToUtc(
-    { ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+  const endMs = zonedLocalToUtc(
+    {
+      ...sundayLocal,
+      hour: 23,
+      minute: 59,
+      second: 59,
+      millisecond: 999,
+    },
     timeZone,
   );
 
-  return {
-    startMs,
-    endMs: nextStartMs - 1,
-  };
+  return { startMs, endMs };
 }
 
 function getWeekKeyForDate(date, timeZone = TIME_ZONE) {
