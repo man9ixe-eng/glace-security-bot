@@ -7,7 +7,7 @@ const {
   EmbedBuilder,
 } = require('discord.js');
 const { trelloRequest } = require('./trelloClient');
-const { recordHostedSession } = require('./activityTracker');
+const { recordHostedSession, recordSupportSession } = require('./activityTracker');
 
 // In-memory registry of active queues, keyed by Trello card shortId.
 const queues = new Map();
@@ -943,15 +943,40 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
 
   await logChannel.send({ embeds: [logEmbed] });
 
+  const logTimestamp = Date.now();
+
   if (queue.hostId) {
     recordHostedSession({
       userId: queue.hostId,
       shortId,
       sessionType: queue.sessionType,
       guildId: queue.guildId || null,
-      timestamp: Date.now(),
+      timestamp: logTimestamp,
       cancelled: !recordAttendance,
     });
+  }
+
+  const supportRoleGroups = [
+    ['cohost', cohost.selected],
+    ['overseer', overseer.selected],
+    ['interviewer', main.selected],
+    ['spectator', spectator.selected],
+    ['supervisor', supervisor.selected],
+  ];
+
+  for (const [roleKey, entries] of supportRoleGroups) {
+    for (const entry of entries) {
+      if (!entry?.userId || entry.userId === queue.hostId) continue;
+      recordSupportSession({
+        userId: entry.userId,
+        shortId,
+        sessionType: queue.sessionType,
+        roleKey,
+        guildId: queue.guildId || null,
+        timestamp: logTimestamp,
+        cancelled: !recordAttendance,
+      });
+    }
   }
 
   if (

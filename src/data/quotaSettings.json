@@ -1,38 +1,44 @@
 {
-  "Intern": {
+  "intern": {
+    "label": "Interns",
+    "mode": "regular",
     "total": 2,
-    "interview": 1,
-    "training": 1,
-    "hosting": 0
+    "minInterview": 1,
+    "minTraining": 1
   },
-  "Management": {
+  "management": {
+    "label": "Management",
+    "mode": "regular",
     "total": 3,
-    "interview": 0,
-    "training": 0,
-    "hosting": 0
+    "minInterview": 0,
+    "minTraining": 0
   },
-  "Senior Management": {
+  "senior_management": {
+    "label": "Senior Management",
+    "mode": "regular",
     "total": 4,
-    "interview": 2,
-    "training": 2,
-    "hosting": 0
+    "minInterview": 2,
+    "minTraining": 2
   },
-  "Corporate": {
+  "corporate": {
+    "label": "Corporate",
+    "mode": "hosted",
     "total": 4,
-    "interview": 2,
-    "training": 2,
-    "hosting": 4
+    "minInterview": 2,
+    "minTraining": 2
   },
-  "Corporate Board": {
+  "corporate_board": {
+    "label": "Corporate Board",
+    "mode": "hosted",
     "total": 2,
-    "interview": 1,
-    "training": 1,
-    "hosting": 2
+    "minInterview": 1,
+    "minTraining": 1
   },
-  "Presidentials": {
+  "presidential": {
+    "label": "Presidentials",
+    "mode": "hosted",
     "total": 1,
-    "interview": 0,
-    "training": 0,
-    "hosting": 1
+    "minInterview": 0,
+    "minTraining": 0
   }
 }

@@ -128,6 +128,7 @@ if (fs.existsSync(commandsPathRoot)) {
 
 // READY
 client.once(Events.ClientReady, (c) => {
+  runWeeklyMaintenance();
   console.log(
     `[READY] Logged in as ${c.user.tag} (id: ${c.user.id}) in ${c.guilds.cache.size} guild(s).`
   );
@@ -159,15 +160,6 @@ if (ENABLE_DISCORD_DEBUG) {
 client.on("warn", (msg) => console.warn("[DISCORD WARN]", msg));
 client.on("error", (err) => console.error("[DISCORD ERROR]", err));
 
-// Activity weekly maintenance: every 5 minutes
-setInterval(async () => {
-  try {
-    await runWeeklyMaintenance(client);
-  } catch (err) {
-    console.error("[AUTO] Activity maintenance error:", err);
-  }
-}, 5 * 60 * 1000);
-
 // Session announcements: every 1 minute
 setInterval(async () => {
   try {
@@ -177,6 +169,15 @@ setInterval(async () => {
     console.error("[AUTO] Session announcement error:", err);
   }
 }, 60 * 1000);
+
+// Weekly activity maintenance: every 1 hour
+setInterval(() => {
+  try {
+    runWeeklyMaintenance();
+  } catch (err) {
+    console.error("[ACTIVITY] Weekly maintenance error:", err);
+  }
+}, 60 * 60 * 1000);
 
 // MESSAGE CREATE
 if (ENABLE_MESSAGE_CONTENT) {

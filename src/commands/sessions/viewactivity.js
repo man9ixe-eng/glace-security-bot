@@ -1,6 +1,6 @@
+
 const { SlashCommandBuilder } = require('discord.js');
 const activityCommand = require('./activity');
-const { ensureActivityDataFresh } = require('../../utils/activityTracker');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,9 +14,8 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await ensureActivityDataFresh(interaction.client, interaction.guild);
-
     const target = interaction.options.getMember('player');
+
     if (!target) {
       await interaction.reply({
         content: 'I could not find that member in this server.',
@@ -25,7 +24,7 @@ module.exports = {
       return;
     }
 
-    const embed = activityCommand.buildActivityEmbed(target, target, interaction.guild);
+    const embed = activityCommand.buildActivityEmbed(interaction.member, target);
     if (!embed) {
       await interaction.reply({
         content: 'That user does not have a quota-tracked Team role on this server.',

@@ -1,71 +1,80 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { setQuota, getQuota } = require('../../utils/quotaSettings');
 
-const tiers = [
-  'Intern',
-  'Management',
-  'Senior Management',
-  'Corporate',
-  'Corporate Board',
-  'Presidentials',
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { getQuota, setQuota } = require('../../utils/quotaSettings');
+
+const TIER_CHOICES = [
+  ['Interns', 'intern'],
+  ['Management', 'management'],
+  ['Senior Management', 'senior_management'],
+  ['Corporate', 'corporate'],
+  ['Corporate Board', 'corporate_board'],
+  ['Presidentials', 'presidential'],
 ];
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('activitysettings')
-    .setDescription('Edit activity quota requirements for a tier.')
+    .setDescription('Edit quota settings for a tracked tier.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption((option) =>
       option
         .setName('tier')
-        .setDescription('The quota tier to edit.')
+        .setDescription('Which tier to edit.')
         .setRequired(true)
-        .addChoices(...tiers.map((tier) => ({ name: tier, value: tier }))),
+        .addChoices(...TIER_CHOICES),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('mode')
+        .setDescription('Quota type for this tier.')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Regular Sessions', value: 'regular' },
+          { name: 'Hosted Sessions', value: 'hosted' },
+        ),
     )
     .addIntegerOption((option) =>
       option.setName('total').setDescription('Required total sessions.').setRequired(true).setMinValue(0),
     )
     .addIntegerOption((option) =>
-      option.setName('interview').setDescription('Minimum interviews required.').setRequired(true).setMinValue(0),
+      option.setName('interview').setDescription('Minimum interview sessions.').setRequired(true).setMinValue(0),
     )
     .addIntegerOption((option) =>
-      option.setName('training').setDescription('Minimum trainings required.').setRequired(true).setMinValue(0),
-    )
-    .addIntegerOption((option) =>
-      option.setName('hosting').setDescription('Minimum hosted sessions required.').setRequired(false).setMinValue(0),
+      option.setName('training').setDescription('Minimum training sessions.').setRequired(true).setMinValue(0),
     ),
 
   async execute(interaction) {
     const tier = interaction.options.getString('tier', true);
+    const mode = interaction.options.getString('mode', true);
     const total = interaction.options.getInteger('total', true);
-    const interview = interaction.options.getInteger('interview', true);
-    const training = interaction.options.getInteger('training', true);
-    const previous = getQuota(tier);
+    const minInterview = interaction.options.getInteger('interview', true);
+    const minTraining = interaction.options.getInteger('training', true);
 
-    let hosting = interaction.options.getInteger('hosting');
-    if (hosting == null) hosting = previous?.hosting || 0;
+    const current = getQuota(tier);
+    if (!current) {
+      await interaction.reply({
+        content: 'That quota tier could not be found.',
+        ephemeral: true,
+      });
+      return;
+    }
 
-    const updated = setQuota(tier, { total, interview, training, hosting });
+    const updated = setQuota(tier, {
+      mode,
+      total,
+      minInterview,
+      minTraining,
+    });
 
     const embed = new EmbedBuilder()
-      .setColor(0xffb6f2)
+      .setColor(0xf7b2ff)
       .setTitle('✨ Activity Settings Updated')
-      .setDescription(`The quota for **${tier}** has been saved.`)
+      .setDescription(`Updated **${updated.label}** quota settings.`)
       .addFields(
-        {
-          name: '🌷 New Requirement',
-          value:
-            `Total: **${updated.total}**\n` +
-            `Interviews: **${updated.interview}**\n` +
-            `Trainings: **${updated.training}**\n` +
-            `Hosting: **${updated.hosting}**`,
-        },
-        {
-          name: '🫧 Previous Requirement',
-          value: previous
-            ? `Total: **${previous.total}**\nInterviews: **${previous.interview}**\nTrainings: **${previous.training}**\nHosting: **${previous.hosting}**`
-            : 'No previous value was stored.',
-        },
+        { name: 'Mode', value: updated.mode === 'hosted' ? 'Hosted Sessions' : 'Regular Sessions', inline: true },
+        { name: 'Total', value: String(updated.total), inline: true },
+        { name: 'Minimum Interviews', value: String(updated.minInterview), inline: true },
+        { name: 'Minimum Trainings', value: String(updated.minTraining), inline: true },
       );
 
     await interaction.reply({ embeds: [embed], ephemeral: true });

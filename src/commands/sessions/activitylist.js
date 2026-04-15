@@ -1,14 +1,26 @@
+
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const {
-  getUserSessions,
+  TIME_ZONE,
   getQuotaProfileForMember,
+  getUserActivity,
   getWeekRange,
-  summarizeSessions,
+  summarizeActivity,
   hasMetQuota,
   formatRangeLabel,
-  TIME_ZONE,
-  ensureActivityDataFresh,
 } = require('../../utils/activityTracker');
+
+function summarizeAgainstQuota(summary, quotaProfile) {
+  const source = quotaProfile.quota.mode === 'hosted' ? summary.hosted : summary.support;
+  const parts = [`${source.total}/${quotaProfile.quota.total} total`];
+  if ((quotaProfile.quota.minInterview || 0) > 0) {
+    parts.push(`${source.interview}/${quotaProfile.quota.minInterview} interview`);
+  }
+  if ((quotaProfile.quota.minTraining || 0) > 0) {
+    parts.push(`${source.training}/${quotaProfile.quota.minTraining} training`);
+  }
+  return parts.join(' • ');
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,7 +29,6 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
-    await ensureActivityDataFresh(interaction.client, interaction.guild);
 
     const members = await interaction.guild.members.fetch();
     const currentRange = getWeekRange(0, TIME_ZONE);
@@ -29,11 +40,15 @@ module.exports = {
       const quotaProfile = getQuotaProfileForMember(member);
       if (!quotaProfile) continue;
 
-      const sessions = getUserSessions(member.id);
-      const summary = summarizeSessions(sessions, currentRange);
-      if (hasMetQuota(summary, quotaProfile.quota)) continue;
+      const activity = getUserActivity(member.id);
+      const summary = summarizeActivity(activity, currentRange);
+      if (hasMetQuota(summary, quotaProfile)) continue;
 
-      missing.push({ member, quotaProfile, summary });
+      missing.push({
+        member,
+        quotaProfile,
+        summary,
+      });
     }
 
     missing.sort((a, b) => {
@@ -45,45 +60,30 @@ module.exports = {
       );
     });
 
-    const pages = [];
-    const chunkSize = 18;
-    for (let i = 0; i < missing.length; i += chunkSize) {
-      pages.push(missing.slice(i, i + chunkSize));
-    }
-
-    const page = pages[0] || [];
-
-    const description = page.length
-      ? page
-          .map(({ member, quotaProfile, summary }) => {
-            const bits = [
-              `🌷 **${member.displayName}**`,
-              `└ **${quotaProfile.label}** • ${summary.total}/${quotaProfile.quota.total} total`,
-              `• ${summary.interview}/${quotaProfile.quota.interview || 0} interview`,
-              `• ${summary.training}/${quotaProfile.quota.training || 0} training`,
-            ];
-
-            if (quotaProfile.corporatePlus) {
-              bits.push(`• ${summary.hosting}/${quotaProfile.quota.hosting || 0} hosting`);
-            }
-
-            return bits.join(' ');
-          })
-          .join('\n\n')
-      : '🌸 Everyone with a quota-tracked Team role has met quota for the current week.';
+    const shown = missing.slice(0, 25);
 
     const embed = new EmbedBuilder()
-      .setColor(0xffb6f2)
-      .setTitle('✨ Activity List • Members Below Quota')
-      .setDescription(description)
+      .setColor(0xffd6ea)
+      .setTitle('🫧 Activity List • Below Quota')
+      .setDescription(
+        missing.length
+          ? shown
+              .map(({ member, quotaProfile, summary }) => {
+                const modeLabel = quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular';
+                return `• **${member.displayName}** — ${quotaProfile.label} — ${modeLabel}: ${summarizeAgainstQuota(summary, quotaProfile)}`;
+              })
+              .join('\n')
+          : 'Everyone with a tracked Team role has met quota for the current week.',
+      )
       .addFields({
-        name: '📅 Current Week',
-        value: `${formatRangeLabel(currentRange, TIME_ZONE)}\nTimezone: **${TIME_ZONE}**`,
+        name: '📅 Week Window',
+        value: `${formatRangeLabel(currentRange, TIME_ZONE)}\nMonday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`,
       })
       .setFooter({
-        text: missing.length > page.length
-          ? `Showing ${page.length} of ${missing.length} members below quota.`
-          : `${missing.length} members below quota.`,
+        text:
+          missing.length > shown.length
+            ? `Showing ${shown.length} of ${missing.length} members below quota.`
+            : `${missing.length} members below quota.`,
       });
 
     await interaction.editReply({ embeds: [embed] });

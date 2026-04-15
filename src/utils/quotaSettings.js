@@ -1,65 +1,113 @@
+
 const fs = require('node:fs');
 const path = require('node:path');
 
-const FILE_PATH = path.join(__dirname, '..', 'data', 'quotaSettings.json');
+const DATA_PATH = path.join(__dirname, '..', 'data', 'quotaSettings.json');
 
 const DEFAULTS = {
-  Intern: { total: 2, interview: 1, training: 1, hosting: 0 },
-  Management: { total: 3, interview: 0, training: 0, hosting: 0 },
-  'Senior Management': { total: 4, interview: 2, training: 2, hosting: 0 },
-  Corporate: { total: 4, interview: 2, training: 2, hosting: 4 },
-  'Corporate Board': { total: 2, interview: 1, training: 1, hosting: 2 },
-  Presidentials: { total: 1, interview: 0, training: 0, hosting: 1 },
+  intern: {
+    label: 'Interns',
+    mode: 'regular',
+    total: 2,
+    minInterview: 1,
+    minTraining: 1,
+  },
+  management: {
+    label: 'Management',
+    mode: 'regular',
+    total: 3,
+    minInterview: 0,
+    minTraining: 0,
+  },
+  senior_management: {
+    label: 'Senior Management',
+    mode: 'regular',
+    total: 4,
+    minInterview: 2,
+    minTraining: 2,
+  },
+  corporate: {
+    label: 'Corporate',
+    mode: 'hosted',
+    total: 4,
+    minInterview: 2,
+    minTraining: 2,
+  },
+  corporate_board: {
+    label: 'Corporate Board',
+    mode: 'hosted',
+    total: 2,
+    minInterview: 1,
+    minTraining: 1,
+  },
+  presidential: {
+    label: 'Presidentials',
+    mode: 'hosted',
+    total: 1,
+    minInterview: 0,
+    minTraining: 0,
+  },
 };
 
-function ensureFile() {
-  const dir = path.dirname(FILE_PATH);
+function ensureStore() {
+  const dir = path.dirname(DATA_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(FILE_PATH)) {
-    fs.writeFileSync(FILE_PATH, JSON.stringify(DEFAULTS, null, 2));
+  if (!fs.existsSync(DATA_PATH)) {
+    fs.writeFileSync(DATA_PATH, JSON.stringify(DEFAULTS, null, 2));
   }
 }
 
-function readFile() {
-  ensureFile();
-  try {
-    const parsed = JSON.parse(fs.readFileSync(FILE_PATH, 'utf8'));
-    return { ...DEFAULTS, ...(parsed || {}) };
-  } catch {
-    return { ...DEFAULTS };
+function normalize(data) {
+  const merged = JSON.parse(JSON.stringify(DEFAULTS));
+  if (!data || typeof data !== 'object') return merged;
+
+  for (const [key, value] of Object.entries(data)) {
+    if (!merged[key]) continue;
+    merged[key] = {
+      ...merged[key],
+      ...value,
+    };
   }
-}
 
-function writeFile(data) {
-  ensureFile();
-  fs.writeFileSync(FILE_PATH, JSON.stringify(data, null, 2));
-}
-
-function getQuota(tier) {
-  const data = readFile();
-  return data[tier] || null;
+  return merged;
 }
 
 function getAllQuotas() {
-  return readFile();
+  ensureStore();
+  try {
+    const raw = fs.readFileSync(DATA_PATH, 'utf8');
+    return normalize(JSON.parse(raw));
+  } catch {
+    return normalize({});
+  }
 }
 
-function setQuota(tier, quota) {
-  const data = readFile();
-  data[tier] = {
-    total: Number(quota.total || 0),
-    interview: Number(quota.interview || 0),
-    training: Number(quota.training || 0),
-    hosting: Number(quota.hosting || 0),
+function saveAllQuotas(data) {
+  ensureStore();
+  fs.writeFileSync(DATA_PATH, JSON.stringify(normalize(data), null, 2));
+}
+
+function getQuota(tierKey) {
+  const all = getAllQuotas();
+  return all[tierKey] || null;
+}
+
+function setQuota(tierKey, patch) {
+  const all = getAllQuotas();
+  if (!all[tierKey]) return null;
+  all[tierKey] = {
+    ...all[tierKey],
+    ...patch,
   };
-  writeFile(data);
-  return data[tier];
+  saveAllQuotas(all);
+  return all[tierKey];
 }
 
 module.exports = {
-  FILE_PATH,
+  DATA_PATH,
   DEFAULTS,
-  getQuota,
   getAllQuotas,
+  getQuota,
   setQuota,
+  saveAllQuotas,
 };
