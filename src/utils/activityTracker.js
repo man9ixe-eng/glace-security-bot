@@ -331,7 +331,7 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
   const now = new Date();
   const parts = getTimeZoneParts(now, timeZone);
 
-  // Monday-based index: Mon=0 ... Sun=6
+  // Monday = 0, Tuesday = 1, ..., Sunday = 6
   const daysSinceMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
 
   const mondayLocal = addDaysToLocalDate(
@@ -341,6 +341,13 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
     -daysSinceMonday + (offsetWeeks * 7),
   );
 
+  const nextMondayLocal = addDaysToLocalDate(
+    mondayLocal.year,
+    mondayLocal.month,
+    mondayLocal.day,
+    7,
+  );
+
   const sundayLocal = addDaysToLocalDate(
     mondayLocal.year,
     mondayLocal.month,
@@ -359,24 +366,29 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
     timeZone,
   );
 
-  const endMs = zonedLocalToUtc(
+  const nextStartMs = zonedLocalToUtc(
     {
-      ...sundayLocal,
-      hour: 23,
-      minute: 59,
-      second: 59,
-      millisecond: 999,
+      ...nextMondayLocal,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
     },
     timeZone,
   );
 
-  return { startMs, endMs };
+  return {
+    startMs,
+    endMs: nextStartMs - 1,
+    startLocal: mondayLocal,
+    endLocal: sundayLocal,
+  };
 }
 
 function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
   const parts = getTimeZoneParts(date, timeZone);
 
-  // Monday-based index: Mon=0 ... Sun=6
+  // Monday = 0, Tuesday = 1, ..., Sunday = 6
   const daysSinceMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
 
   const mondayLocal = addDaysToLocalDate(
@@ -386,6 +398,13 @@ function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
     -daysSinceMonday,
   );
 
+  const nextMondayLocal = addDaysToLocalDate(
+    mondayLocal.year,
+    mondayLocal.month,
+    mondayLocal.day,
+    7,
+  );
+
   const sundayLocal = addDaysToLocalDate(
     mondayLocal.year,
     mondayLocal.month,
@@ -404,18 +423,23 @@ function getWeekRangeForDate(date, timeZone = TIME_ZONE) {
     timeZone,
   );
 
-  const endMs = zonedLocalToUtc(
+  const nextStartMs = zonedLocalToUtc(
     {
-      ...sundayLocal,
-      hour: 23,
-      minute: 59,
-      second: 59,
-      millisecond: 999,
+      ...nextMondayLocal,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
     },
     timeZone,
   );
 
-  return { startMs, endMs };
+  return {
+    startMs,
+    endMs: nextStartMs - 1,
+    startLocal: mondayLocal,
+    endLocal: sundayLocal,
+  };
 }
 
 function getWeekKeyForDate(date, timeZone = TIME_ZONE) {
@@ -719,22 +743,22 @@ function hasMetQuota(summary, quotaProfile) {
   return true;
 }
 
-function formatRangeLabel(range, timeZone = TIME_ZONE) {
-  const start = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+function formatRangeLabel(range) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIME_ZONE,
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(range.startMs));
+  });
 
-  const end = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(range.endMs));
+  // Force midday to avoid timezone shifting backward
+  const startDate = new Date(range.startMs + 12 * 60 * 60 * 1000);
+  const endDate = new Date(range.endMs - 12 * 60 * 60 * 1000);
 
-  return `${start} to ${end}`;
+  const startLabel = formatter.format(startDate);
+  const endLabel = formatter.format(endDate);
+
+  return `${startLabel} to ${endLabel}`;
 }
 
 function formatWeekWindowShort(range, timeZone = TIME_ZONE) {
