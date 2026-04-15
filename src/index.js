@@ -11,6 +11,7 @@ const path = require("node:path");
 const { handleMessageAutomod } = require("./utils/automod");
 const { runSessionAnnouncementTick } = require("./utils/sessionAnnouncements");
 const { handleQueueButtonInteraction } = require("./utils/sessionQueueManager");
+const { runWeeklyMaintenance } = require("./utils/activityTracker");
 
 // ✅ Only keep enforceTicketSpeak (we route ticket buttons inside InteractionCreate)
 const ticketSystem = require("./utils/ticketSystem");
@@ -157,6 +158,15 @@ if (ENABLE_DISCORD_DEBUG) {
 
 client.on("warn", (msg) => console.warn("[DISCORD WARN]", msg));
 client.on("error", (err) => console.error("[DISCORD ERROR]", err));
+
+// Activity weekly maintenance: every 5 minutes
+setInterval(async () => {
+  try {
+    await runWeeklyMaintenance(client);
+  } catch (err) {
+    console.error("[AUTO] Activity maintenance error:", err);
+  }
+}, 5 * 60 * 1000);
 
 // Session announcements: every 1 minute
 setInterval(async () => {

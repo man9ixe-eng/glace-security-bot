@@ -7,9 +7,29 @@ const {
   hasMetQuota,
   formatRangeLabel,
   TIME_ZONE,
+  ensureActivityDataFresh,
 } = require('../../utils/activityTracker');
 
-function buildActivityEmbed(member, targetUser) {
+function quotaBreakdownLines(summary, quotaProfile, includeLiveQuotaStatus = true) {
+  const quota = quotaProfile.quota;
+  const lines = [
+    `🌷 **Total Sessions** • **${summary.total}/${quota.total}**`,
+    `🎤 **Interviews** • **${summary.interview}/${quota.interview || 0}**`,
+    `🎓 **Trainings** • **${summary.training}/${quota.training || 0}**`,
+  ];
+
+  if (quotaProfile.corporatePlus) {
+    lines.push(`🏨 **Hosted Requirement** • **${summary.hosting}/${quota.hosting || 0}**`);
+  }
+
+  if (includeLiveQuotaStatus) {
+    lines.push('', hasMetQuota(summary, quota) ? '✅ **Quota Complete**' : '❌ **Quota Not Met Yet**');
+  }
+
+  return lines.join('\n');
+}
+
+function buildActivityEmbed(member, targetUser, guild) {
   const quotaProfile = getQuotaProfileForMember(member);
   if (!quotaProfile) return null;
 
@@ -20,40 +40,48 @@ function buildActivityEmbed(member, targetUser) {
   const lastSummary = summarizeSessions(sessions, lastRange);
   const metQuota = hasMetQuota(currentSummary, quotaProfile.quota);
 
+  const displayName =
+    targetUser.displayName ||
+    targetUser.user?.globalName ||
+    targetUser.user?.username ||
+    targetUser.username;
+
   return new EmbedBuilder()
-    .setColor(metQuota ? 0x2ecc71 : 0xe74c3c)
-    .setTitle(`${targetUser.displayName || targetUser.user?.globalName || targetUser.user?.username || targetUser.username} | Activity Log`)
-    .setDescription(`Weekly activity is tracked in **${TIME_ZONE}** and resets every **Monday at 12:00 AM**.`)
+    .setColor(metQuota ? 0xffb6f2 : 0xffd166)
+    .setTitle(`✨ ${displayName} • Activity Panel`)
+    .setDescription(
+      '╭───────────── ୨୧ ─────────────╮\n' +
+        `📅 **Current Week:** ${formatRangeLabel(currentRange, TIME_ZONE)}\n` +
+        `🕰️ Resets every **Monday at 12:00 AM ${TIME_ZONE}**\n` +
+        `🗂️ Tier: **${quotaProfile.label}**\n` +
+        '╰─────────────────────────────╯',
+    )
     .addFields(
       {
-        name: `Current Week (${formatRangeLabel(currentRange, TIME_ZONE)})`,
-        value:
-          `Hosted Total: **${currentSummary.total}/${quotaProfile.quota.total}**\n` +
-          `Interview: **${currentSummary.interview}/${quotaProfile.quota.interview}**\n` +
-          `Training: **${currentSummary.training}/${quotaProfile.quota.training}**`,
+        name: '🌸 Current Week',
+        value: quotaBreakdownLines(currentSummary, quotaProfile, true),
         inline: true,
       },
       {
-        name: `Last Week (${formatRangeLabel(lastRange, TIME_ZONE)})`,
-        value:
-          `Hosted Total: **${lastSummary.total}**\n` +
-          `Interview: **${lastSummary.interview}**\n` +
-          `Training: **${lastSummary.training}**`,
+        name: '🫧 Last Week',
+        value: quotaBreakdownLines(lastSummary, quotaProfile, false),
         inline: true,
       },
       {
-        name: 'Quota Status',
-        value: metQuota ? '✅ Met current week quota' : '❌ Has not met current week quota',
-      },
-      {
-        name: 'Quota Tier',
+        name: '📝 Quota Rules',
         value:
-          `**${quotaProfile.label}**\n` +
-          `Required: **${quotaProfile.quota.total} total** / **${quotaProfile.quota.interview} interview** / **${quotaProfile.quota.training} training**`,
+          `• Total required: **${quotaProfile.quota.total}**\n` +
+          `• Interview minimum: **${quotaProfile.quota.interview || 0}**\n` +
+          `• Training minimum: **${quotaProfile.quota.training || 0}**` +
+          (quotaProfile.corporatePlus
+            ? `\n• Hosting minimum: **${quotaProfile.quota.hosting || 0}**`
+            : ''),
       },
     )
     .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
-    .setFooter({ text: 'Only logged sessions count toward quota.' });
+    .setFooter({
+      text: guild?.name ? `${guild.name} • Only logged sessions count` : 'Only logged sessions count',
+    });
 }
 
 module.exports = {
@@ -62,11 +90,12 @@ module.exports = {
     .setDescription('View your current and previous week activity.'),
 
   async execute(interaction) {
-    const embed = buildActivityEmbed(interaction.member, interaction.member);
+    await ensureActivityDataFresh(interaction.client, interaction.guild);
 
+    const embed = buildActivityEmbed(interaction.member, interaction.member, interaction.guild);
     if (!embed) {
       await interaction.reply({
-        content: 'You do not have a quota-tracked role on this server.',
+        content: 'You do not have a quota-tracked Team role on this server.',
         ephemeral: true,
       });
       return;

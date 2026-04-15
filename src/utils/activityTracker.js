@@ -1,15 +1,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { getQuota, getAllQuotas } = require('./quotaSettings');
 const rolesConfig = require('../config/roles');
 
 const DATA_PATH = path.join(__dirname, '..', 'data', 'activityLogs.json');
 const TIME_ZONE = 'America/New_York';
+const RESET_CHANNEL_ID = process.env.WEEKLY_ACTIVITY_RESET_CHANNEL_ID || null;
+const SESSION_LOG_CHANNEL_ID = process.env.SESSION_LOG_CHANNEL_ID || null;
+const MAX_BACKFILL_MESSAGES = Number(process.env.ACTIVITY_BACKFILL_MESSAGE_LIMIT || 250);
+const BACKFILL_COOLDOWN_MS = 5 * 60 * 1000;
 
 function ensureStore() {
   const dir = path.dirname(DATA_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(DATA_PATH)) {
-    fs.writeFileSync(DATA_PATH, JSON.stringify({ sessions: [] }, null, 2));
+    fs.writeFileSync(
+      DATA_PATH,
+      JSON.stringify({ sessions: [], meta: { lastWeeklyResetKey: null, lastBackfillAt: 0 } }, null, 2),
+    );
   }
 }
 
@@ -18,11 +26,18 @@ function readStore() {
   try {
     const raw = fs.readFileSync(DATA_PATH, 'utf8');
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return { sessions: [] };
+    if (!parsed || typeof parsed !== 'object') {
+      return { sessions: [], meta: { lastWeeklyResetKey: null, lastBackfillAt: 0 } };
+    }
+
     if (!Array.isArray(parsed.sessions)) parsed.sessions = [];
+    if (!parsed.meta || typeof parsed.meta !== 'object') parsed.meta = {};
+    if (!parsed.meta.lastWeeklyResetKey) parsed.meta.lastWeeklyResetKey = null;
+    if (!parsed.meta.lastBackfillAt) parsed.meta.lastBackfillAt = 0;
+
     return parsed;
   } catch {
-    return { sessions: [] };
+    return { sessions: [], meta: { lastWeeklyResetKey: null, lastBackfillAt: 0 } };
   }
 }
 
@@ -31,112 +46,148 @@ function writeStore(data) {
   fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
 }
 
-function recordHostedSession({ userId, shortId, sessionType, guildId = null, timestamp = Date.now(), cancelled = false }) {
-  if (!userId || !shortId || !sessionType) return false;
+function normalizeSessionType(sessionType) {
+  const value = String(sessionType || '').trim().toLowerCase();
+  if (value === 'interview') return 'interview';
+  if (value === 'training') return 'training';
+  if (value === 'massshift' || value === 'mass shift' || value === 'mass-shift') return 'massshift';
+  return value || 'unknown';
+}
 
+function getAllSessions({ includeCancelled = false } = {}) {
+  const sessions = readStore().sessions;
+  if (includeCancelled) return sessions;
+  return sessions.filter((entry) => !entry.cancelled);
+}
+
+function recordHostedSession({
+  userId,
+  shortId = null,
+  sessionType,
+  guildId = null,
+  timestamp = Date.now(),
+  cancelled = false,
+  sourceMessageId = null,
+}) {
+  if (!userId || !sessionType) return false;
+
+  const normalizedType = normalizeSessionType(sessionType);
   const data = readStore();
-  const existing = data.sessions.find((entry) => entry.shortId === shortId);
+
+  const existing = data.sessions.find((entry) => {
+    if (sourceMessageId && entry.sourceMessageId === sourceMessageId) return true;
+    if (shortId && entry.shortId === shortId) return true;
+
+    return (
+      entry.userId === userId &&
+      normalizeSessionType(entry.sessionType) === normalizedType &&
+      Math.abs(Number(entry.timestamp || 0) - Number(timestamp || 0)) <= 10 * 60 * 1000
+    );
+  });
 
   if (existing) {
     existing.userId = userId;
-    existing.sessionType = sessionType;
-    existing.guildId = guildId;
-    existing.timestamp = timestamp;
-    existing.cancelled = cancelled;
+    existing.shortId = shortId || existing.shortId || null;
+    existing.sessionType = normalizedType;
+    existing.guildId = guildId || existing.guildId || null;
+    existing.timestamp = Number(timestamp || Date.now());
+    existing.cancelled = Boolean(cancelled);
+    if (sourceMessageId) existing.sourceMessageId = sourceMessageId;
     writeStore(data);
     return true;
   }
 
   data.sessions.push({
     userId,
-    shortId,
-    sessionType,
+    shortId: shortId || `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    sessionType: normalizedType,
     guildId,
-    timestamp,
-    cancelled,
+    timestamp: Number(timestamp || Date.now()),
+    cancelled: Boolean(cancelled),
+    sourceMessageId,
   });
 
   writeStore(data);
   return true;
 }
 
-function getAllSessions() {
-  return readStore().sessions;
-}
-
 function getUserSessions(userId, { includeCancelled = false } = {}) {
-  return getAllSessions().filter((entry) => {
-    if (entry.userId !== userId) return false;
-    if (!includeCancelled && entry.cancelled) return false;
-    return true;
-  });
+  return getAllSessions({ includeCancelled }).filter((entry) => entry.userId === userId);
 }
 
-function getRoleIds(key) {
-  const value = rolesConfig[key];
-  return Array.isArray(value) ? value.filter(Boolean) : [];
+function sanitizeRoleName(name) {
+  return String(name || '')
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
-function hasAnyRoleId(member, ids) {
-  return ids.some((id) => member.roles.cache.has(id));
-}
-
-function hasRoleNameMatch(member, patterns) {
-  const roleNames = member.roles.cache.map((role) => role.name.toLowerCase());
-  return patterns.some((pattern) => roleNames.some((name) => name.includes(pattern)));
+function memberHasRoleId(member, ids) {
+  return Array.isArray(ids) && ids.some((id) => member.roles.cache.has(id));
 }
 
 function getQuotaProfileForMember(member) {
-  if (!member || !member.roles) return null;
+  if (!member?.roles?.cache) return null;
+
+  const namedTeamRoles = member.roles.cache
+    .map((role) => ({ role, normalized: sanitizeRoleName(role.name) }))
+    .filter(({ normalized }) => normalized.includes('team') && !normalized.includes('former'));
 
   const profiles = [
     {
-      key: 'presidential',
-      label: 'Presidentials',
-      ids: getRoleIds('PRESIDENTIAL_ROLE_IDS'),
-      names: ['presidential', 'chief executive officer', 'ceo'],
-      quota: { total: 1, interview: 0, training: 1 },
+      key: 'Presidentials',
+      idKey: 'PRESIDENTIAL_ROLE_IDS',
+      matches: ['presidential team', 'presidentials team', 'executive presidential team'],
+      corporatePlus: true,
     },
     {
-      key: 'corporate_board',
-      label: 'Corporate Board',
-      ids: getRoleIds('CORPORATE_BOARD_ROLE_IDS'),
-      names: ['board of directors', 'corporate board', 'board'],
-      quota: { total: 2, interview: 1, training: 1 },
+      key: 'Corporate Board',
+      idKey: 'CORPORATE_BOARD_ROLE_IDS',
+      matches: ['corporate board team', 'board team'],
+      corporatePlus: true,
     },
     {
-      key: 'corporate',
-      label: 'Corporate',
-      ids: getRoleIds('CORPORATE_ROLE_IDS'),
-      names: ['corporate intern', 'corporate'],
-      quota: { total: 4, interview: 2, training: 2 },
+      key: 'Corporate',
+      idKey: 'CORPORATE_ROLE_IDS',
+      matches: ['corporate team', 'corporate intern team'],
+      corporatePlus: true,
     },
     {
-      key: 'senior_management',
-      label: 'Senior Management',
-      ids: getRoleIds('SENIOR_MANAGEMENT_ROLE_IDS'),
-      names: ['senior management', 'director'],
-      quota: { total: 4, interview: 2, training: 2 },
+      key: 'Senior Management',
+      idKey: 'SENIOR_MANAGEMENT_ROLE_IDS',
+      matches: ['senior management team'],
+      corporatePlus: false,
     },
     {
-      key: 'management',
-      label: 'Management',
-      ids: getRoleIds('MANAGEMENT_ROLE_IDS'),
-      names: ['executive manager', 'assistant manager', 'management'],
-      quota: { total: 3, interview: 2, training: 1 },
+      key: 'Management',
+      idKey: 'MANAGEMENT_ROLE_IDS',
+      matches: ['management team'],
+      corporatePlus: false,
     },
     {
-      key: 'intern',
-      label: 'Interns',
-      ids: getRoleIds('INTERN_ROLE_IDS'),
-      names: ['leadership intern', 'intern'],
-      quota: { total: 2, interview: 1, training: 1 },
+      key: 'Intern',
+      idKey: 'INTERN_ROLE_IDS',
+      matches: ['intern team', 'leadership intern team'],
+      corporatePlus: false,
     },
   ];
 
   for (const profile of profiles) {
-    if (hasAnyRoleId(member, profile.ids) || hasRoleNameMatch(member, profile.names)) {
-      return profile;
+    const quota = getQuota(profile.key);
+    const byId = memberHasRoleId(member, rolesConfig[profile.idKey]);
+    const byName = namedTeamRoles.some(({ normalized }) =>
+      profile.matches.some((match) => normalized.includes(match)),
+    );
+
+    if (byId || byName) {
+      return {
+        key: profile.key,
+        label: profile.key,
+        corporatePlus: profile.corporatePlus,
+        quota,
+      };
     }
   }
 
@@ -162,15 +213,7 @@ function getTimeZoneParts(date, timeZone = TIME_ZONE) {
     if (part.type !== 'literal') map[part.type] = part.value;
   }
 
-  const weekdayMap = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
+  const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
   return {
     year: Number(map.year),
@@ -217,6 +260,7 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
   const now = new Date();
   const nowParts = getTimeZoneParts(now, timeZone);
   const daysSinceMonday = (nowParts.weekday + 6) % 7;
+
   const mondayLocal = addDaysToLocalDate(
     nowParts.year,
     nowParts.month,
@@ -231,8 +275,14 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
     7,
   );
 
-  const startMs = zonedLocalToUtc({ ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 }, timeZone);
-  const nextStartMs = zonedLocalToUtc({ ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 }, timeZone);
+  const startMs = zonedLocalToUtc(
+    { ...mondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    timeZone,
+  );
+  const nextStartMs = zonedLocalToUtc(
+    { ...nextMondayLocal, hour: 0, minute: 0, second: 0, millisecond: 0 },
+    timeZone,
+  );
 
   return {
     startMs,
@@ -241,18 +291,22 @@ function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
 }
 
 function summarizeSessions(sessions, range) {
-  const filtered = sessions.filter((entry) => entry.timestamp >= range.startMs && entry.timestamp <= range.endMs);
+  const filtered = sessions.filter(
+    (entry) => Number(entry.timestamp) >= range.startMs && Number(entry.timestamp) <= range.endMs,
+  );
 
   const summary = {
     total: filtered.length,
     interview: 0,
     training: 0,
+    hosting: filtered.length,
     cancelled: 0,
   };
 
   for (const entry of filtered) {
-    if (entry.sessionType === 'interview') summary.interview += 1;
-    if (entry.sessionType === 'training' || entry.sessionType === 'massshift') summary.training += 1;
+    const type = normalizeSessionType(entry.sessionType);
+    if (type === 'interview') summary.interview += 1;
+    if (type === 'training' || type === 'massshift') summary.training += 1;
     if (entry.cancelled) summary.cancelled += 1;
   }
 
@@ -261,27 +315,162 @@ function summarizeSessions(sessions, range) {
 
 function hasMetQuota(summary, quota) {
   if (!quota) return false;
-  return (
-    summary.total >= quota.total &&
-    summary.interview >= quota.interview &&
-    summary.training >= quota.training
-  );
+  if (summary.total < Number(quota.total || 0)) return false;
+  if (Number(quota.interview || 0) > 0 && summary.interview < Number(quota.interview)) return false;
+  if (Number(quota.training || 0) > 0 && summary.training < Number(quota.training)) return false;
+  if (Number(quota.hosting || 0) > 0 && summary.hosting < Number(quota.hosting)) return false;
+  return true;
 }
 
 function formatRangeLabel(range, timeZone = TIME_ZONE) {
   const start = new Intl.DateTimeFormat('en-US', {
     timeZone,
-    month: 'short',
+    month: 'long',
     day: 'numeric',
+    year: 'numeric',
   }).format(new Date(range.startMs));
 
   const end = new Intl.DateTimeFormat('en-US', {
     timeZone,
-    month: 'short',
+    month: 'long',
     day: 'numeric',
+    year: 'numeric',
   }).format(new Date(range.endMs));
 
-  return `${start} - ${end}`;
+  return `${start} → ${end}`;
+}
+
+function getCurrentWeekKey(timeZone = TIME_ZONE) {
+  const range = getWeekRange(0, timeZone);
+  return String(range.startMs);
+}
+
+function purgeOldSessions(data, keepWeeks = 16) {
+  const cutoff = getWeekRange(-keepWeeks, TIME_ZONE).startMs;
+  data.sessions = data.sessions.filter((entry) => Number(entry.timestamp || 0) >= cutoff);
+}
+
+async function maybeAnnounceWeeklyReset(client) {
+  if (!RESET_CHANNEL_ID) return;
+  const channel = await client.channels.fetch(RESET_CHANNEL_ID).catch(() => null);
+  if (!channel) return;
+
+  const range = getWeekRange(0, TIME_ZONE);
+  await channel.send({
+    embeds: [
+      {
+        color: 0xf7b8ff,
+        title: '✨ Activity Week Reset',
+        description:
+          'A new quota week has started.\n\n' +
+          `📅 **Current Week:** ${formatRangeLabel(range, TIME_ZONE)}\n` +
+          `🕛 Reset time: **Monday 12:00 AM ${TIME_ZONE}**`,
+      },
+    ],
+  }).catch(() => null);
+}
+
+async function runWeeklyMaintenance(client) {
+  const data = readStore();
+  const currentKey = getCurrentWeekKey(TIME_ZONE);
+
+  if (data.meta.lastWeeklyResetKey !== currentKey) {
+    data.meta.lastWeeklyResetKey = currentKey;
+    purgeOldSessions(data, 16);
+    writeStore(data);
+    await maybeAnnounceWeeklyReset(client);
+  }
+}
+
+async function backfillFromSessionLogs(client, guild) {
+  if (!client || !guild || !SESSION_LOG_CHANNEL_ID) return 0;
+
+  const data = readStore();
+  const now = Date.now();
+  if (now - Number(data.meta.lastBackfillAt || 0) < BACKFILL_COOLDOWN_MS) {
+    return 0;
+  }
+
+  const channel = await client.channels.fetch(SESSION_LOG_CHANNEL_ID).catch(() => null);
+  if (!channel?.messages?.fetch) {
+    data.meta.lastBackfillAt = now;
+    writeStore(data);
+    return 0;
+  }
+
+  const members = await guild.members.fetch().catch(() => null);
+  if (!members) {
+    data.meta.lastBackfillAt = now;
+    writeStore(data);
+    return 0;
+  }
+
+  const nameMap = new Map();
+  for (const member of members.values()) {
+    const candidates = [
+      member.displayName,
+      member.user?.globalName,
+      member.user?.username,
+    ].filter(Boolean);
+
+    for (const value of candidates) {
+      const key = sanitizeRoleName(value);
+      if (!key) continue;
+      if (!nameMap.has(key)) nameMap.set(key, member.id);
+    }
+  }
+
+  const messages = await channel.messages.fetch({ limit: Math.min(MAX_BACKFILL_MESSAGES, 100) }).catch(() => null);
+  if (!messages) {
+    data.meta.lastBackfillAt = now;
+    writeStore(data);
+    return 0;
+  }
+
+  let added = 0;
+
+  for (const message of messages.values()) {
+    const embed = message.embeds?.[0];
+    if (!embed?.title) continue;
+
+    const title = String(embed.title).toLowerCase();
+    let sessionType = null;
+    if (title.includes('training')) sessionType = 'training';
+    else if (title.includes('interview')) sessionType = 'interview';
+    else if (title.includes('mass shift')) sessionType = 'massshift';
+    if (!sessionType) continue;
+
+    const hostField = embed.fields?.find((field) => String(field.name).toLowerCase() === 'host');
+    const hostName = sanitizeRoleName(hostField?.value || '');
+    if (!hostName) continue;
+
+    const userId = nameMap.get(hostName);
+    if (!userId) continue;
+
+    const exists = data.sessions.some((entry) => entry.sourceMessageId === message.id);
+    if (exists) continue;
+
+    data.sessions.push({
+      userId,
+      shortId: `backfill-${message.id}`,
+      sessionType,
+      guildId: guild.id,
+      timestamp: message.createdTimestamp,
+      cancelled: false,
+      sourceMessageId: message.id,
+    });
+    added += 1;
+  }
+
+  data.meta.lastBackfillAt = now;
+  if (!data.meta.lastWeeklyResetKey) data.meta.lastWeeklyResetKey = getCurrentWeekKey(TIME_ZONE);
+  writeStore(data);
+  return added;
+}
+
+async function ensureActivityDataFresh(client, guild) {
+  await runWeeklyMaintenance(client);
+  await backfillFromSessionLogs(client, guild);
 }
 
 module.exports = {
@@ -295,4 +484,7 @@ module.exports = {
   summarizeSessions,
   hasMetQuota,
   formatRangeLabel,
+  ensureActivityDataFresh,
+  runWeeklyMaintenance,
+  getAllQuotas,
 };

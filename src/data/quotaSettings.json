@@ -1,0 +1,38 @@
+{
+  "Intern": {
+    "total": 2,
+    "interview": 1,
+    "training": 1,
+    "hosting": 0
+  },
+  "Management": {
+    "total": 3,
+    "interview": 0,
+    "training": 0,
+    "hosting": 0
+  },
+  "Senior Management": {
+    "total": 4,
+    "interview": 2,
+    "training": 2,
+    "hosting": 0
+  },
+  "Corporate": {
+    "total": 4,
+    "interview": 2,
+    "training": 2,
+    "hosting": 4
+  },
+  "Corporate Board": {
+    "total": 2,
+    "interview": 1,
+    "training": 1,
+    "hosting": 2
+  },
+  "Presidentials": {
+    "total": 1,
+    "interview": 0,
+    "training": 0,
+    "hosting": 1
+  }
+}
