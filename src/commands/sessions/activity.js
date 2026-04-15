@@ -11,12 +11,12 @@ const {
 } = require('../../utils/activityTracker');
 
 const TEAM_EMOJIS = {
-  intern: ':intern_team:',
-  management: ':manager_team:',
-  senior_management: ':senior_team:',
-  corporate: ':corp_team:',
-  corporate_board: ':board_team:',
-  presidential: ':pres_team:',
+  intern: '<:intern_team:1476916364877758505>',
+  management: '<:manager_team:1476916258036514837>',
+  senior_management: '<:senior_team:1476916038602985614>',
+  corporate: '<:corp_team:1478642239155474533>',
+  corporate_board: '<:board_team:1476915796730187868>',
+  presidential: '<:pres_team:1476915718644699136>',
 };
 
 function getTeamEmoji(profile) {
@@ -25,6 +25,20 @@ function getTeamEmoji(profile) {
 
 function getModeLabel(profile) {
   return profile?.isCorporatePlus ? 'Host' : 'Attendee';
+}
+
+function getTeamColor(profile, metQuota) {
+  // Slightly brighter if met quota
+  const colors = {
+    presidential: metQuota ? 0xFFD700 : 0xC9A227,      // gold / darker gold
+    corporate_board: metQuota ? 0xFF8C00 : 0xCC7000,   // orange
+    corporate: metQuota ? 0xFF3B3B : 0xCC2F2F,         // red
+    senior_management: metQuota ? 0x22C55E : 0x16A34A, // green
+    management: metQuota ? 0x8B5CF6 : 0x6D28D9,        // purple
+    intern: metQuota ? 0xEC4899 : 0xC026D3,            // pink/purple
+  };
+
+  return colors[profile?.key] || 0x3b82f6;
 }
 
 function buildDetailedQuota(profile) {
@@ -146,8 +160,8 @@ async function buildActivityEmbed(interaction, targetMember) {
     quotaProfile.quota.mode === 'hosted' ? last.hosted : last.support;
 
   const embed = new EmbedBuilder()
-    .setColor(met ? 0x1e3a8a : 0x3b82f6)
-    .setTitle(`💠 ${name} • Weekly Activity`)
+    .setColor(getTeamColor(quotaProfile, met))
+    .setTitle(`${getTeamEmoji(quotaProfile)} ${name} • Activity`)
     .setDescription(
       `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`,
     )
@@ -155,7 +169,7 @@ async function buildActivityEmbed(interaction, targetMember) {
       {
         name: '🏨 Quota',
         value: box([
-          `**${getTeamEmoji(quotaProfile)} ${quotaProfile.label}**`,
+          `${getTeamEmoji(quotaProfile)}  **${quotaProfile.label}**`,
           '',
           `Mode: ${getModeLabel(quotaProfile)}`,
           '',
@@ -173,7 +187,7 @@ async function buildActivityEmbed(interaction, targetMember) {
           '',
           ...buildQuotaProgressLines(currentSource, quotaProfile.quota),
           '',
-          `Status: ${met ? '✅ Below cleared / Met' : '❌ Below'}`.replace('Below cleared / ', ''),
+          `Status: ${met ? '✅ Met' : '❌ Below'}`,
         ]),
         inline: true,
       },
