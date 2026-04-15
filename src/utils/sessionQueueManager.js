@@ -470,7 +470,18 @@ async function openQueueForCard(interaction, cardOption) {
     return;
   }
 
-  const { hostName, hostId } = extractHostFromDesc(card.desc, card.name);
+let { hostName, hostId } = extractHostFromDesc(card.desc, card.name);
+
+// If no ID, assume command user is the host
+if (!hostId) {
+  hostId = interaction.user.id;
+
+  // ALSO fix the name to match the Discord user
+  hostName =
+    interaction.member?.displayName ||
+    interaction.user.globalName ||
+    interaction.user.username;
+}
   const timeText = extractTimeFromName(card.name);
   const startsIn = formatDiscordRelativeFromDue(card.due);
   const cardUrl = card.shortUrl || card.url || cardOption;
@@ -481,20 +492,20 @@ async function openQueueForCard(interaction, cardOption) {
   } 🟡`;
   const headerBottom = '╚══════════════════════════════════════╝';
 
-  const descriptionLines = [
-    headerTop,
-    headerTitle,
-    headerBottom,
-    '',
-    hostId
-  ? `📌  Host: <@${hostId}> (${hostId}) • ${hostName || 'Unknown'}`
-  : `📌  Host: ${hostName || 'Unknown'}`
-    startsIn ? `📌  Starts: ${startsIn}` : null,
-    timeText ? `📌  Time: ${timeText}` : null,
-    '',
-    '💠 ROLES 💠',
-    '----------------------------------------------------------------',
-  ];
+const descriptionLines = [
+  headerTop,
+  headerTitle,
+  headerBottom,
+  '',
+  hostId
+    ? `📌  Host: <@${hostId}> (${hostId}) • ${hostName || 'Unknown'}`
+    : `📌  Host: ${hostName || 'Unknown'}`,
+  startsIn ? `📌  Starts: ${startsIn}` : null,
+  timeText ? `📌  Time: ${timeText}` : null,
+  '',
+  '💠 ROLES 💠',
+  '----------------------------------------------------------------',
+];
 
   if (sessionType === 'interview') {
     descriptionLines.push(
