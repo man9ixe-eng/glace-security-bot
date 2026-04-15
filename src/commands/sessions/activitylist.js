@@ -27,6 +27,10 @@ function summarizeAgainstQuota(summary, quotaProfile) {
   return parts.join(' • ');
 }
 
+function buildSectionBox(lines) {
+  return `╭────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────╯`;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('activitylist')
@@ -70,24 +74,34 @@ module.exports = {
 
     const shown = missing.slice(0, 25);
 
+    const listText = missing.length
+      ? shown
+          .map(({ member, quotaProfile, summary }) => {
+            const modeLabel =
+              quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular';
+
+            return `• **${member.displayName || member.user.username}**\n` +
+              `  ${quotaProfile.label} • ${modeLabel}\n` +
+              `  ${summarizeAgainstQuota(summary, quotaProfile)}`;
+          })
+          .join('\n\n')
+      : 'All Glace Interns+ have met quota for the current week.';
+
     const embed = new EmbedBuilder()
       .setColor(0x1d4ed8)
-      .setTitle('Activity List • Below Quota')
+      .setTitle('💠 Activity List')
       .setDescription(
-        missing.length
-          ? shown
-              .map(({ member, quotaProfile, summary }) => {
-                const modeLabel =
-                  quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular';
-
-                return `• **${member.displayName || member.user.username}** — ${quotaProfile.label} — ${modeLabel}: ${summarizeAgainstQuota(summary, quotaProfile)}`;
-              })
-              .join('\n')
-          : 'All Glace Interns+ have met quota for the current week.',
+        `Below is the current list of members who have not met quota.\n\n${buildSectionBox(
+          listText.split('\n')
+        )}`,
       )
       .addFields({
-        name: 'Week Window',
-        value: `${formatRangeLabel(currentRange)}\nMonday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`,
+        name: '📅 Week Window',
+        value: buildSectionBox([
+          `${formatRangeLabel(currentRange)}`,
+          `Monday 12:00 AM → Sunday 11:59 PM`,
+          `${TIME_ZONE}`,
+        ]),
       })
       .setFooter({
         text:

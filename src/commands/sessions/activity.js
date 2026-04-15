@@ -11,33 +11,17 @@ const {
 } = require('../../utils/activityTracker');
 
 function formatQuotaLine(quotaProfile) {
-  const quota = quotaProfile.quota;
-  const parts = [`${quota.total} total`];
+  const q = quotaProfile.quota;
+  const parts = [`${q.total} total`];
 
-  if ((quota.minInterview || 0) > 0) {
-    parts.push(`${quota.minInterview} interview`);
-  }
-
-  if ((quota.minTraining || 0) > 0) {
-    parts.push(`${quota.minTraining} training`);
-  }
+  if (q.minInterview > 0) parts.push(`${q.minInterview} interview`);
+  if (q.minTraining > 0) parts.push(`${q.minTraining} training`);
 
   return parts.join(' • ');
 }
 
-function statBlock(lines) {
-  return lines.join('\n');
-}
-
-function buildCorporateSupportTypeTotals(summary) {
-  const interviewerCount = summary.roles.interviewer || 0;
-  const trainerCount = summary.roles.trainer || 0;
-
-  return {
-    interviews: interviewerCount,
-    trainings: trainerCount,
-    total: summary.total || 0,
-  };
+function box(lines) {
+  return `╭────────────────────╮\n${lines.map(l => `│ ${l}`).join('\n')}\n╰────────────────────╯`;
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
@@ -53,118 +37,110 @@ async function buildActivityEmbed(interaction, targetMember) {
   const current = summarizeActivity(activity, currentRange);
   const last = summarizeActivity(activity, lastRange);
 
-  const metCurrentQuota = hasMetQuota(current, quotaProfile);
-  const metLastQuota = hasMetQuota(last, quotaProfile);
+  const met = hasMetQuota(current, quotaProfile);
+  const metLast = hasMetQuota(last, quotaProfile);
 
-  const displayName =
+  const name =
     targetMember.displayName ||
     targetMember.user?.globalName ||
-    targetMember.user?.username ||
-    targetMember.username;
+    targetMember.user?.username;
 
-  const quotaSource =
+  const currentSource =
     quotaProfile.quota.mode === 'hosted' ? current.hosted : current.support;
 
-  const lastQuotaSource =
+  const lastSource =
     quotaProfile.quota.mode === 'hosted' ? last.hosted : last.support;
 
   const embed = new EmbedBuilder()
-    .setColor(metCurrentQuota ? 0x1d4ed8 : 0x2563eb)
-    .setTitle(`${displayName} • Activity Overview`)
+    .setColor(met ? 0x1e3a8a : 0x3b82f6)
+    .setTitle(`💠 ${name} • Weekly Activity`)
     .setDescription(
-      `**Week Window**\n${formatRangeLabel(currentRange)}\n\n` +
-        `Tracking resets every Monday at **12:00 AM ${TIME_ZONE}** and ends every Sunday at **11:59 PM ${TIME_ZONE}**.`
+      `📅 **Week:** ${formatRangeLabel(currentRange)}\n` +
+      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`
     )
     .addFields(
       {
-        name: 'Quota Profile',
-        value: statBlock([
-          `**Tier:** ${quotaProfile.label}`,
-          `**Quota Type:** ${
-            quotaProfile.quota.mode === 'hosted'
-              ? 'Hosted Sessions'
-              : 'Regular Sessions'
-          }`,
-          `**Requirement:** ${formatQuotaLine(quotaProfile)}`,
+        name: '🏨 Quota',
+        value: box([
+          quotaProfile.label,
+          `Type: ${quotaProfile.quota.mode === 'hosted' ? 'Hosted' : 'Regular'}`,
+          `Required: ${formatQuotaLine(quotaProfile)}`,
         ]),
       },
       {
-        name: 'Current Week',
-        value: statBlock([
-          `**Interviews:** ${quotaSource.interview}`,
-          `**Trainings:** ${quotaSource.training}`,
-          `**Total:** ${quotaSource.total}`,
-          `**Status:** ${metCurrentQuota ? '✅ Met quota' : '❌ Below quota'}`,
+        name: '📊 Current Week',
+        value: box([
+          `Interviews: ${currentSource.interview}`,
+          `Trainings: ${currentSource.training}`,
+          `Total: ${currentSource.total}`,
+          '',
+          `Status: ${met ? '✅ Met' : '❌ Below'}`,
         ]),
         inline: true,
       },
       {
-        name: 'Last Week',
-        value: statBlock([
-          `**Interviews:** ${lastQuotaSource.interview}`,
-          `**Trainings:** ${lastQuotaSource.training}`,
-          `**Total:** ${lastQuotaSource.total}`,
-          `**Status:** ${metLastQuota ? '✅ Met quota' : '❌ Below quota'}`,
+        name: '📁 Last Week',
+        value: box([
+          `Interviews: ${lastSource.interview}`,
+          `Trainings: ${lastSource.training}`,
+          `Total: ${lastSource.total}`,
+          '',
+          `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
         ]),
         inline: true,
-      }
+      },
     )
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))
-    .setFooter({
-      text: 'Glace Hotels Activity System',
-    })
-    .setTimestamp();
+    .setFooter({ text: 'Glace Hotels | Activity System' });
 
+  // 🔷 CORPORATE+
   if (quotaProfile.isCorporatePlus) {
-    const currentHelpTotals = buildCorporateSupportTypeTotals(current.support);
-    const lastHelpTotals = buildCorporateSupportTypeTotals(last.support);
-
-    embed.data.fields[1].value = statBlock([
-      `**Hosted Interviews:** ${current.hosted.interview}`,
-      `**Hosted Trainings:** ${current.hosted.training}`,
-      `**Total Hosted:** ${current.hosted.total}`,
-      `**Status:** ${metCurrentQuota ? '✅ Met quota' : '❌ Below quota'}`,
+    embed.data.fields[1].value = box([
+      `Hosted Interviews: ${current.hosted.interview}`,
+      `Hosted Trainings: ${current.hosted.training}`,
+      `Total Hosted: ${current.hosted.total}`,
+      '',
+      `Status: ${met ? '✅ Met' : '❌ Below'}`,
     ]);
 
-    embed.data.fields[2].value = statBlock([
-      `**Hosted Interviews:** ${last.hosted.interview}`,
-      `**Hosted Trainings:** ${last.hosted.training}`,
-      `**Total Hosted:** ${last.hosted.total}`,
-      `**Status:** ${metLastQuota ? '✅ Met quota' : '❌ Below quota'}`,
+    embed.data.fields[2].value = box([
+      `Hosted Interviews: ${last.hosted.interview}`,
+      `Hosted Trainings: ${last.hosted.training}`,
+      `Total Hosted: ${last.hosted.total}`,
+      '',
+      `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
     ]);
 
     embed.addFields(
       {
-        name: 'Support Sessions',
-        value: statBlock([
-          `**Interviews:** ${currentHelpTotals.interviews}`,
-          `**Trainings:** ${currentHelpTotals.trainings}`,
-          `**Total Non-Hosted:** ${currentHelpTotals.total}`,
+        name: '🏨 Helped Sessions',
+        value: box([
+          `Interviews: ${current.support.interview}`,
+          `Trainings: ${current.support.training}`,
+          `Total: ${current.support.total}`,
         ]),
       },
       {
-        name: 'This Week Support Breakdown',
-        value: statBlock([
-          `**Co-Host:** ${current.support.roles.cohost || 0}`,
-          `**Overseer:** ${current.support.roles.overseer || 0}`,
-          `**Interviewer:** ${current.support.roles.interviewer || 0}`,
-          `**Trainer:** ${current.support.roles.trainer || 0}`,
-          `**Supervisor:** ${current.support.roles.supervisor || 0}`,
-          `**Spectator:** ${current.support.roles.spectator || 0}`,
-          `**Total Support Sessions:** ${current.support.total}`,
+        name: '👥 This Week',
+        value: box([
+          `Co-Host: ${current.support.roles.cohost || 0}`,
+          `Overseer: ${current.support.roles.overseer || 0}`,
+          `Interviewer: ${current.support.roles.interviewer || 0}`,
+          `Trainer: ${current.support.roles.trainer || 0}`,
+          `Supervisor: ${current.support.roles.supervisor || 0}`,
+          `Spectator: ${current.support.roles.spectator || 0}`,
         ]),
         inline: true,
       },
       {
-        name: 'Last Week Support Breakdown',
-        value: statBlock([
-          `**Co-Host:** ${last.support.roles.cohost || 0}`,
-          `**Overseer:** ${last.support.roles.overseer || 0}`,
-          `**Interviewer:** ${last.support.roles.interviewer || 0}`,
-          `**Trainer:** ${last.support.roles.trainer || 0}`,
-          `**Supervisor:** ${last.support.roles.supervisor || 0}`,
-          `**Spectator:** ${last.support.roles.spectator || 0}`,
-          `**Total Support Sessions:** ${last.support.total}`,
+        name: '📂 Last Week',
+        value: box([
+          `Co-Host: ${last.support.roles.cohost || 0}`,
+          `Overseer: ${last.support.roles.overseer || 0}`,
+          `Interviewer: ${last.support.roles.interviewer || 0}`,
+          `Trainer: ${last.support.roles.trainer || 0}`,
+          `Supervisor: ${last.support.roles.supervisor || 0}`,
+          `Spectator: ${last.support.roles.spectator || 0}`,
         ]),
         inline: true,
       }
@@ -177,17 +153,16 @@ async function buildActivityEmbed(interaction, targetMember) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('activity')
-    .setDescription('View your current and previous week activity.'),
+    .setDescription('View your activity.'),
 
   async execute(interaction) {
     const embed = await buildActivityEmbed(interaction, interaction.member);
 
     if (!embed) {
-      await interaction.reply({
-        content: 'You do not have a quota-tracked Team role on this server.',
+      return interaction.reply({
+        content: 'No quota role found.',
         ephemeral: true,
       });
-      return;
     }
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
