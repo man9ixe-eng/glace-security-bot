@@ -1,82 +1,129 @@
-
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { getQuota, setQuota } = require('../../utils/quotaSettings');
-
-const TIER_CHOICES = [
-  ['Interns', 'intern'],
-  ['Management', 'management'],
-  ['Senior Management', 'senior_management'],
-  ['Corporate', 'corporate'],
-  ['Corporate Board', 'corporate_board'],
-  ['Presidentials', 'presidential'],
-];
+const {
+  getQuotaSettings,
+  updateQuotaSettings,
+  getQuotaEntry,
+} = require('../../utils/quotaSettings');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('activitysettings')
-    .setDescription('Edit quota settings for a tracked tier.')
+    .setDescription('Edit activity quota settings for a tier.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption((option) =>
       option
         .setName('tier')
-        .setDescription('Which tier to edit.')
-        .setRequired(true)
-        .addChoices(...TIER_CHOICES),
-    )
-    .addStringOption((option) =>
-      option
-        .setName('mode')
-        .setDescription('Quota type for this tier.')
+        .setDescription('Which tier to edit')
         .setRequired(true)
         .addChoices(
-          { name: 'Regular Sessions', value: 'regular' },
-          { name: 'Hosted Sessions', value: 'hosted' },
+          { name: 'Intern', value: 'Intern' },
+          { name: 'Management', value: 'Management' },
+          { name: 'Senior Management', value: 'Senior Management' },
+          { name: 'Corporate', value: 'Corporate' },
+          { name: 'Corporate Board', value: 'Corporate Board' },
+          { name: 'Presidential', value: 'Presidential' },
         ),
     )
     .addIntegerOption((option) =>
-      option.setName('total').setDescription('Required total sessions.').setRequired(true).setMinValue(0),
+      option
+        .setName('total')
+        .setDescription('Total required sessions')
+        .setRequired(false)
+        .setMinValue(0),
     )
     .addIntegerOption((option) =>
-      option.setName('interview').setDescription('Minimum interview sessions.').setRequired(true).setMinValue(0),
+      option
+        .setName('training')
+        .setDescription('Minimum required training sessions')
+        .setRequired(false)
+        .setMinValue(0),
     )
     .addIntegerOption((option) =>
-      option.setName('training').setDescription('Minimum training sessions.').setRequired(true).setMinValue(0),
+      option
+        .setName('interview')
+        .setDescription('Minimum required interview sessions')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName('hosting')
+        .setDescription('Minimum required hosted sessions (Corporate+ only)')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName('show')
+        .setDescription('Show current settings for this tier instead of editing')
+        .setRequired(false),
     ),
 
   async execute(interaction) {
     const tier = interaction.options.getString('tier', true);
-    const mode = interaction.options.getString('mode', true);
-    const total = interaction.options.getInteger('total', true);
-    const minInterview = interaction.options.getInteger('interview', true);
-    const minTraining = interaction.options.getInteger('training', true);
+    const showOnly = interaction.options.getBoolean('show') ?? false;
 
-    const current = getQuota(tier);
+    const total = interaction.options.getInteger('total');
+    const training = interaction.options.getInteger('training');
+    const interview = interaction.options.getInteger('interview');
+    const hosting = interaction.options.getInteger('hosting');
+
+    const current = getQuotaEntry(tier);
+
     if (!current) {
-      await interaction.reply({
-        content: 'That quota tier could not be found.',
+      return interaction.reply({
+        content: `No quota settings exist for **${tier}**.`,
         ephemeral: true,
       });
-      return;
     }
 
-    const updated = setQuota(tier, {
-      mode,
-      total,
-      minInterview,
-      minTraining,
-    });
+    if (
+      showOnly ||
+      [total, training, interview, hosting].every((value) => value === null)
+    ) {
+      const embed = new EmbedBuilder()
+        .setColor(0x8fd3ff)
+        .setTitle('✨ Activity Settings')
+        .setDescription(`Viewing quota settings for **${tier}**`)
+        .addFields(
+          { name: '📊 Total Required', value: String(current.total ?? 0), inline: true },
+          { name: '🎓 Min Trainings', value: String(current.training ?? 0), inline: true },
+          { name: '🗣️ Min Interviews', value: String(current.interview ?? 0), inline: true },
+          { name: '🏨 Min Hosted', value: String(current.hosting ?? 0), inline: true },
+        );
+
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const next = {
+      ...current,
+      ...(total !== null ? { total } : {}),
+      ...(training !== null ? { training } : {}),
+      ...(interview !== null ? { interview } : {}),
+      ...(hosting !== null ? { hosting } : {}),
+    };
+
+    if ((next.training ?? 0) + (next.interview ?? 0) > (next.total ?? 0)) {
+      return interaction.reply({
+        content:
+          'The sum of minimum trainings and minimum interviews cannot be greater than the total required sessions.',
+        ephemeral: true,
+      });
+    }
+
+    updateQuotaSettings(tier, next);
 
     const embed = new EmbedBuilder()
-      .setColor(0xf7b2ff)
-      .setTitle('✨ Activity Settings Updated')
-      .setDescription(`Updated **${updated.label}** quota settings.`)
+      .setColor(0x57f287)
+      .setTitle('✅ Activity Settings Updated')
+      .setDescription(`Updated quota settings for **${tier}**`)
       .addFields(
-        { name: 'Mode', value: updated.mode === 'hosted' ? 'Hosted Sessions' : 'Regular Sessions', inline: true },
-        { name: 'Total', value: String(updated.total), inline: true },
-        { name: 'Minimum Interviews', value: String(updated.minInterview), inline: true },
-        { name: 'Minimum Trainings', value: String(updated.minTraining), inline: true },
+        { name: '📊 Total Required', value: String(next.total ?? 0), inline: true },
+        { name: '🎓 Min Trainings', value: String(next.training ?? 0), inline: true },
+        { name: '🗣️ Min Interviews', value: String(next.interview ?? 0), inline: true },
+        { name: '🏨 Min Hosted', value: String(next.hosting ?? 0), inline: true },
       );
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   },
 };
