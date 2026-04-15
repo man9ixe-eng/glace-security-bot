@@ -86,40 +86,55 @@ async function buildActivityEmbed(interaction, targetMember) {
     });
 
   if (quotaProfile.isCorporatePlus) {
-    embed.addFields(
-      {
-        name: '🏨 Hosted Sessions',
-        value: buildSectionBox([
-          `Hosted Interviews: **${current.hosted.interview}**`,
-          `Hosted Trainings: **${current.hosted.training}**`,
-          `Total Hosted: **${current.hosted.total}**`,
-        ]),
-        inline: true,
-      },
-      {
-        name: '🤝 Helped Other Hosts',
-        value: buildSectionBox([
-          `Co-Host: **${current.support.roles.cohost || 0}**`,
-          `Overseer: **${current.support.roles.overseer || 0}**`,
-          `Main Role: **${current.support.roles.interviewer || 0}**`,
-          `Supervisor: **${current.support.roles.supervisor || 0}**`,
-          `Spectator: **${current.support.roles.spectator || 0}**`,
-          `Total Help Sessions: **${current.support.total}**`,
-        ]),
-      },
-      {
-        name: '🌙 Last Week Helper Activity',
-        value: buildSectionBox([
-          `Co-Host: **${last.support.roles.cohost || 0}**`,
-          `Overseer: **${last.support.roles.overseer || 0}**`,
-          `Main Role: **${last.support.roles.interviewer || 0}**`,
-          `Supervisor: **${last.support.roles.supervisor || 0}**`,
-          `Spectator: **${last.support.roles.spectator || 0}**`,
-          `Total Help Sessions: **${last.support.total}**`,
-        ]),
-      },
-    );
-  }
+  embed.data.fields[1].value = buildSectionBox([
+    `Interviews Hosted: **${current.hosted.interview}**`,
+    `Trainings Hosted: **${current.hosted.training}**`,
+    `Total Hosted: **${current.hosted.total}**`,
+    `Status: ${metQuota ? '✅ Met quota' : '❌ Below quota'}`,
+  ]);
+
+  embed.data.fields[2].value = buildSectionBox([
+    `Interviews: **${last.hosted.interview}**`,
+    `Trainings: **${last.hosted.training}**`,
+    `Total: **${last.hosted.total}**`,
+    `Status: ${hasMetQuota(last, quotaProfile) ? '✅ Met quota' : '❌ Below quota'}`,
+  ]);
+
+  embed.addFields(
+    {
+      name: '🏨 Helped Sessions',
+      value: buildSectionBox([
+        `Interviews: **${current.support.interview || 0}**`,
+        `Trainings: **${current.support.training || 0}**`,
+        `Total Attended / Non-hosted: **${current.support.total}**`,
+      ]),
+    },
+    {
+      name: '🤝 This Week | Attended Breakdown',
+      value: buildSectionBox([
+        `Co-Host: **${current.support.roles.cohost || 0}**`,
+        `Overseer: **${current.support.roles.overseer || 0}**`,
+        `Interviewer: **${current.support.roles.interviewer || 0}**`,
+        `Trainer: **${current.support.roles.trainer || 0}**`,
+        `Supervisor: **${current.support.roles.supervisor || 0}**`,
+        `Spectator: **${current.support.roles.spectator || 0}**`,
+        `Total Help Sessions: **${current.support.total}**`,
+      ]),
+    },
+    {
+      name: '🌙 Last Week | Attended Breakdown',
+      value: buildSectionBox([
+        `Co-Host: **${last.support.roles.cohost || 0}**`,
+        `Overseer: **${last.support.roles.overseer || 0}**`,
+        `Interviewer: **${last.support.roles.interviewer || 0}**`,
+        `Trainer: **${last.support.roles.trainer || 0}**`,
+        `Supervisor: **${last.support.roles.supervisor || 0}**`,
+        `Spectator: **${last.support.roles.spectator || 0}**`,
+        `Total Help Sessions: **${last.support.total}**`,
+      ]),
+    }
+  );
+}
 
   return embed;
 }

@@ -330,7 +330,7 @@ function addDaysToLocalDate(year, month, day, offsetDays) {
 function getWeekRange(offsetWeeks = 0, timeZone = TIME_ZONE) {
   const now = new Date();
   const currentParts = getTimeZoneParts(now, timeZone);
-  const daysSinceMonday = (currentParts.weekday + 6) % 7;
+  const daysSinceMonday = currentParts.weekday === 0 ? 6 : currentParts.weekday - 1;
 
   const mondayLocal = addDaysToLocalDate(
     currentParts.year,
