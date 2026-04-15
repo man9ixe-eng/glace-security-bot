@@ -573,10 +573,10 @@ async function backfillFromLogChannel(client) {
       for (const field of embed.fields || []) {
         const loweredName = String(field.name || '').toLowerCase();
 
-        if (loweredName === 'host') {
+        if (loweredName.includes('host')) {
           hostIds = extractIdsFromFieldValue(field.value);
           continue;
-        }
+         }
 
         const roleKey = mapFieldNameToRoleKey(field.name);
         if (!roleKey) continue;
