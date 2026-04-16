@@ -211,26 +211,28 @@ if (ENABLE_MESSAGE_CONTENT) {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    // BUTTONS
-    if (interaction.isButton()) {
+    // MESSAGE COMPONENTS (buttons + select menus)
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
       const id = interaction.customId || "";
 
-      // ticket close yes/no buttons
-      if (id.startsWith("ticket:closeyes:") || id.startsWith("ticket:closeno:")) {
-        const { handleTicketControlButton } = require("./utils/ticketSystem");
-        const handled = await handleTicketControlButton(interaction);
-        if (handled) return;
+      if (interaction.isButton()) {
+        // ticket close yes/no buttons
+        if (id.startsWith("ticket:closeyes:") || id.startsWith("ticket:closeno:")) {
+          const { handleTicketControlButton } = require("./utils/ticketSystem");
+          const handled = await handleTicketControlButton(interaction);
+          if (handled) return;
+        }
+
+        // ticket create buttons
+        if (id.startsWith("ticket:create:")) {
+          const typeKeyRaw = id.split(":").slice(2).join(":");
+          const { createTicketChannel } = require("./utils/ticketSystem");
+          await createTicketChannel(interaction, typeKeyRaw);
+          return;
+        }
       }
 
-      // ticket create buttons
-      if (id.startsWith("ticket:create:")) {
-        const typeKeyRaw = id.split(":").slice(2).join(":");
-        const { createTicketChannel } = require("./utils/ticketSystem");
-        await createTicketChannel(interaction, typeKeyRaw);
-        return;
-      }
-
-      // session queue buttons
+      // session queue components
       const queueHandled = await handleQueueButtonInteraction(interaction);
       if (queueHandled) return;
     }
