@@ -5,6 +5,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  StringSelectMenuBuilder,
 } = require('discord.js');
 const { trelloRequest } = require('./trelloClient');
 const { recordHostedSession, recordSupportSession, replaceSessionActivity } = require('./activityTracker');
@@ -18,7 +19,6 @@ const ROLE_LIMITS = {
   cohost: 1,
   overseer: 1,
   interviewer: 12, // default (Interviewers)
-  spectator: 4,
   supervisor: 4,
 };
 
@@ -33,6 +33,114 @@ const SESSION_LOG_CHANNEL_ID = process.env.SESSION_LOG_CHANNEL_ID || null;
 // (Still supported, but SESSION_LOG_CHANNEL_ID takes priority now.)
 const SESSION_ATTENDEES_LOG_CHANNEL_ID =
   process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID || null;
+
+
+const RANK_LADDER = [
+  'Leadership Intern',
+  'Supervisor',
+  'Assistant Manager',
+  'Hotel Manager',
+  'Executive Manager',
+  'Corporate Intern',
+  'Junior Corporate',
+  'Senior Corporate',
+  'Head Corporate',
+  'Board Of Directors',
+  'Presidential Intern',
+  'CEO',
+  'VP',
+  'President',
+];
+
+function normalizeRoleName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getMemberRankIndex(member) {
+  const roles = member?.roles?.cache ? [...member.roles.cache.values()] : [];
+  let bestIndex = -1;
+
+  for (const role of roles) {
+    const raw = String(role?.name || '');
+    const normalized = normalizeRoleName(raw);
+    if (!normalized || normalized.includes('former')) continue;
+
+    for (let index = 0; index < RANK_LADDER.length; index += 1) {
+      const target = normalizeRoleName(RANK_LADDER[index]);
+      if (!target) continue;
+      if (normalized.includes(target)) {
+        bestIndex = Math.max(bestIndex, index);
+      }
+    }
+  }
+
+  return bestIndex;
+}
+
+function hasMinimumRank(member, minimumRank) {
+  const requiredIndex = RANK_LADDER.findIndex(
+    (rank) => normalizeRoleName(rank) === normalizeRoleName(minimumRank),
+  );
+  if (requiredIndex === -1) return false;
+  return getMemberRankIndex(member) >= requiredIndex;
+}
+
+function getAllowedQueueRoles(queue, member) {
+  if (!queue || !member) return [];
+
+  if (queue.sessionType === 'training') {
+    return [
+      hasMinimumRank(member, 'Leadership Intern')
+        ? { key: 'interviewer', label: 'Trainer' }
+        : null,
+      hasMinimumRank(member, 'Assistant Manager')
+        ? { key: 'supervisor', label: 'Supervisor' }
+        : null,
+      hasMinimumRank(member, 'Corporate Intern')
+        ? { key: 'cohost', label: 'Co-Host' }
+        : null,
+      hasMinimumRank(member, 'Head Corporate')
+        ? { key: 'overseer', label: 'Overseer' }
+        : null,
+    ].filter(Boolean);
+  }
+
+  if (queue.sessionType === 'massshift') {
+    return [
+      hasMinimumRank(member, 'Leadership Intern')
+        ? { key: 'interviewer', label: 'Attendee' }
+        : null,
+      hasMinimumRank(member, 'Executive Manager')
+        ? { key: 'cohost', label: 'Co-Host' }
+        : null,
+      hasMinimumRank(member, 'Head Corporate')
+        ? { key: 'overseer', label: 'Overseer' }
+        : null,
+    ].filter(Boolean);
+  }
+
+  return [
+    hasMinimumRank(member, 'Leadership Intern')
+      ? { key: 'interviewer', label: 'Interviewer' }
+      : null,
+    hasMinimumRank(member, 'Corporate Intern')
+      ? { key: 'cohost', label: 'Co-Host' }
+      : null,
+    hasMinimumRank(member, 'Head Corporate')
+      ? { key: 'overseer', label: 'Overseer' }
+      : null,
+  ].filter(Boolean);
+}
+
+function getHeaderEmoji(sessionType) {
+  if (sessionType === 'training') return '🔴';
+  if (sessionType === 'massshift') return '🟣';
+  return '🟡';
+}
 
 /**
  * Extract Trello shortId from:
@@ -287,7 +395,6 @@ function upsertQueue(shortId, data) {
       cohost: [],
       overseer: [],
       interviewer: [],
-      spectator: [],
       supervisor: [],
     },
   };
@@ -638,7 +745,6 @@ async function applyEditedLineup(client, shortId, newSections, editorId = null) 
     queue.roles.supervisor = lineup.sections.supervisor.map((userId) => ({ userId, claimedAt: Date.now() }));
     queue.roles.cohost = lineup.sections.cohost.map((userId) => ({ userId, claimedAt: Date.now() }));
     queue.roles.overseer = lineup.sections.overseer.map((userId) => ({ userId, claimedAt: Date.now() }));
-    queue.roles.spectator = [];
     queues.set(shortId, queue);
   }
 
@@ -751,9 +857,10 @@ if (!hostId) {
   const cardUrl = card.shortUrl || card.url || cardOption;
 
   const headerTop = '╔══════════════════════════════════════╗';
-  const headerTitle = `🟡 ${cfg.typeLabel} | ${hostName || 'Host'} | ${
+  const headerEmoji = getHeaderEmoji(sessionType);
+  const headerTitle = `${headerEmoji} ${cfg.typeLabel} | ${hostName || 'Host'} | ${
     timeText || 'Time'
-  } 🟡`;
+  } ${headerEmoji}`;
   const headerBottom = '╚══════════════════════════════════════╝';
 
 const descriptionLines = [
@@ -774,22 +881,20 @@ const descriptionLines = [
   if (sessionType === 'interview') {
     descriptionLines.push(
       'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Executive Manager+',
+      'ℹ️  **Overseer:** Head Corporate+',
       'ℹ️  **Interviewer (12):** Leadership Intern+',
-      'ℹ️  **Spectator (4):** Leadership Intern+',
     );
   } else if (sessionType === 'training') {
     descriptionLines.push(
       'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Executive Manager+',
+      'ℹ️  **Overseer:** Head Corporate+',
       'ℹ️  **Supervisor (4):** Assistant Manager+',
       'ℹ️  **Trainer (8):** Leadership Intern+',
-      'ℹ️  **Spectator (4):** Leadership Intern+',
     );
   } else if (sessionType === 'massshift') {
     descriptionLines.push(
-      'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Executive Manager+',
+      'ℹ️  **Co-Host:** Executive Manager+',
+      'ℹ️  **Overseer:** Head Corporate+',
       'ℹ️  **Attendees (15):** Leadership Intern+',
     );
   }
@@ -798,7 +903,7 @@ const descriptionLines = [
     '',
     '❓  HOW TO JOIN THE QUEUE ❓',
     '----------------------------------------------------------------',
-    '- Check the role list above — if your rank is allowed, press the role button you want.',
+    '- Check the role list above — if your rank is allowed, press **Join Queue** and choose your role from the dropdown.',
     '- You’ll get a popup that says: “You have been added to the (ROLE) Queue.”',
     '- Do NOT join until you are pinged in “Session Attendees” **15 minutes before** the session starts.',
     '- Line up on the number/role you are selected for on "Session Attendees".',
@@ -819,44 +924,16 @@ const descriptionLines = [
     .setDescription(descriptionLines.filter(Boolean).join('\n'))
     .setColor(cfg.color || 0x6cb2eb);
 
-  const joinRowComponents = [
+  const joinRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`queue_join_cohost_${shortId}`)
-      .setLabel('Co-Host')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`queue_join_overseer_${shortId}`)
-      .setLabel('Overseer')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`queue_join_interviewer_${shortId}`)
-      .setLabel(
-        sessionType === 'training'
-          ? 'Trainer'
-          : sessionType === 'massshift'
-          ? 'Attendee'
-          : 'Interviewer',
-      )
+      .setCustomId(`queue_joinmenu_${shortId}`)
+      .setLabel('Join Queue')
       .setStyle(ButtonStyle.Success),
-  ];
-
-  if (sessionType !== 'massshift') {
-    joinRowComponents.push(
-      new ButtonBuilder()
-        .setCustomId(`queue_join_spectator_${shortId}`)
-        .setLabel('Spectator')
-        .setStyle(ButtonStyle.Secondary),
-    );
-  }
-
-  joinRowComponents.push(
     new ButtonBuilder()
       .setCustomId(`queue_leave_${shortId}`)
       .setLabel('Leave Queue')
       .setStyle(ButtonStyle.Danger),
   );
-
-  const joinRow = new ActionRowBuilder().addComponents(joinRowComponents);
 
   const controlRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -889,7 +966,6 @@ const descriptionLines = [
       cohost: [],
       overseer: [],
       interviewer: [],
-      spectator: [],
       supervisor: [],
     },
     isClosed: false,
@@ -922,12 +998,6 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
   const main = splitSelected(
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
-    priorityStore,
-    guildId,
-  );
-  const spectator = splitSelected(
-    queue.roles.spectator,
-    getRoleLimit(queue, 'spectator'),
     priorityStore,
     guildId,
   );
@@ -985,21 +1055,6 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
 
   const mainBackups = formatBackupsLine(main.backups, 12);
   if (mainBackups) lines.push(mainBackups);
-
-  if (queue.sessionType !== 'massshift') {
-    lines.push('', '🔵  Spectators 🔵');
-
-    if (spectator.selected.length === 0) {
-      lines.push('None selected.');
-    } else {
-      spectator.selected.forEach((entry, idx) => {
-        lines.push(`${idx + 1}. <@${entry.userId}>`);
-      });
-    }
-
-    const spectatorBackups = formatBackupsLine(spectator.backups, 10);
-    if (spectatorBackups) lines.push(spectatorBackups);
-  }
 
   if (supervisor.sorted.length) {
     lines.push('', '🟢  Supervisors 🟢');
@@ -1121,12 +1176,6 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     client.priorityStore,
     guildId,
   );
-  const spectator = splitSelected(
-    queue.roles.spectator,
-    getRoleLimit(queue, 'spectator'),
-    client.priorityStore,
-    guildId,
-  );
   const supervisor = splitSelected(
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
@@ -1152,13 +1201,11 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     cohostNames,
     overseerNames,
     mainNames,
-    spectatorNames,
     supervisorNames,
   ] = await Promise.all([
     usernamesFromEntries(cohost.selected),
     usernamesFromEntries(overseer.selected),
     usernamesFromEntries(main.selected),
-    usernamesFromEntries(spectator.selected),
     usernamesFromEntries(supervisor.selected),
   ]);
 
@@ -1206,90 +1253,6 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
       : 'None',
   });
 
-  if (queue.sessionType !== 'massshift') {
-    fields.push({
-      name: 'Spectators',
-      value: spectatorNames.length
-        ? spectatorNames.map((n, i) => `${i + 1}. ${n}`).join('\n')
-        : 'None',
-      inline: true,
-    });
-  }
-
-  if (supervisorNames.length) {
-    fields.push({
-      name: 'Supervisors',
-      value: supervisorNames.map((n, i) => `${i + 1}. ${n}`).join('\n'),
-      inline: true,
-    });
-  }
-
-  const now = new Date();
-  const loggedAt = now.toLocaleString('en-US', { timeZone: 'America/Toronto' });
-
-  const logStyle = getLogEmbedStyle(queue.sessionType);
-
-  const logEmbed = new EmbedBuilder()
-    .setTitle(logStyle.title)
-    .setDescription(`Logged at **${loggedAt}**`)
-    .addFields(fields)
-    .setColor(logStyle.color);
-
-  const sentLogMessage = await logChannel.send({ embeds: [logEmbed] });
-
-  const logTimestamp = Date.now();
-
-  upsertSession({
-    shortId,
-    sessionType: queue.sessionType,
-    hostId: queue.hostId || null,
-    hostName: queue.hostName || null,
-    guildId: queue.guildId || null,
-    cardName: queue.cardName || null,
-    cardUrl: queue.cardUrl || null,
-    queueChannelId: queue.channelId || null,
-    queueMessageId: queue.messageId || null,
-    attendeesMessageId: queue.attendeesMessageId || null,
-    logChannelId: logChannel.id,
-    logMessageId: sentLogMessage.id,
-    loggedAt: logTimestamp,
-    lineup: buildStructuredLineup(queue, client.priorityStore),
-  });
-
-  if (queue.hostId) {
-    recordHostedSession({
-      userId: queue.hostId,
-      shortId,
-      sessionType: queue.sessionType,
-      guildId: queue.guildId || null,
-      timestamp: logTimestamp,
-      cancelled: !recordAttendance,
-    });
-  }
-
-  const supportRoleGroups = [
-    ['cohost', cohost.selected],
-    ['overseer', overseer.selected],
-    ['interviewer', main.selected],
-    ['spectator', spectator.selected],
-    ['supervisor', supervisor.selected],
-  ];
-
-  for (const [roleKey, entries] of supportRoleGroups) {
-    for (const entry of entries) {
-      if (!entry?.userId || entry.userId === queue.hostId) continue;
-      recordSupportSession({
-        userId: entry.userId,
-        shortId,
-        sessionType: queue.sessionType,
-        roleKey,
-        guildId: queue.guildId || null,
-        timestamp: logTimestamp,
-        cancelled: !recordAttendance,
-      });
-    }
-  }
-
   if (
     recordAttendance &&
     client.priorityStore &&
@@ -1299,7 +1262,6 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
       ...cohost.selected,
       ...overseer.selected,
       ...main.selected,
-      ...(queue.sessionType !== 'massshift' ? spectator.selected : []),
       ...supervisor.selected,
     ]
       .map((e) => e.userId)
@@ -1412,10 +1374,8 @@ async function handleQueueButtonInteraction(interaction) {
   const action = parts[1];
 
   try {
-    if (action === 'join') {
-      const roleKey = parts[2];
-      const shortId = parts[3];
-
+    if (action === 'joinmenu') {
+      const shortId = parts[2];
       const queue = queues.get(shortId);
       if (!queue || queue.isClosed) {
         await interaction.reply({ content: 'This queue is no longer active.', ephemeral: true });
@@ -1423,10 +1383,57 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
+      const allowedRoles = getAllowedQueueRoles(queue, interaction.member);
+      if (!allowedRoles.length) {
+        await interaction.reply({
+          content: 'You do not have a rank that can claim a queue role for this session.',
+          ephemeral: true,
+        });
+        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
+        return true;
+      }
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`queue_pickrole_${shortId}`)
+        .setPlaceholder('Choose a role to queue for')
+        .addOptions(
+          allowedRoles.map((role) => ({
+            label: role.label,
+            value: role.key,
+          })),
+        );
+
+      await interaction.reply({
+        content: 'Choose the role you want to queue for.',
+        components: [new ActionRowBuilder().addComponents(select)],
+        ephemeral: true,
+      });
+      return true;
+    }
+
+    if (action === 'pickrole') {
+      const shortId = parts[2];
+      const roleKey = interaction.values?.[0];
+      const queue = queues.get(shortId);
+      if (!queue || queue.isClosed) {
+        await interaction.update({ content: 'This queue is no longer active.', components: [] });
+        return true;
+      }
+
+      const allowedRoleKeys = new Set(
+        getAllowedQueueRoles(queue, interaction.member).map((role) => role.key),
+      );
+      if (!allowedRoleKeys.has(roleKey)) {
+        await interaction.update({
+          content: 'You cannot claim that role based on your current rank.',
+          components: [],
+        });
+        return true;
+      }
+
       const addResult = addUserToRole(queue, interaction.user.id, roleKey);
       if (!addResult.ok) {
-        await interaction.reply({ content: addResult.reason, ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
+        await interaction.update({ content: addResult.reason, components: [] });
         return true;
       }
 
@@ -1437,13 +1444,14 @@ async function handleQueueButtonInteraction(interaction) {
             : queue.sessionType === 'massshift'
             ? 'Attendee'
             : 'Interviewer'
+          : roleKey === 'cohost'
+          ? 'Co-Host'
           : roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
 
-      await interaction.reply({
+      await interaction.update({
         content: `You have been added to the **${roleLabel}** queue.`,
-        ephemeral: true,
+        components: [],
       });
-      setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
       return true;
     }
 
