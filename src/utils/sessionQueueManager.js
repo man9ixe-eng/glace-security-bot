@@ -5,19 +5,10 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  StringSelectMenuBuilder,
 } = require('discord.js');
 const { trelloRequest } = require('./trelloClient');
-const {
-  recordHostedSession,
-  recordSupportSession,
-  getUserActivity,
-  getQuotaProfileForMember,
-  getWeekRange,
-  summarizeActivity,
-  hasMetQuota,
-  runWeeklyMaintenance,
-} = require('./activityTracker');
+const { recordHostedSession, recordSupportSession, replaceSessionActivity } = require('./activityTracker');
+const { upsertSession, getSession } = require('./editActivityStore');
 
 // In-memory registry of active queues, keyed by Trello card shortId.
 const queues = new Map();
@@ -27,6 +18,7 @@ const ROLE_LIMITS = {
   cohost: 1,
   overseer: 1,
   interviewer: 12, // default (Interviewers)
+  spectator: 4,
   supervisor: 4,
 };
 
@@ -295,6 +287,7 @@ function upsertQueue(shortId, data) {
       cohost: [],
       overseer: [],
       interviewer: [],
+      spectator: [],
       supervisor: [],
     },
   };
@@ -305,112 +298,6 @@ function upsertQueue(shortId, data) {
 
   queues.set(shortId, merged);
   return merged;
-}
-
-const RANK_ORDER = [
-  "leadership intern",
-  "supervisor",
-  "assistant manager",
-  "hotel manager",
-  "executive manager",
-  "corporate intern",
-  "junior corporate",
-  "senior corporate",
-  "head corporate",
-  "board of directors",
-  "presidential intern",
-  "chief executive officer",
-  "vice president",
-  "president",
-];
-
-function normalizeRoleNameForRank(name) {
-  return String(name || '')
-    .toLowerCase()
-    .replace(/<a?:\w+:\d+>/g, ' ')
-    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function getMemberRankIndex(member) {
-  if (!member?.roles?.cache) return -1;
-
-  let highest = -1;
-  for (const role of member.roles.cache.values()) {
-    const normalized = normalizeRoleNameForRank(role.name);
-    const index = RANK_ORDER.findIndex((rank) => normalized.includes(rank));
-    if (index > highest) highest = index;
-  }
-
-  return highest;
-}
-
-function hasMinimumRank(member, minimumRankName) {
-  const minimumIndex = RANK_ORDER.indexOf(String(minimumRankName || '').toLowerCase());
-  if (minimumIndex === -1) return false;
-  return getMemberRankIndex(member) >= minimumIndex;
-}
-
-function getAllowedRoleOptionsForMember(queue, member) {
-  const options = [];
-
-  if (queue.sessionType === 'interview') {
-    if (hasMinimumRank(member, 'corporate intern')) options.push({ key: 'cohost', label: 'Co-Host' });
-    if (hasMinimumRank(member, 'head corporate')) options.push({ key: 'overseer', label: 'Overseer' });
-    if (hasMinimumRank(member, 'leadership intern')) options.push({ key: 'interviewer', label: 'Interviewer' });
-    return options;
-  }
-
-  if (queue.sessionType === 'training') {
-    if (hasMinimumRank(member, 'leadership intern')) options.push({ key: 'interviewer', label: 'Trainer' });
-    if (hasMinimumRank(member, 'assistant manager')) options.push({ key: 'supervisor', label: 'Supervisor' });
-    if (hasMinimumRank(member, 'corporate intern')) options.push({ key: 'cohost', label: 'Co-Host' });
-    if (hasMinimumRank(member, 'head corporate')) options.push({ key: 'overseer', label: 'Overseer' });
-    return options;
-  }
-
-  if (queue.sessionType === 'massshift') {
-    if (hasMinimumRank(member, 'executive manager')) options.push({ key: 'cohost', label: 'Co-Host' });
-    if (hasMinimumRank(member, 'head corporate')) options.push({ key: 'overseer', label: 'Overseer' });
-    if (hasMinimumRank(member, 'leadership intern')) options.push({ key: 'interviewer', label: 'Attendee' });
-  }
-
-  return options;
-}
-
-function getRoleLabel(queue, roleKey) {
-  if (roleKey === 'interviewer') {
-    if (queue.sessionType === 'training') return 'Trainer';
-    if (queue.sessionType === 'massshift') return 'Attendee';
-    return 'Interviewer';
-  }
-
-  if (roleKey === 'cohost') return 'Co-Host';
-  if (roleKey === 'overseer') return 'Overseer';
-  if (roleKey === 'supervisor') return 'Supervisor';
-  return roleKey;
-}
-
-function getQueuePrioritySnapshot(queue, priorityStore, guild, entry) {
-  const member = guild?.members?.cache?.get(entry.userId) || null;
-  let quotaIncomplete = false;
-  let totalSessions = Number.MAX_SAFE_INTEGER;
-
-  if (member) {
-    const quotaProfile = getQuotaProfileForMember(member);
-    const activity = getUserActivity(entry.userId);
-    const summary = summarizeActivity(activity, getWeekRange('current'));
-    totalSessions = summary.support?.total || 0;
-    quotaIncomplete = quotaProfile ? !hasMetQuota(summary, quotaProfile) : false;
-  }
-
-  const lastAttendedAt =
-    priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
-      ? priorityStore.getLastAttendedAt(queue.guildId || 'global', entry.userId)
-      : 0;
-
-  return { quotaIncomplete, totalSessions, lastAttendedAt };
 }
 
 /**
@@ -475,35 +362,29 @@ function getRoleLimit(queue, roleKey) {
 
 /**
  * Sort role entries:
- * 1) Users who have NOT met quota this week
- * 2) Users with the LEAST logged support sessions this week
- * 3) Users who attended least recently
- * 4) Tie-break: claim time (first come, first served)
+ * 1) Priority: users who attended least recently go first (or never attended)
+ * 2) Tie-break: claim time (first come, first served)
  */
-function sortRoleEntries(queue, entries, priorityStore, guild) {
+function sortRoleEntries(entries, priorityStore, guildId) {
   return [...(entries || [])].sort((a, b) => {
-    const aSnapshot = getQueuePrioritySnapshot(queue, priorityStore, guild, a);
-    const bSnapshot = getQueuePrioritySnapshot(queue, priorityStore, guild, b);
+    const aLast =
+      priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
+        ? priorityStore.getLastAttendedAt(guildId, a.userId)
+        : 0;
+    const bLast =
+      priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
+        ? priorityStore.getLastAttendedAt(guildId, b.userId)
+        : 0;
 
-    if (aSnapshot.quotaIncomplete !== bSnapshot.quotaIncomplete) {
-      return aSnapshot.quotaIncomplete ? -1 : 1;
-    }
-
-    if (aSnapshot.totalSessions !== bSnapshot.totalSessions) {
-      return aSnapshot.totalSessions - bSnapshot.totalSessions;
-    }
-
-    if (aSnapshot.lastAttendedAt !== bSnapshot.lastAttendedAt) {
-      return aSnapshot.lastAttendedAt - bSnapshot.lastAttendedAt;
-    }
+    if (aLast !== bLast) return aLast - bLast;
 
     if (a.claimedAt && b.claimedAt) return a.claimedAt - b.claimedAt;
     return 0;
   });
 }
 
-function splitSelected(queue, entries, limit, priorityStore, guild) {
-  const sorted = sortRoleEntries(queue, entries, priorityStore, guild);
+function splitSelected(entries, limit, priorityStore, guildId) {
+  const sorted = sortRoleEntries(entries, priorityStore, guildId);
   const safeLimit = Number.isFinite(limit) ? limit : sorted.length;
   return {
     sorted,
@@ -522,6 +403,269 @@ function formatBackupsLine(backups, maxShow = 10) {
     backups.length > maxShow ? ` (+${backups.length - maxShow} more)` : '';
   return `🟠 Backups: ${shown}${extra}`;
 }
+
+
+function getEditableSections(sessionType) {
+  if (sessionType === 'training') {
+    return [
+      { key: 'interviewer', label: 'Trainer' },
+      { key: 'supervisor', label: 'Supervisor' },
+      { key: 'cohost', label: 'Co-Host' },
+      { key: 'overseer', label: 'Overseer' },
+    ];
+  }
+
+  if (sessionType === 'massshift') {
+    return [
+      { key: 'interviewer', label: 'Attendees' },
+      { key: 'cohost', label: 'Co-Host' },
+      { key: 'overseer', label: 'Overseer' },
+    ];
+  }
+
+  return [
+    { key: 'interviewer', label: 'Interviewer' },
+    { key: 'cohost', label: 'Co-Host' },
+    { key: 'overseer', label: 'Overseer' },
+  ];
+}
+
+function buildStructuredLineup(queue, priorityStore) {
+  const guildId = queue.guildId || 'global';
+  const main = splitSelected(queue.roles.interviewer || [], getRoleLimit(queue, 'interviewer'), priorityStore, guildId);
+  const cohost = splitSelected(queue.roles.cohost || [], getRoleLimit(queue, 'cohost'), priorityStore, guildId);
+  const overseer = splitSelected(queue.roles.overseer || [], getRoleLimit(queue, 'overseer'), priorityStore, guildId);
+  const supervisor = splitSelected(queue.roles.supervisor || [], getRoleLimit(queue, 'supervisor'), priorityStore, guildId);
+
+  return {
+    shortId: queue.shortId,
+    sessionType: queue.sessionType,
+    hostId: queue.hostId || null,
+    hostName: queue.hostName || null,
+    sections: {
+      interviewer: main.selected.map((entry) => entry.userId),
+      supervisor: supervisor.selected.map((entry) => entry.userId),
+      cohost: cohost.selected.map((entry) => entry.userId),
+      overseer: overseer.selected.map((entry) => entry.userId),
+    },
+  };
+}
+
+function buildEditTemplateFromLineup(lineup) {
+  const sections = getEditableSections(lineup.sessionType);
+  const blocks = [];
+
+  for (const section of sections) {
+    blocks.push(`[${section.label}]`);
+    const ids = lineup.sections?.[section.key] || [];
+
+    if (!ids.length) {
+      blocks.push('None');
+    } else {
+      ids.forEach((userId, index) => {
+        blocks.push(`${index + 1}. <@${userId}>`);
+      });
+    }
+
+    blocks.push('');
+  }
+
+  return blocks.join('\n').trim();
+}
+
+function buildLogFieldsFromLineup(lineup) {
+  const fields = [
+    {
+      name: 'Host',
+      value: lineup.hostId ? `<@${lineup.hostId}> (${lineup.hostId})` : lineup.hostName || 'Unknown',
+    },
+  ];
+
+  for (const section of getEditableSections(lineup.sessionType)) {
+    const ids = lineup.sections?.[section.key] || [];
+    const fieldName =
+      section.label === 'Attendees'
+        ? 'Attendees'
+        : section.label === 'Trainer'
+        ? 'Trainers'
+        : section.label === 'Interviewer'
+        ? 'Interviewers'
+        : section.label === 'Supervisor'
+        ? 'Supervisors'
+        : section.label;
+
+    fields.push({
+      name: fieldName,
+      value: ids.length ? ids.map((id, i) => `${i + 1}. <@${id}> (${id})`).join('\n') : 'None',
+      inline: section.key !== 'interviewer',
+    });
+  }
+
+  return fields;
+}
+
+function parseEditedLineup(text, sessionType) {
+  const allowedSections = getEditableSections(sessionType);
+  const nameToKey = new Map(allowedSections.map((section) => [section.label.toLowerCase(), section.key]));
+  const result = {
+    interviewer: [],
+    supervisor: [],
+    cohost: [],
+    overseer: [],
+  };
+
+  const blocks = String(text || '')
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  for (const block of blocks) {
+    const lines = block.split(/\n/).map((line) => line.trim()).filter(Boolean);
+    if (!lines.length) continue;
+
+    const header = lines.shift();
+    const headerMatch = header.match(/^\[(.+)\]$/);
+    if (!headerMatch) {
+      return { ok: false, error: 'Each section must start with a header like `[Trainer]`.' };
+    }
+
+    const label = headerMatch[1].trim();
+    const key = nameToKey.get(label.toLowerCase());
+    if (!key) {
+      return { ok: false, error: `\`${label}\` is not a valid section for this session type.` };
+    }
+
+    if (lines.length === 1 && /^none$/i.test(lines[0])) {
+      result[key] = [];
+      continue;
+    }
+
+    const ids = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const match = line.match(/^(\d+)\.\s*<@!?(\d{17,20})>$/);
+      if (!match) {
+        return { ok: false, error: `Invalid line in [${label}]: \`${line}\`` };
+      }
+      if (Number(match[1]) !== i + 1) {
+        return { ok: false, error: `[${label}] numbering must start at 1 and not skip numbers.` };
+      }
+      ids.push(match[2]);
+    }
+
+    const dupes = ids.filter((id, idx) => ids.indexOf(id) !== idx);
+    if (dupes.length) {
+      return { ok: false, error: `You repeated the same user in [${label}].` };
+    }
+
+    result[key] = ids;
+  }
+
+  const providedHeaders = new Set(
+    blocks.map((block) => ((block.match(/^\[(.+)\]/m) || [])[1] || '').trim().toLowerCase()),
+  );
+
+  for (const section of allowedSections) {
+    if (!providedHeaders.has(section.label.toLowerCase())) {
+      return { ok: false, error: `Missing required section [${section.label}].` };
+    }
+  }
+
+  return { ok: true, sections: result };
+}
+
+async function updateAttendeesMessage(client, sessionRecord, lineup) {
+  if (!sessionRecord?.queueChannelId || !sessionRecord?.attendeesMessageId) return;
+  const channel = await client.channels.fetch(sessionRecord.queueChannelId).catch(() => null);
+  if (!channel) return;
+  const message = await channel.messages.fetch(sessionRecord.attendeesMessageId).catch(() => null);
+  if (!message) return;
+
+  await message.edit({
+    content: ['✅ **SELECTED ATTENDEES**', '', buildEditTemplateFromLineup(lineup)].join('\n'),
+  });
+}
+
+async function updateLogMessage(client, sessionRecord, lineup) {
+  if (!sessionRecord?.logChannelId || !sessionRecord?.logMessageId) return;
+  const channel = await client.channels.fetch(sessionRecord.logChannelId).catch(() => null);
+  if (!channel) return;
+  const message = await channel.messages.fetch(sessionRecord.logMessageId).catch(() => null);
+  if (!message) return;
+
+  const existingEmbed = message.embeds?.[0];
+  const logStyle = getLogEmbedStyle(lineup.sessionType);
+  const embed = EmbedBuilder.from(existingEmbed || new EmbedBuilder())
+    .setTitle(logStyle.title)
+    .setColor(logStyle.color)
+    .setFields(buildLogFieldsFromLineup(lineup))
+    .setFooter({ text: 'Edited with /editactivity' });
+
+  await message.edit({ embeds: [embed] });
+}
+
+async function applyEditedLineup(client, shortId, newSections, editorId = null) {
+  const queue = queues.get(shortId);
+  const record = getSession(shortId);
+  const base = queue ? buildStructuredLineup(queue, client.priorityStore) : record;
+  if (!base) {
+    return { ok: false, error: 'I could not find an active queue or saved log for that Trello card.' };
+  }
+
+  const lineup = {
+    ...base,
+    sections: {
+      interviewer: newSections.interviewer || [],
+      supervisor: newSections.supervisor || [],
+      cohost: newSections.cohost || [],
+      overseer: newSections.overseer || [],
+    },
+    editedBy: editorId,
+    editedAt: Date.now(),
+  };
+
+  const sessionRecord = upsertSession({
+    ...(record || {}),
+    shortId,
+    sessionType: lineup.sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+    lineup,
+  });
+
+  if (queue) {
+    queue.roles.interviewer = lineup.sections.interviewer.map((userId) => ({ userId, claimedAt: Date.now() }));
+    queue.roles.supervisor = lineup.sections.supervisor.map((userId) => ({ userId, claimedAt: Date.now() }));
+    queue.roles.cohost = lineup.sections.cohost.map((userId) => ({ userId, claimedAt: Date.now() }));
+    queue.roles.overseer = lineup.sections.overseer.map((userId) => ({ userId, claimedAt: Date.now() }));
+    queue.roles.spectator = [];
+    queues.set(shortId, queue);
+  }
+
+  await updateAttendeesMessage(client, sessionRecord, lineup);
+
+  if (sessionRecord.logMessageId) {
+    await updateLogMessage(client, sessionRecord, lineup);
+    const supportEntries = [];
+    for (const userId of lineup.sections.interviewer) supportEntries.push({ userId, roleKey: 'interviewer' });
+    for (const userId of lineup.sections.supervisor) supportEntries.push({ userId, roleKey: 'supervisor' });
+    for (const userId of lineup.sections.cohost) supportEntries.push({ userId, roleKey: 'cohost' });
+    for (const userId of lineup.sections.overseer) supportEntries.push({ userId, roleKey: 'overseer' });
+
+    replaceSessionActivity({
+      shortId,
+      hostId: lineup.hostId || null,
+      sessionType: lineup.sessionType,
+      guildId: sessionRecord.guildId || queue?.guildId || null,
+      supportEntries,
+      timestamp: sessionRecord.loggedAt || Date.now(),
+      cancelled: false,
+    });
+  }
+
+  return { ok: true, lineup, sessionRecord };
+}
+
 
 /**
  * /sessionqueue – open a queue for a Trello card.
@@ -630,20 +774,22 @@ const descriptionLines = [
   if (sessionType === 'interview') {
     descriptionLines.push(
       'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Head Corporate+',
+      'ℹ️  **Overseer:** Executive Manager+',
       'ℹ️  **Interviewer (12):** Leadership Intern+',
+      'ℹ️  **Spectator (4):** Leadership Intern+',
     );
   } else if (sessionType === 'training') {
     descriptionLines.push(
-      'ℹ️  **Trainer (8):** Leadership Intern+',
-      'ℹ️  **Supervisor (4):** Assistant Manager+',
       'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Head Corporate+',
+      'ℹ️  **Overseer:** Executive Manager+',
+      'ℹ️  **Supervisor (4):** Assistant Manager+',
+      'ℹ️  **Trainer (8):** Leadership Intern+',
+      'ℹ️  **Spectator (4):** Leadership Intern+',
     );
   } else if (sessionType === 'massshift') {
     descriptionLines.push(
-      'ℹ️  **Co-Host:** Executive Manager+',
-      'ℹ️  **Overseer:** Head Corporate+',
+      'ℹ️  **Co-Host:** Corporate Intern+',
+      'ℹ️  **Overseer:** Executive Manager+',
       'ℹ️  **Attendees (15):** Leadership Intern+',
     );
   }
@@ -673,16 +819,44 @@ const descriptionLines = [
     .setDescription(descriptionLines.filter(Boolean).join('\n'))
     .setColor(cfg.color || 0x6cb2eb);
 
-  const joinRow = new ActionRowBuilder().addComponents(
+  const joinRowComponents = [
     new ButtonBuilder()
-      .setCustomId(`queue_joinmenu_${shortId}`)
-      .setLabel('Join Queue')
+      .setCustomId(`queue_join_cohost_${shortId}`)
+      .setLabel('Co-Host')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`queue_join_overseer_${shortId}`)
+      .setLabel('Overseer')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`queue_join_interviewer_${shortId}`)
+      .setLabel(
+        sessionType === 'training'
+          ? 'Trainer'
+          : sessionType === 'massshift'
+          ? 'Attendee'
+          : 'Interviewer',
+      )
       .setStyle(ButtonStyle.Success),
+  ];
+
+  if (sessionType !== 'massshift') {
+    joinRowComponents.push(
+      new ButtonBuilder()
+        .setCustomId(`queue_join_spectator_${shortId}`)
+        .setLabel('Spectator')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+
+  joinRowComponents.push(
     new ButtonBuilder()
       .setCustomId(`queue_leave_${shortId}`)
       .setLabel('Leave Queue')
       .setStyle(ButtonStyle.Danger),
   );
+
+  const joinRow = new ActionRowBuilder().addComponents(joinRowComponents);
 
   const controlRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -715,6 +889,7 @@ const descriptionLines = [
       cohost: [],
       overseer: [],
       interviewer: [],
+      spectator: [],
       supervisor: [],
     },
     isClosed: false,
@@ -729,39 +904,38 @@ const descriptionLines = [
 /**
  * Build the live "Selected Attendees" text message.
  */
-async function buildLiveAttendeesMessage(queue, priorityStore, client) {
-  const guild = queue.guildId ? await client.guilds.fetch(queue.guildId).catch(() => null) : null;
-  if (guild && !guild.members.cache.size) {
-    await guild.members.fetch().catch(() => null);
-  }
+function buildLiveAttendeesMessage(queue, priorityStore) {
+  const guildId = queue.guildId || 'global';
 
   const cohost = splitSelected(
-    queue,
     queue.roles.cohost,
     getRoleLimit(queue, 'cohost'),
     priorityStore,
-    guild,
+    guildId,
   );
   const overseer = splitSelected(
-    queue,
     queue.roles.overseer,
     getRoleLimit(queue, 'overseer'),
     priorityStore,
-    guild,
+    guildId,
   );
   const main = splitSelected(
-    queue,
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
     priorityStore,
-    guild,
+    guildId,
+  );
+  const spectator = splitSelected(
+    queue.roles.spectator,
+    getRoleLimit(queue, 'spectator'),
+    priorityStore,
+    guildId,
   );
   const supervisor = splitSelected(
-    queue,
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
     priorityStore,
-    guild,
+    guildId,
   );
 
   const headerTop = '╔══════════════════════════════════════╗';
@@ -812,6 +986,20 @@ async function buildLiveAttendeesMessage(queue, priorityStore, client) {
   const mainBackups = formatBackupsLine(main.backups, 12);
   if (mainBackups) lines.push(mainBackups);
 
+  if (queue.sessionType !== 'massshift') {
+    lines.push('', '🔵  Spectators 🔵');
+
+    if (spectator.selected.length === 0) {
+      lines.push('None selected.');
+    } else {
+      spectator.selected.forEach((entry, idx) => {
+        lines.push(`${idx + 1}. <@${entry.userId}>`);
+      });
+    }
+
+    const spectatorBackups = formatBackupsLine(spectator.backups, 10);
+    if (spectatorBackups) lines.push(spectatorBackups);
+  }
 
   if (supervisor.sorted.length) {
     lines.push('', '🟢  Supervisors 🟢');
@@ -861,11 +1049,26 @@ async function postLiveAttendeesForQueue(client, queue) {
 
   const channel = await client.channels.fetch(queue.channelId).catch(() => null);
   if (!channel) return;
-  const content = await buildLiveAttendeesMessage(queue, client.priorityStore, client);
+  const content = buildLiveAttendeesMessage(queue, client.priorityStore);
   const message = await channel.send({ content });
 
   queue.attendeesMessageId = message.id;
   queues.set(queue.shortId, queue);
+
+  const lineup = buildStructuredLineup(queue, client.priorityStore);
+  upsertSession({
+    shortId: queue.shortId,
+    sessionType: queue.sessionType,
+    hostId: queue.hostId || null,
+    hostName: queue.hostName || null,
+    guildId: queue.guildId || null,
+    cardName: queue.cardName || null,
+    cardUrl: queue.cardUrl || null,
+    queueChannelId: queue.channelId || null,
+    queueMessageId: queue.messageId || null,
+    attendeesMessageId: message.id,
+    lineup,
+  });
 }
 
 /**
@@ -898,38 +1101,37 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     return;
   }
 
-  const guild = queue.guildId ? await client.guilds.fetch(queue.guildId).catch(() => null) : null;
-  if (guild && !guild.members.cache.size) {
-    await guild.members.fetch().catch(() => null);
-  }
+  const guildId = queue.guildId || 'global';
 
   const cohost = splitSelected(
-    queue,
     queue.roles.cohost,
     getRoleLimit(queue, 'cohost'),
     client.priorityStore,
-    guild,
+    guildId,
   );
   const overseer = splitSelected(
-    queue,
     queue.roles.overseer,
     getRoleLimit(queue, 'overseer'),
     client.priorityStore,
-    guild,
+    guildId,
   );
   const main = splitSelected(
-    queue,
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
     client.priorityStore,
-    guild,
+    guildId,
+  );
+  const spectator = splitSelected(
+    queue.roles.spectator,
+    getRoleLimit(queue, 'spectator'),
+    client.priorityStore,
+    guildId,
   );
   const supervisor = splitSelected(
-    queue,
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
     client.priorityStore,
-    guild,
+    guildId,
   );
 
   async function usernamesFromEntries(entries) {
@@ -950,11 +1152,13 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     cohostNames,
     overseerNames,
     mainNames,
+    spectatorNames,
     supervisorNames,
   ] = await Promise.all([
     usernamesFromEntries(cohost.selected),
     usernamesFromEntries(overseer.selected),
     usernamesFromEntries(main.selected),
+    usernamesFromEntries(spectator.selected),
     usernamesFromEntries(supervisor.selected),
   ]);
 
@@ -1002,6 +1206,15 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
       : 'None',
   });
 
+  if (queue.sessionType !== 'massshift') {
+    fields.push({
+      name: 'Spectators',
+      value: spectatorNames.length
+        ? spectatorNames.map((n, i) => `${i + 1}. ${n}`).join('\n')
+        : 'None',
+      inline: true,
+    });
+  }
 
   if (supervisorNames.length) {
     fields.push({
@@ -1022,9 +1235,26 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     .addFields(fields)
     .setColor(logStyle.color);
 
-  await logChannel.send({ embeds: [logEmbed] });
+  const sentLogMessage = await logChannel.send({ embeds: [logEmbed] });
 
   const logTimestamp = Date.now();
+
+  upsertSession({
+    shortId,
+    sessionType: queue.sessionType,
+    hostId: queue.hostId || null,
+    hostName: queue.hostName || null,
+    guildId: queue.guildId || null,
+    cardName: queue.cardName || null,
+    cardUrl: queue.cardUrl || null,
+    queueChannelId: queue.channelId || null,
+    queueMessageId: queue.messageId || null,
+    attendeesMessageId: queue.attendeesMessageId || null,
+    logChannelId: logChannel.id,
+    logMessageId: sentLogMessage.id,
+    loggedAt: logTimestamp,
+    lineup: buildStructuredLineup(queue, client.priorityStore),
+  });
 
   if (queue.hostId) {
     recordHostedSession({
@@ -1041,6 +1271,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     ['cohost', cohost.selected],
     ['overseer', overseer.selected],
     ['interviewer', main.selected],
+    ['spectator', spectator.selected],
     ['supervisor', supervisor.selected],
   ];
 
@@ -1068,6 +1299,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
       ...cohost.selected,
       ...overseer.selected,
       ...main.selected,
+      ...(queue.sessionType !== 'massshift' ? spectator.selected : []),
       ...supervisor.selected,
     ]
       .map((e) => e.userId)
@@ -1180,79 +1412,6 @@ async function handleQueueButtonInteraction(interaction) {
   const action = parts[1];
 
   try {
-    if (action === 'joinmenu') {
-      const shortId = parts[2];
-
-      const queue = queues.get(shortId);
-      if (!queue || queue.isClosed) {
-        await interaction.reply({ content: 'This queue is no longer active.', ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-        return true;
-      }
-
-      const member = interaction.guild
-        ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
-        : null;
-
-      if (!member) {
-        await interaction.reply({ content: 'I could not verify your rank for this queue.', ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-        return true;
-      }
-
-      const options = getAllowedRoleOptionsForMember(queue, member);
-      if (!options.length) {
-        await interaction.reply({ content: 'You do not have an eligible rank for any role in this queue.', ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-        return true;
-      }
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`queue_pickrole_${shortId}`)
-        .setPlaceholder('Choose a role to queue for')
-        .addOptions(options.map((option) => ({ label: option.label, value: option.key })));
-
-      await interaction.reply({
-        content: 'Choose the role you want to queue for.',
-        components: [new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true,
-      });
-      return true;
-    }
-
-    if (action === 'pickrole') {
-      const shortId = parts[2];
-      const roleKey = interaction.values?.[0];
-
-      const queue = queues.get(shortId);
-      if (!queue || queue.isClosed) {
-        await interaction.update({ content: 'This queue is no longer active.', components: [] });
-        return true;
-      }
-
-      const member = interaction.guild
-        ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
-        : null;
-
-      const allowedKeys = new Set(getAllowedRoleOptionsForMember(queue, member).map((option) => option.key));
-      if (!allowedKeys.has(roleKey)) {
-        await interaction.update({ content: 'You are not allowed to queue for that role.', components: [] });
-        return true;
-      }
-
-      const addResult = addUserToRole(queue, interaction.user.id, roleKey);
-      if (!addResult.ok) {
-        await interaction.update({ content: addResult.reason, components: [] });
-        return true;
-      }
-
-      await interaction.update({
-        content: `You have been added to the **${getRoleLabel(queue, roleKey)}** queue.`,
-        components: [],
-      });
-      return true;
-    }
-
     if (action === 'join') {
       const roleKey = parts[2];
       const shortId = parts[3];
@@ -1271,7 +1430,14 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
-      const roleLabel = getRoleLabel(queue, roleKey);
+      const roleLabel =
+        roleKey === 'interviewer'
+          ? queue.sessionType === 'training'
+            ? 'Trainer'
+            : queue.sessionType === 'massshift'
+            ? 'Attendee'
+            : 'Interviewer'
+          : roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
 
       await interaction.reply({
         content: `You have been added to the **${roleLabel}** queue.`,
@@ -1314,7 +1480,6 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
-      runWeeklyMaintenance();
       queue.isClosed = true;
       queues.set(shortId, queue);
 
@@ -1395,4 +1560,11 @@ module.exports = {
   postAttendeesForCard,
   logAttendeesForCard,
   cleanupQueueForCard,
+  extractShortId,
+  fetchCardByShortId,
+  buildStructuredLineup,
+  buildEditTemplateFromLineup,
+  parseEditedLineup,
+  applyEditedLineup,
+  __getQueue: (shortId) => queues.get(shortId) || null,
 };

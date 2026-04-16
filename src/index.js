@@ -11,6 +11,7 @@ const path = require("node:path");
 const { handleMessageAutomod } = require("./utils/automod");
 const { runSessionAnnouncementTick } = require("./utils/sessionAnnouncements");
 const { handleQueueButtonInteraction } = require("./utils/sessionQueueManager");
+const { handleEditActivityReply } = require("./utils/editActivityManager");
 const { runWeeklyMaintenance } = require("./utils/activityTracker");
 
 // ✅ Only keep enforceTicketSpeak (we route ticket buttons inside InteractionCreate)
@@ -184,6 +185,13 @@ if (ENABLE_MESSAGE_CONTENT) {
   client.on("messageCreate", async (message) => {
     if (message.author?.bot) return;
 
+    try {
+      const handledEditReply = await handleEditActivityReply(message);
+      if (handledEditReply) return;
+    } catch (err) {
+      console.error("[EDITACTIVITY] Reply handling error:", err);
+    }
+
     // Ticket typing enforcement (tickets should not be automodded)
     try {
       const inTicket = await ticketSystem.enforceTicketSpeak(message);
@@ -211,28 +219,26 @@ if (ENABLE_MESSAGE_CONTENT) {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    // MESSAGE COMPONENTS (buttons + select menus)
-    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+    // BUTTONS
+    if (interaction.isButton()) {
       const id = interaction.customId || "";
 
-      if (interaction.isButton()) {
-        // ticket close yes/no buttons
-        if (id.startsWith("ticket:closeyes:") || id.startsWith("ticket:closeno:")) {
-          const { handleTicketControlButton } = require("./utils/ticketSystem");
-          const handled = await handleTicketControlButton(interaction);
-          if (handled) return;
-        }
-
-        // ticket create buttons
-        if (id.startsWith("ticket:create:")) {
-          const typeKeyRaw = id.split(":").slice(2).join(":");
-          const { createTicketChannel } = require("./utils/ticketSystem");
-          await createTicketChannel(interaction, typeKeyRaw);
-          return;
-        }
+      // ticket close yes/no buttons
+      if (id.startsWith("ticket:closeyes:") || id.startsWith("ticket:closeno:")) {
+        const { handleTicketControlButton } = require("./utils/ticketSystem");
+        const handled = await handleTicketControlButton(interaction);
+        if (handled) return;
       }
 
-      // session queue components
+      // ticket create buttons
+      if (id.startsWith("ticket:create:")) {
+        const typeKeyRaw = id.split(":").slice(2).join(":");
+        const { createTicketChannel } = require("./utils/ticketSystem");
+        await createTicketChannel(interaction, typeKeyRaw);
+        return;
+      }
+
+      // session queue buttons
       const queueHandled = await handleQueueButtonInteraction(interaction);
       if (queueHandled) return;
     }

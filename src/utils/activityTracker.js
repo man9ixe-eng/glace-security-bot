@@ -492,6 +492,54 @@ function recordSupportSession({
   return true;
 }
 
+
+function replaceSessionActivity({
+  shortId,
+  hostId = null,
+  sessionType,
+  guildId = null,
+  supportEntries = [],
+  timestamp = Date.now(),
+  cancelled = false,
+}) {
+  if (!shortId || !sessionType) return false;
+
+  runWeeklyMaintenance();
+  const data = readStore();
+
+  data.hostedSessions = data.hostedSessions.filter((entry) => entry.shortId !== shortId);
+  data.supportSessions = data.supportSessions.filter((entry) => entry.shortId !== shortId);
+
+  if (hostId) {
+    data.hostedSessions.push({
+      userId: hostId,
+      shortId,
+      sessionType,
+      guildId,
+      timestamp,
+      cancelled,
+    });
+  }
+
+  for (const entry of supportEntries) {
+    if (!entry?.userId || !entry?.roleKey) continue;
+    if (hostId && entry.userId === hostId) continue;
+
+    data.supportSessions.push({
+      userId: entry.userId,
+      shortId,
+      sessionType,
+      roleKey: entry.roleKey,
+      guildId,
+      timestamp,
+      cancelled,
+    });
+  }
+
+  writeStore(data);
+  return true;
+}
+
 function extractIdsFromFieldValue(value) {
   const text = String(value || '');
   const ids = new Set();
@@ -746,6 +794,7 @@ module.exports = {
   backfillFromLogChannel,
   recordHostedSession,
   recordSupportSession,
+  replaceSessionActivity,
   getAllActivity,
   getUserActivity,
   getQuotaProfileForMember,
