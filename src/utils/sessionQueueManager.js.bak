@@ -5,19 +5,9 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  StringSelectMenuBuilder,
 } = require('discord.js');
 const { trelloRequest } = require('./trelloClient');
-const {
-  recordHostedSession,
-  recordSupportSession,
-  getUserActivity,
-  getQuotaProfileForMember,
-  getWeekRange,
-  summarizeActivity,
-  hasMetQuota,
-  runWeeklyMaintenance,
-} = require('./activityTracker');
+const { recordHostedSession, recordSupportSession } = require('./activityTracker');
 
 // In-memory registry of active queues, keyed by Trello card shortId.
 const queues = new Map();
@@ -27,6 +17,7 @@ const ROLE_LIMITS = {
   cohost: 1,
   overseer: 1,
   interviewer: 12, // default (Interviewers)
+  spectator: 4,
   supervisor: 4,
 };
 
@@ -295,6 +286,7 @@ function upsertQueue(shortId, data) {
       cohost: [],
       overseer: [],
       interviewer: [],
+      spectator: [],
       supervisor: [],
     },
   };
@@ -305,112 +297,6 @@ function upsertQueue(shortId, data) {
 
   queues.set(shortId, merged);
   return merged;
-}
-
-const RANK_ORDER = [
-  "leadership intern",
-  "supervisor",
-  "assistant manager",
-  "hotel manager",
-  "executive manager",
-  "corporate intern",
-  "junior corporate",
-  "senior corporate",
-  "head corporate",
-  "board of directors",
-  "presidential intern",
-  "chief executive officer",
-  "vice president",
-  "president",
-];
-
-function normalizeRoleNameForRank(name) {
-  return String(name || '')
-    .toLowerCase()
-    .replace(/<a?:\w+:\d+>/g, ' ')
-    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function getMemberRankIndex(member) {
-  if (!member?.roles?.cache) return -1;
-
-  let highest = -1;
-  for (const role of member.roles.cache.values()) {
-    const normalized = normalizeRoleNameForRank(role.name);
-    const index = RANK_ORDER.findIndex((rank) => normalized.includes(rank));
-    if (index > highest) highest = index;
-  }
-
-  return highest;
-}
-
-function hasMinimumRank(member, minimumRankName) {
-  const minimumIndex = RANK_ORDER.indexOf(String(minimumRankName || '').toLowerCase());
-  if (minimumIndex === -1) return false;
-  return getMemberRankIndex(member) >= minimumIndex;
-}
-
-function getAllowedRoleOptionsForMember(queue, member) {
-  const options = [];
-
-  if (queue.sessionType === 'interview') {
-    if (hasMinimumRank(member, 'corporate intern')) options.push({ key: 'cohost', label: 'Co-Host' });
-    if (hasMinimumRank(member, 'head corporate')) options.push({ key: 'overseer', label: 'Overseer' });
-    if (hasMinimumRank(member, 'leadership intern')) options.push({ key: 'interviewer', label: 'Interviewer' });
-    return options;
-  }
-
-  if (queue.sessionType === 'training') {
-    if (hasMinimumRank(member, 'leadership intern')) options.push({ key: 'interviewer', label: 'Trainer' });
-    if (hasMinimumRank(member, 'assistant manager')) options.push({ key: 'supervisor', label: 'Supervisor' });
-    if (hasMinimumRank(member, 'corporate intern')) options.push({ key: 'cohost', label: 'Co-Host' });
-    if (hasMinimumRank(member, 'head corporate')) options.push({ key: 'overseer', label: 'Overseer' });
-    return options;
-  }
-
-  if (queue.sessionType === 'massshift') {
-    if (hasMinimumRank(member, 'executive manager')) options.push({ key: 'cohost', label: 'Co-Host' });
-    if (hasMinimumRank(member, 'head corporate')) options.push({ key: 'overseer', label: 'Overseer' });
-    if (hasMinimumRank(member, 'leadership intern')) options.push({ key: 'interviewer', label: 'Attendee' });
-  }
-
-  return options;
-}
-
-function getRoleLabel(queue, roleKey) {
-  if (roleKey === 'interviewer') {
-    if (queue.sessionType === 'training') return 'Trainer';
-    if (queue.sessionType === 'massshift') return 'Attendee';
-    return 'Interviewer';
-  }
-
-  if (roleKey === 'cohost') return 'Co-Host';
-  if (roleKey === 'overseer') return 'Overseer';
-  if (roleKey === 'supervisor') return 'Supervisor';
-  return roleKey;
-}
-
-function getQueuePrioritySnapshot(queue, priorityStore, guild, entry) {
-  const member = guild?.members?.cache?.get(entry.userId) || null;
-  let quotaIncomplete = false;
-  let totalSessions = Number.MAX_SAFE_INTEGER;
-
-  if (member) {
-    const quotaProfile = getQuotaProfileForMember(member);
-    const activity = getUserActivity(entry.userId);
-    const summary = summarizeActivity(activity, getWeekRange('current'));
-    totalSessions = summary.support?.total || 0;
-    quotaIncomplete = quotaProfile ? !hasMetQuota(summary, quotaProfile) : false;
-  }
-
-  const lastAttendedAt =
-    priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
-      ? priorityStore.getLastAttendedAt(queue.guildId || 'global', entry.userId)
-      : 0;
-
-  return { quotaIncomplete, totalSessions, lastAttendedAt };
 }
 
 /**
@@ -475,35 +361,29 @@ function getRoleLimit(queue, roleKey) {
 
 /**
  * Sort role entries:
- * 1) Users who have NOT met quota this week
- * 2) Users with the LEAST logged support sessions this week
- * 3) Users who attended least recently
- * 4) Tie-break: claim time (first come, first served)
+ * 1) Priority: users who attended least recently go first (or never attended)
+ * 2) Tie-break: claim time (first come, first served)
  */
-function sortRoleEntries(queue, entries, priorityStore, guild) {
+function sortRoleEntries(entries, priorityStore, guildId) {
   return [...(entries || [])].sort((a, b) => {
-    const aSnapshot = getQueuePrioritySnapshot(queue, priorityStore, guild, a);
-    const bSnapshot = getQueuePrioritySnapshot(queue, priorityStore, guild, b);
+    const aLast =
+      priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
+        ? priorityStore.getLastAttendedAt(guildId, a.userId)
+        : 0;
+    const bLast =
+      priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
+        ? priorityStore.getLastAttendedAt(guildId, b.userId)
+        : 0;
 
-    if (aSnapshot.quotaIncomplete !== bSnapshot.quotaIncomplete) {
-      return aSnapshot.quotaIncomplete ? -1 : 1;
-    }
-
-    if (aSnapshot.totalSessions !== bSnapshot.totalSessions) {
-      return aSnapshot.totalSessions - bSnapshot.totalSessions;
-    }
-
-    if (aSnapshot.lastAttendedAt !== bSnapshot.lastAttendedAt) {
-      return aSnapshot.lastAttendedAt - bSnapshot.lastAttendedAt;
-    }
+    if (aLast !== bLast) return aLast - bLast;
 
     if (a.claimedAt && b.claimedAt) return a.claimedAt - b.claimedAt;
     return 0;
   });
 }
 
-function splitSelected(queue, entries, limit, priorityStore, guild) {
-  const sorted = sortRoleEntries(queue, entries, priorityStore, guild);
+function splitSelected(entries, limit, priorityStore, guildId) {
+  const sorted = sortRoleEntries(entries, priorityStore, guildId);
   const safeLimit = Number.isFinite(limit) ? limit : sorted.length;
   return {
     sorted,
@@ -630,20 +510,22 @@ const descriptionLines = [
   if (sessionType === 'interview') {
     descriptionLines.push(
       'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Head Corporate+',
+      'ℹ️  **Overseer:** Executive Manager+',
       'ℹ️  **Interviewer (12):** Leadership Intern+',
+      'ℹ️  **Spectator (4):** Leadership Intern+',
     );
   } else if (sessionType === 'training') {
     descriptionLines.push(
-      'ℹ️  **Trainer (8):** Leadership Intern+',
-      'ℹ️  **Supervisor (4):** Assistant Manager+',
       'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Head Corporate+',
+      'ℹ️  **Overseer:** Executive Manager+',
+      'ℹ️  **Supervisor (4):** Assistant Manager+',
+      'ℹ️  **Trainer (8):** Leadership Intern+',
+      'ℹ️  **Spectator (4):** Leadership Intern+',
     );
   } else if (sessionType === 'massshift') {
     descriptionLines.push(
-      'ℹ️  **Co-Host:** Executive Manager+',
-      'ℹ️  **Overseer:** Head Corporate+',
+      'ℹ️  **Co-Host:** Corporate Intern+',
+      'ℹ️  **Overseer:** Executive Manager+',
       'ℹ️  **Attendees (15):** Leadership Intern+',
     );
   }
@@ -673,16 +555,44 @@ const descriptionLines = [
     .setDescription(descriptionLines.filter(Boolean).join('\n'))
     .setColor(cfg.color || 0x6cb2eb);
 
-  const joinRow = new ActionRowBuilder().addComponents(
+  const joinRowComponents = [
     new ButtonBuilder()
-      .setCustomId(`queue_joinmenu_${shortId}`)
-      .setLabel('Join Queue')
+      .setCustomId(`queue_join_cohost_${shortId}`)
+      .setLabel('Co-Host')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`queue_join_overseer_${shortId}`)
+      .setLabel('Overseer')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`queue_join_interviewer_${shortId}`)
+      .setLabel(
+        sessionType === 'training'
+          ? 'Trainer'
+          : sessionType === 'massshift'
+          ? 'Attendee'
+          : 'Interviewer',
+      )
       .setStyle(ButtonStyle.Success),
+  ];
+
+  if (sessionType !== 'massshift') {
+    joinRowComponents.push(
+      new ButtonBuilder()
+        .setCustomId(`queue_join_spectator_${shortId}`)
+        .setLabel('Spectator')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+
+  joinRowComponents.push(
     new ButtonBuilder()
       .setCustomId(`queue_leave_${shortId}`)
       .setLabel('Leave Queue')
       .setStyle(ButtonStyle.Danger),
   );
+
+  const joinRow = new ActionRowBuilder().addComponents(joinRowComponents);
 
   const controlRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -715,6 +625,7 @@ const descriptionLines = [
       cohost: [],
       overseer: [],
       interviewer: [],
+      spectator: [],
       supervisor: [],
     },
     isClosed: false,
@@ -729,39 +640,38 @@ const descriptionLines = [
 /**
  * Build the live "Selected Attendees" text message.
  */
-async function buildLiveAttendeesMessage(queue, priorityStore, client) {
-  const guild = queue.guildId ? await client.guilds.fetch(queue.guildId).catch(() => null) : null;
-  if (guild && !guild.members.cache.size) {
-    await guild.members.fetch().catch(() => null);
-  }
+function buildLiveAttendeesMessage(queue, priorityStore) {
+  const guildId = queue.guildId || 'global';
 
   const cohost = splitSelected(
-    queue,
     queue.roles.cohost,
     getRoleLimit(queue, 'cohost'),
     priorityStore,
-    guild,
+    guildId,
   );
   const overseer = splitSelected(
-    queue,
     queue.roles.overseer,
     getRoleLimit(queue, 'overseer'),
     priorityStore,
-    guild,
+    guildId,
   );
   const main = splitSelected(
-    queue,
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
     priorityStore,
-    guild,
+    guildId,
+  );
+  const spectator = splitSelected(
+    queue.roles.spectator,
+    getRoleLimit(queue, 'spectator'),
+    priorityStore,
+    guildId,
   );
   const supervisor = splitSelected(
-    queue,
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
     priorityStore,
-    guild,
+    guildId,
   );
 
   const headerTop = '╔══════════════════════════════════════╗';
@@ -812,6 +722,20 @@ async function buildLiveAttendeesMessage(queue, priorityStore, client) {
   const mainBackups = formatBackupsLine(main.backups, 12);
   if (mainBackups) lines.push(mainBackups);
 
+  if (queue.sessionType !== 'massshift') {
+    lines.push('', '🔵  Spectators 🔵');
+
+    if (spectator.selected.length === 0) {
+      lines.push('None selected.');
+    } else {
+      spectator.selected.forEach((entry, idx) => {
+        lines.push(`${idx + 1}. <@${entry.userId}>`);
+      });
+    }
+
+    const spectatorBackups = formatBackupsLine(spectator.backups, 10);
+    if (spectatorBackups) lines.push(spectatorBackups);
+  }
 
   if (supervisor.sorted.length) {
     lines.push('', '🟢  Supervisors 🟢');
@@ -861,7 +785,7 @@ async function postLiveAttendeesForQueue(client, queue) {
 
   const channel = await client.channels.fetch(queue.channelId).catch(() => null);
   if (!channel) return;
-  const content = await buildLiveAttendeesMessage(queue, client.priorityStore, client);
+  const content = buildLiveAttendeesMessage(queue, client.priorityStore);
   const message = await channel.send({ content });
 
   queue.attendeesMessageId = message.id;
@@ -898,38 +822,37 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     return;
   }
 
-  const guild = queue.guildId ? await client.guilds.fetch(queue.guildId).catch(() => null) : null;
-  if (guild && !guild.members.cache.size) {
-    await guild.members.fetch().catch(() => null);
-  }
+  const guildId = queue.guildId || 'global';
 
   const cohost = splitSelected(
-    queue,
     queue.roles.cohost,
     getRoleLimit(queue, 'cohost'),
     client.priorityStore,
-    guild,
+    guildId,
   );
   const overseer = splitSelected(
-    queue,
     queue.roles.overseer,
     getRoleLimit(queue, 'overseer'),
     client.priorityStore,
-    guild,
+    guildId,
   );
   const main = splitSelected(
-    queue,
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
     client.priorityStore,
-    guild,
+    guildId,
+  );
+  const spectator = splitSelected(
+    queue.roles.spectator,
+    getRoleLimit(queue, 'spectator'),
+    client.priorityStore,
+    guildId,
   );
   const supervisor = splitSelected(
-    queue,
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
     client.priorityStore,
-    guild,
+    guildId,
   );
 
   async function usernamesFromEntries(entries) {
@@ -950,11 +873,13 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     cohostNames,
     overseerNames,
     mainNames,
+    spectatorNames,
     supervisorNames,
   ] = await Promise.all([
     usernamesFromEntries(cohost.selected),
     usernamesFromEntries(overseer.selected),
     usernamesFromEntries(main.selected),
+    usernamesFromEntries(spectator.selected),
     usernamesFromEntries(supervisor.selected),
   ]);
 
@@ -1002,6 +927,15 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
       : 'None',
   });
 
+  if (queue.sessionType !== 'massshift') {
+    fields.push({
+      name: 'Spectators',
+      value: spectatorNames.length
+        ? spectatorNames.map((n, i) => `${i + 1}. ${n}`).join('\n')
+        : 'None',
+      inline: true,
+    });
+  }
 
   if (supervisorNames.length) {
     fields.push({
@@ -1041,6 +975,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     ['cohost', cohost.selected],
     ['overseer', overseer.selected],
     ['interviewer', main.selected],
+    ['spectator', spectator.selected],
     ['supervisor', supervisor.selected],
   ];
 
@@ -1068,6 +1003,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
       ...cohost.selected,
       ...overseer.selected,
       ...main.selected,
+      ...(queue.sessionType !== 'massshift' ? spectator.selected : []),
       ...supervisor.selected,
     ]
       .map((e) => e.userId)
@@ -1180,79 +1116,6 @@ async function handleQueueButtonInteraction(interaction) {
   const action = parts[1];
 
   try {
-    if (action === 'joinmenu') {
-      const shortId = parts[2];
-
-      const queue = queues.get(shortId);
-      if (!queue || queue.isClosed) {
-        await interaction.reply({ content: 'This queue is no longer active.', ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-        return true;
-      }
-
-      const member = interaction.guild
-        ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
-        : null;
-
-      if (!member) {
-        await interaction.reply({ content: 'I could not verify your rank for this queue.', ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-        return true;
-      }
-
-      const options = getAllowedRoleOptionsForMember(queue, member);
-      if (!options.length) {
-        await interaction.reply({ content: 'You do not have an eligible rank for any role in this queue.', ephemeral: true });
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-        return true;
-      }
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`queue_pickrole_${shortId}`)
-        .setPlaceholder('Choose a role to queue for')
-        .addOptions(options.map((option) => ({ label: option.label, value: option.key })));
-
-      await interaction.reply({
-        content: 'Choose the role you want to queue for.',
-        components: [new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true,
-      });
-      return true;
-    }
-
-    if (action === 'pickrole') {
-      const shortId = parts[2];
-      const roleKey = interaction.values?.[0];
-
-      const queue = queues.get(shortId);
-      if (!queue || queue.isClosed) {
-        await interaction.update({ content: 'This queue is no longer active.', components: [] });
-        return true;
-      }
-
-      const member = interaction.guild
-        ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
-        : null;
-
-      const allowedKeys = new Set(getAllowedRoleOptionsForMember(queue, member).map((option) => option.key));
-      if (!allowedKeys.has(roleKey)) {
-        await interaction.update({ content: 'You are not allowed to queue for that role.', components: [] });
-        return true;
-      }
-
-      const addResult = addUserToRole(queue, interaction.user.id, roleKey);
-      if (!addResult.ok) {
-        await interaction.update({ content: addResult.reason, components: [] });
-        return true;
-      }
-
-      await interaction.update({
-        content: `You have been added to the **${getRoleLabel(queue, roleKey)}** queue.`,
-        components: [],
-      });
-      return true;
-    }
-
     if (action === 'join') {
       const roleKey = parts[2];
       const shortId = parts[3];
@@ -1271,7 +1134,14 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
-      const roleLabel = getRoleLabel(queue, roleKey);
+      const roleLabel =
+        roleKey === 'interviewer'
+          ? queue.sessionType === 'training'
+            ? 'Trainer'
+            : queue.sessionType === 'massshift'
+            ? 'Attendee'
+            : 'Interviewer'
+          : roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
 
       await interaction.reply({
         content: `You have been added to the **${roleLabel}** queue.`,
@@ -1314,7 +1184,6 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
-      runWeeklyMaintenance();
       queue.isClosed = true;
       queues.set(shortId, queue);
 
