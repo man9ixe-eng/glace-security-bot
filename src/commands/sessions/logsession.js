@@ -1,5 +1,3 @@
-// src/commands/sessions/logsession.js
-
 const { SlashCommandBuilder } = require('discord.js');
 const { completeSessionCard } = require('../../utils/trelloClient');
 const {
@@ -41,13 +39,25 @@ module.exports = {
     }
 
     try {
-      // ✅ will log to SESSION_LOG_CHANNEL_ID now
-      await logAttendeesForCard(interaction.client, cardInput, {
+      const result = await logAttendeesForCard(interaction.client, cardInput, {
         recordAttendance: true,
+        cancelled: false,
       });
+
+      if (!result?.ok) {
+        await interaction.editReply(
+          '⚠️ The Trello card was completed, but I could not create the session log/activity entry. Please check if the queue still exists and the log channel is configured.',
+        );
+        return;
+      }
+
       await cleanupQueueForCard(interaction.client, cardInput);
     } catch (err) {
       console.error('[LOGSESSION] Error while logging/cleaning queue:', err);
+      await interaction.editReply(
+        '⚠️ The Trello card was completed, but an error happened while creating the session log/activity entry.',
+      );
+      return;
     }
 
     await interaction.editReply(

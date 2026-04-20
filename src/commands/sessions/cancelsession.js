@@ -1,82 +1,51 @@
-// src/commands/sessions/cancelsession.js
-
-const {
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const { cancelSessionCard } = require('../../utils/trelloClient');
+const { cleanupQueueForCard } = require('../../utils/sessionQueueManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('cancelsession')
-    .setDescription('Cancel a Trello session card.')
+    .setDescription('Cancel a Trello session card and remove queue messages.')
     .setDMPermission(false)
     .addStringOption((option) =>
       option
         .setName('card')
-        .setDescription('Trello card URL or ID')
+        .setDescription('Trello card URL or short ID')
         .setRequired(true),
-    )
-    .addStringOption((option) =>
-      option
-        .setName('reason')
-        .setDescription('Reason for cancellation')
-        .setRequired(false),
     ),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const cardInput = interaction.options.getString('card', true);
-    const reason =
-      interaction.options.getString('reason') || 'No reason provided.';
+    const cardInput = interaction.options.getString('card', true).trim();
 
-    // Extract Trello ID / short link
     let cardId = cardInput;
-    let shortId = null;
-
     if (cardInput.includes('trello.com')) {
       const match = cardInput.match(/\/c\/([A-Za-z0-9]+)/);
-      if (match) {
-        cardId = match[1];
-        shortId = match[1];
-      }
-    } else {
-      const match = cardInput.match(/^([A-Za-z0-9]{6,10})$/);
-      if (match) {
-        cardId = match[1];
-        shortId = match[1];
-      }
+      if (match) cardId = match[1];
     }
 
-    if (!shortId) shortId = cardId;
-
-    const success = await cancelSessionCard({ cardId, reason });
+    const success = await cancelSessionCard({ cardId });
 
     if (!success) {
       await interaction.editReply(
-        '⚠️ I tried to cancel that session on Trello, but something went wrong.\nPlease double-check the card link/ID and my Trello configuration.',
+        '⚠️ I tried to cancel that session on Trello, but something went wrong.\nPlease double-check the card link/ID and Trello configuration.',
       );
       return;
     }
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`cancel_log_yes_${shortId}`)
-        .setLabel('Yes, log attendees')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`cancel_log_no_${shortId}`)
-        .setLabel('No, just clean up')
-        .setStyle(ButtonStyle.Secondary),
-    );
+    try {
+      await cleanupQueueForCard(interaction.client, cardInput);
+    } catch (err) {
+      console.error('[CANCELSESSION] Error while cleaning queue messages:', err);
+      await interaction.editReply(
+        '⚠️ The Trello card was cancelled, but an error happened while removing the queue messages.',
+      );
+      return;
+    }
 
-    await interaction.editReply({
-      content:
-        '✅ Session has been cancelled on Trello.\nDo you want to log attendees for this cancelled session?',
-      components: [row],
-    });
+    await interaction.editReply(
+      '✅ Session successfully cancelled on Trello.\n✅ Queue messages cleaned up.',
+    );
   },
 };
