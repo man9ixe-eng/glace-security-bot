@@ -1,3 +1,5 @@
+// src/commands/sessions/logsession.js
+
 const { SlashCommandBuilder } = require('discord.js');
 const { completeSessionCard } = require('../../utils/trelloClient');
 const {
@@ -22,7 +24,6 @@ module.exports = {
 
     const cardInput = interaction.options.getString('card', true);
 
-    // Extract Trello short ID from full URL or plain ID
     let cardId = cardInput;
     if (cardInput.includes('trello.com')) {
       const match = cardInput.match(/\/c\/([A-Za-z0-9]+)/);
@@ -46,7 +47,7 @@ module.exports = {
 
       if (!result?.ok) {
         await interaction.editReply(
-          '⚠️ The Trello card was completed, but I could not create the session log/activity entry. Please check if the queue still exists and the log channel is configured.',
+          '⚠️ The Trello card was completed, but I could not create the session log/activity entry. Please make sure the queue exists and the session log channel is configured correctly.',
         );
         return;
       }
