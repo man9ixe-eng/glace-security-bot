@@ -1,623 +1,328 @@
-const {
-  SlashCommandBuilder,
-  ChannelType,
-  EmbedBuilder,
-} = require("discord.js");
-const axios = require("axios");
+// src/commands/staff/promotion.js
+// /promotion — team + ticket role updater for Glace Hotels.
 
-const TRELLO_KEY = process.env.TRELLO_KEY;
-const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
-const BOARD_ID = process.env.STAFF_JOURNEY_BOARD_ID;
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const rolesConfig = require('../../config/roles');
+const { hasAnyRole } = require('../../utils/permissions');
 
-const PROMOTIONS_LIST_ID = process.env.PROMOTIONS_LIST_ID;
-const LABEL_RECENTLY_PROMOTED = process.env.LABEL_RECENTLY_PROMOTED;
-
-const ANNOUNCE_CHANNEL_ID = process.env.STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID;
-const PROMOTION_PING_ROLE_ID = process.env.STAFF_JOURNEY_PROMOTION_PING_ROLE_ID;
-const GH_LOGO_URL = process.env.GH_LOGO_URL;
-
-// =========================
-// RANK CONFIG
-// =========================
-const RANK_CONFIG = {
-  "Leadership Intern": {
-    listId: process.env.LEADERSHIP_INTERN_LIST_ID,
-    rankLabel: process.env.LABEL_LEADERSHIP_INTERN,
-    teamLabel: process.env.LABEL_INTERN,
+const TEAM_RANKS = {
+  intern: {
+    label: 'Intern',
+    teamIdsKey: 'INTERN_ROLE_IDS',
+    teamNameMatchers: [['intern']],
+    excludeTargetKeywords: ['corporate'],
+    requiredLevel: 6,
+    ticketLabel: 'Ticket Intern',
+    ticketEnvNames: ['TICKET_ROLE_INTERN_ID', 'TICKET_ROLE_TRIAL_ID'],
+    ticketNameMatchers: [['ticket', 'intern'], ['ticket', 'trial']],
   },
-  "Supervisor": {
-    listId: process.env.SUPERVISOR_LIST_ID,
-    rankLabel: process.env.LABEL_SUPERVISOR,
-    teamLabel: process.env.LABEL_MANAGEMENT,
+  management: {
+    label: 'Management',
+    teamIdsKey: 'MANAGEMENT_ROLE_IDS',
+    teamNameMatchers: [['management']],
+    excludeTargetKeywords: ['senior'],
+    requiredLevel: 6,
+    ticketLabel: 'Ticket Mod',
+    ticketEnvNames: ['TICKET_ROLE_MOD_ID'],
+    ticketNameMatchers: [['ticket', 'mod'], ['ticket', 'moderator']],
   },
-  "Assistant Manager": {
-    listId: process.env.ASSISTANT_MANAGER_LIST_ID,
-    rankLabel: process.env.LABEL_ASSISTANT_MANAGER,
-    teamLabel: process.env.LABEL_MANAGEMENT,
+  senior_management: {
+    label: 'Senior Management',
+    teamIdsKey: 'SENIOR_MANAGEMENT_ROLE_IDS',
+    teamNameMatchers: [['senior', 'management']],
+    requiredLevel: 6,
+    ticketLabel: 'Ticket Admin',
+    ticketEnvNames: ['TICKET_ROLE_ADMIN_ID'],
+    ticketNameMatchers: [['ticket', 'admin']],
   },
-  "Hotel Manager": {
-    listId: process.env.HOTEL_MANAGER_LIST_ID,
-    rankLabel: process.env.LABEL_HOTEL_MANAGER,
-    teamLabel: process.env.LABEL_MANAGEMENT,
+  corporate: {
+    label: 'Corporate',
+    teamIdsKey: 'CORPORATE_ROLE_IDS',
+    teamNameMatchers: [['corporate']],
+    excludeTargetKeywords: ['intern', 'board', 'directors'],
+    requiredLevel: 7,
+    ticketLabel: 'Ticket Reviewer',
+    ticketEnvNames: ['TICKET_ROLE_REVIEWER_ID'],
+    ticketNameMatchers: [['ticket', 'reviewer']],
   },
-  "Executive Manager": {
-    listId: process.env.EXECUTIVE_MANAGER_LIST_ID,
-    rankLabel: process.env.LABEL_EXECUTIVE_MANAGER,
-    teamLabel: process.env.LABEL_SENIOR_MANAGEMENT,
+  corporate_board: {
+    label: 'Corporate Board',
+    teamIdsKey: 'CORPORATE_BOARD_ROLE_IDS',
+    teamNameMatchers: [['corporate', 'board'], ['board', 'directors']],
+    requiredLevel: 7,
+    ticketLabel: 'Ticket Chief',
+    ticketEnvNames: ['TICKET_ROLE_CHIEF_ID'],
+    ticketNameMatchers: [['ticket', 'chief']],
   },
-  "Corporate Intern": {
-    listId: process.env.CORPORATE_INTERN_LIST_ID,
-    rankLabel: process.env.LABEL_CORPORATE_INTERN,
-    teamLabel: process.env.LABEL_SENIOR_MANAGEMENT,
-  },
-  "Junior Corporate": {
-    listId: process.env.JUNIOR_CORPORATE_LIST_ID,
-    rankLabel: process.env.LABEL_JUNIOR_CORPORATE,
-    teamLabel: process.env.LABEL_CORPORATE,
-  },
-  "Senior Corporate": {
-    listId: process.env.SENIOR_CORPORATE_LIST_ID,
-    rankLabel: process.env.LABEL_SENIOR_CORPORATE,
-    teamLabel: process.env.LABEL_CORPORATE,
-  },
-  "Head Corporate": {
-    listId: process.env.HEAD_CORPORATE_LIST_ID,
-    rankLabel: process.env.LABEL_HEAD_CORPORATE,
-    teamLabel: process.env.LABEL_CORPORATE,
-  },
-  "Board Of Directors": {
-    listId: process.env.BOARD_OF_DIRECTORS_LIST_ID,
-    rankLabel: process.env.LABEL_BOARD_OF_DIRECTORS,
-    teamLabel: process.env.LABEL_CORPORATE_BOARD,
-  },
-  "Presidential Intern": {
-    listId: process.env.PRESIDENTIAL_INTERN_LIST_ID,
-    rankLabel: process.env.LABEL_PRESIDENTIAL_INTERN,
-    teamLabel: process.env.LABEL_CORPORATE_BOARD,
-  },
-  "Chief Executive Officer": {
-    listId: process.env.CHIEF_EXECUTIVE_OFFICER_LIST_ID,
-    rankLabel: process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
-    teamLabel: process.env.LABEL_PRESIDENTIAL,
-  },
-  "Vice President": {
-    listId: process.env.VICE_PRESIDENT_LIST_ID,
-    rankLabel: process.env.LABEL_VICE_PRESIDENT,
-    teamLabel: process.env.LABEL_PRESIDENTIAL,
-  },
-  "President": {
-    listId: process.env.PRESIDENT_LIST_ID,
-    rankLabel: process.env.LABEL_PRESIDENT,
-    teamLabel: process.env.LABEL_PRESIDENTIAL,
+  presidential: {
+    label: 'Presidential',
+    teamIdsKey: 'PRESIDENTIAL_ROLE_IDS',
+    teamNameMatchers: [['presidential']],
+    excludeTargetKeywords: ['intern'],
+    requiredLevel: 7,
+    ticketLabel: 'Ticket Chief',
+    ticketEnvNames: ['TICKET_ROLE_CHIEF_ID'],
+    ticketNameMatchers: [['ticket', 'chief']],
   },
 };
 
-const ALL_RANK_LABELS = [
-  process.env.LABEL_LEADERSHIP_INTERN,
-  process.env.LABEL_SUPERVISOR,
-  process.env.LABEL_ASSISTANT_MANAGER,
-  process.env.LABEL_HOTEL_MANAGER,
-  process.env.LABEL_EXECUTIVE_MANAGER,
-  process.env.LABEL_CORPORATE_INTERN,
-  process.env.LABEL_JUNIOR_CORPORATE,
-  process.env.LABEL_SENIOR_CORPORATE,
-  process.env.LABEL_HEAD_CORPORATE,
-  process.env.LABEL_BOARD_OF_DIRECTORS,
-  process.env.LABEL_PRESIDENTIAL_INTERN,
-  process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
-  process.env.LABEL_VICE_PRESIDENT,
-  process.env.LABEL_PRESIDENT,
-].filter(Boolean);
+const TEAM_REMOVE_KEYS = [
+  'JUNIOR_STAFF_ROLE_IDS',
+  'INTERN_ROLE_IDS',
+  'MANAGEMENT_ROLE_IDS',
+  'SENIOR_MANAGEMENT_ROLE_IDS',
+  'CORPORATE_ROLE_IDS',
+  'CORPORATE_BOARD_ROLE_IDS',
+  'PRESIDENTIAL_ROLE_IDS',
+];
 
-const ALL_TEAM_LABELS = [
-  process.env.LABEL_INTERN,
-  process.env.LABEL_MANAGEMENT,
-  process.env.LABEL_SENIOR_MANAGEMENT,
-  process.env.LABEL_CORPORATE,
-  process.env.LABEL_CORPORATE_BOARD,
-  process.env.LABEL_PRESIDENTIAL,
-].filter(Boolean);
+const TEAM_REMOVE_MATCHERS = [
+  ['junior', 'staff'],
+  ['intern'],
+  ['management'],
+  ['senior', 'management'],
+  ['corporate'],
+  ['corporate', 'board'],
+  ['board', 'directors'],
+  ['presidential'],
+];
 
-// =========================
-// DATE HELPERS
-// =========================
-function getTodayMmDdYyyy() {
-  return new Date().toLocaleDateString("en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
+const TICKET_REMOVE_ENV_NAMES = [
+  'TICKET_ROLE_INTERN_ID',
+  'TICKET_ROLE_TRIAL_ID',
+  'TICKET_ROLE_MOD_ID',
+  'TICKET_ROLE_ADMIN_ID',
+  'TICKET_ROLE_REVIEWER_ID',
+  'TICKET_ROLE_CHIEF_ID',
+];
+
+const TICKET_REMOVE_MATCHERS = [
+  ['ticket', 'intern'],
+  ['ticket', 'trial'],
+  ['ticket', 'mod'],
+  ['ticket', 'moderator'],
+  ['ticket', 'admin'],
+  ['ticket', 'reviewer'],
+  ['ticket', 'chief'],
+];
+
+function configuredIdsForKey(key) {
+  const value = rolesConfig[key];
+  return Array.isArray(value) ? value.filter(Boolean).map(String) : [];
+}
+
+function envIds(names = []) {
+  return names
+    .map((name) => process.env[name])
+    .filter(Boolean)
+    .map(String);
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/<a?:\w+:\d+>/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function roleMatches(role, matchers, { requireTeam = false } = {}) {
+  const name = normalizeName(role?.name);
+  if (!name) return false;
+  if (name.includes('former') || name.includes('retired') || name.includes('alumni')) return false;
+  if (requireTeam && !name.includes('team')) return false;
+
+  return matchers.some((keywords) => keywords.every((keyword) => name.includes(keyword)));
+}
+
+function uniqueRoles(roles) {
+  const seen = new Set();
+  return roles.filter((role) => {
+    if (!role || seen.has(role.id)) return false;
+    seen.add(role.id);
+    return true;
   });
 }
 
-function parseMmDdYyyy(dateStr) {
-  if (!dateStr || typeof dateStr !== "string") return null;
-  const parts = dateStr.split("/");
-  if (parts.length !== 3) return null;
+function findRolesByIdsAndNames(guild, ids = [], matchers = [], opts = {}) {
+  const roleIds = new Set(ids.filter(Boolean).map(String));
+  const found = [];
 
-  const [mm, dd, yyyy] = parts.map(Number);
-  if (!mm || !dd || !yyyy) return null;
-
-  return { mm, dd, yyyy };
-}
-
-function localNoonFromMmDdYyyy(dateStr) {
-  const parsed = parseMmDdYyyy(dateStr);
-  if (!parsed) return null;
-  return new Date(parsed.yyyy, parsed.mm - 1, parsed.dd, 12, 0, 0, 0);
-}
-
-function formatPrettyDate(dateStr) {
-  const d = localNoonFromMmDdYyyy(dateStr);
-  if (!d) return null;
-
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatDueNextMonth(dateStr) {
-  const d = localNoonFromMmDdYyyy(dateStr);
-  if (!d) return null;
-
-  const originalDay = d.getDate();
-  d.setMonth(d.getMonth() + 1);
-
-  if (d.getDate() !== originalDay) {
-    d.setDate(0);
-    d.setHours(12, 0, 0, 0);
+  for (const role of guild.roles.cache.values()) {
+    if (roleIds.has(role.id) || roleMatches(role, matchers, opts)) {
+      found.push(role);
+    }
   }
 
-  return d.toISOString();
+  return uniqueRoles(found);
 }
 
-function durationBetweenPrettyAndInput(prettyStartDate, newDateStr) {
-  const start = new Date(prettyStartDate);
-  const end = localNoonFromMmDdYyyy(newDateStr);
+function getActorLevel(member) {
+  if (!member || !member.guild) return 0;
 
-  if (Number.isNaN(start.getTime()) || !end) return null;
+  if (member.id === member.guild.ownerId) return 7;
+  if (Array.isArray(rolesConfig.OWNER_IDS) && rolesConfig.OWNER_IDS.includes(member.id)) return 7;
 
-  let months =
-    (end.getFullYear() - start.getFullYear()) * 12 +
-    (end.getMonth() - start.getMonth());
-
-  if (end.getDate() < start.getDate()) {
-    months -= 1;
-  }
-
-  if (months >= 1) {
-    return months === 1 ? "1 month" : `${months} months`;
-  }
-
-  let days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-  if (days < 1) days = 1;
-
-  return days === 1 ? "1 day" : `${days} days`;
-}
-
-// =========================
-// DESCRIPTION HELPERS
-// =========================
-function normalizeLines(desc) {
-  if (!desc || typeof desc !== "string") return [];
-  return desc
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function parseJourneyLine(line) {
-  const match = line.match(/^- \*\*(.+?) - (.+?)(?: - (.+?))?\*\*$/);
-  if (!match) return null;
-
-  return {
-    startDate: match[1],
-    rank: match[2],
-    duration: match[3] || null,
-  };
-}
-
-function finalizePreviousRankLine(desc, newDateStr) {
-  const lines = normalizeLines(desc);
-  if (lines.length === 0) return "";
-
-  const lastIndex = lines.length - 1;
-  const parsed = parseJourneyLine(lines[lastIndex]);
-
-  if (!parsed) return lines.join("\n");
-  if (parsed.duration) return lines.join("\n");
-
-  const duration = durationBetweenPrettyAndInput(parsed.startDate, newDateStr);
-  if (!duration) return lines.join("\n");
-
-  lines[lastIndex] = `- **${parsed.startDate} - ${parsed.rank} - ${duration}**`;
-  return lines.join("\n");
-}
-
-function appendNewRankLine(desc, prettyDate, rank) {
-  const lines = normalizeLines(desc);
-  lines.push(`- **${prettyDate} - ${rank}**`);
-  return lines.join("\n");
-}
-
-// =========================
-// TRELLO HELPERS
-// =========================
-async function trelloGet(url, params = {}) {
-  return axios.get(url, {
-    params: {
-      key: TRELLO_KEY,
-      token: TRELLO_TOKEN,
-      ...params,
-    },
-  });
-}
-
-async function trelloPut(url, params = {}) {
-  return axios.put(url, null, {
-    params: {
-      key: TRELLO_KEY,
-      token: TRELLO_TOKEN,
-      ...params,
-    },
-  });
-}
-
-async function trelloPost(url, params = {}) {
-  return axios.post(url, null, {
-    params: {
-      key: TRELLO_KEY,
-      token: TRELLO_TOKEN,
-      ...params,
-    },
-  });
-}
-
-async function trelloDelete(url, params = {}) {
-  return axios.delete(url, {
-    params: {
-      key: TRELLO_KEY,
-      token: TRELLO_TOKEN,
-      ...params,
-    },
-  });
-}
-
-async function findStaffCardByUsername(username) {
-  const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/cards`, {
-    fields: "id,name,desc,idLabels,idList,closed,pos,shortUrl",
-  });
-
-  const lower = username.toLowerCase();
-
-  return (
-    res.data.find((card) => {
-      if (card.closed) return false;
-      return card.name.toLowerCase().startsWith(`${lower} - `);
-    }) || null
-  );
-}
-
-async function findPromotionCard(username, rank, date) {
-  const res = await trelloGet(`https://api.trello.com/1/lists/${PROMOTIONS_LIST_ID}/cards`, {
-    fields: "id,name,desc,due,closed,pos,idLabels",
-  });
-
-  const expectedName = `${username} - ${rank} - ${date}`.toLowerCase();
-
-  return (
-    (res.data || []).find((card) => {
-      return !card.closed && (card.name || "").toLowerCase() === expectedName;
-    }) || null
-  );
-}
-
-async function ensureLabelOnCard(cardId, labelId) {
-  if (!labelId) return;
-  await trelloPost(`https://api.trello.com/1/cards/${cardId}/idLabels`, {
-    value: labelId,
-  });
-}
-
-// =========================
-// ANNOUNCEMENT HELPERS
-// =========================
-function getTeamFromRank(rank) {
-  switch (rank) {
-    case "Leadership Intern":
-      return "intern";
-    case "Supervisor":
-    case "Assistant Manager":
-    case "Hotel Manager":
-      return "management";
-    case "Executive Manager":
-    case "Corporate Intern":
-      return "senior_management";
-    case "Junior Corporate":
-    case "Senior Corporate":
-    case "Head Corporate":
-      return "corporate";
-    case "Board Of Directors":
-    case "Presidential Intern":
-      return "corporate_board";
-    case "Chief Executive Officer":
-    case "Vice President":
-    case "President":
-      return "presidential";
-    default:
-      return "default";
-  }
-}
-
-function getTeamColor(team) {
-  switch (team) {
-    case "intern":
-      return 0xe76bf3;
-    case "management":
-      return 0x6a00ff;
-    case "senior_management":
-      return 0x22c55e;
-    case "corporate":
-      return 0xdc2626;
-    case "corporate_board":
-      return 0xf97316;
-    case "presidential":
-      return 0xfacc15;
-    default:
-      return 0x8f63d2;
-  }
-}
-
-async function sendPromotionAnnouncement(client, {
-  username,
-  rank,
-  promoterUser,
-  memberUser,
-  message,
-  trelloLink,
-}) {
-  if (!ANNOUNCE_CHANNEL_ID) return false;
-
-  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
-  if (!channel) return false;
-  if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) {
-    return false;
-  }
-
-  const team = getTeamFromRank(rank);
-  const color = getTeamColor(team);
-
-  const embed = new EmbedBuilder()
-    .setTitle("🎉 PROMOTION")
-    .setColor(color)
-    .setDescription(`Please congratulate **${username}** on their promotion to **${rank}**!`)
-    .addFields({
-      name: "━━━━━━━━━━━━━━━━━━━━",
-      value: message
-        ? `> ${message}\n> \n> **Promoter:** ${promoterUser}`
-        : `> **Promoter:** ${promoterUser}`,
-      inline: false,
-    })
-    .setFooter({ text: "Glace Hotels • Staff Journey" })
-    .setTimestamp();
-
-  if (GH_LOGO_URL) {
-    embed.setThumbnail(GH_LOGO_URL);
-  }
-
-  if (trelloLink) {
-    embed.addFields({
-      name: "🔗 Trello Card",
-      value: `[View Promotion Card](${trelloLink})`,
-      inline: false,
+  const roleNames = [...member.roles.cache.values()].map((role) => normalizeName(role.name));
+  const hasTeamName = (keywords) =>
+    roleNames.some((name) => {
+      if (!name.includes('team')) return false;
+      if (name.includes('former') || name.includes('retired') || name.includes('alumni')) return false;
+      return keywords.every((keyword) => name.includes(keyword));
     });
+
+  if (hasAnyRole(member, rolesConfig.PRESIDENTIAL_ROLE_IDS || []) || hasTeamName(['presidential'])) return 7;
+
+  if (
+    hasAnyRole(member, rolesConfig.CORPORATE_BOARD_ROLE_IDS || []) ||
+    hasAnyRole(member, rolesConfig.CORPORATE_ROLE_IDS || []) ||
+    hasTeamName(['corporate']) ||
+    hasTeamName(['corporate', 'board']) ||
+    hasTeamName(['board', 'directors'])
+  ) {
+    return 6;
   }
 
-  const bottom = [];
-  if (memberUser) bottom.push(`${memberUser}`);
-  if (PROMOTION_PING_ROLE_ID) bottom.push(`||<@&${PROMOTION_PING_ROLE_ID}>||`);
-
-  await channel.send({
-    embeds: [embed],
-    content: bottom.join("\n") || undefined,
-    allowedMentions: {
-      users: memberUser ? [memberUser.id, promoterUser.id] : [promoterUser.id],
-      roles: PROMOTION_PING_ROLE_ID ? [PROMOTION_PING_ROLE_ID] : [],
-    },
-  });
-
-  return true;
+  return 0;
 }
 
-// =========================
-// COMMAND
-// =========================
+function roleMentionList(roles) {
+  return roles.length ? roles.map((role) => `<@&${role.id}>`).join(', ') : 'None';
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("add-promotion")
-    .setDescription("Promote a staff member, reuse/create promo card, and auto-post announcement")
-    .addStringOption((o) =>
-      o.setName("username").setDescription("Username").setRequired(true)
+    .setName('promotion')
+    .setDescription('Update a member\'s team role and matching ticket role.')
+    .setDMPermission(false)
+    .addUserOption((option) =>
+      option
+        .setName('username')
+        .setDescription('Member to update')
+        .setRequired(true),
     )
-    .addStringOption((o) =>
-      o.setName("rank").setDescription("New rank").setRequired(true)
-    )
-    .addUserOption((o) =>
-      o.setName("promoter").setDescription("Promoter").setRequired(true)
-    )
-    .addStringOption((o) =>
-      o.setName("date").setDescription("MM/DD/YYYY").setRequired(false)
-    )
-    .addUserOption((o) =>
-      o.setName("member").setDescription("Member mention in announcement").setRequired(false)
-    )
-    .addStringOption((o) =>
-      o.setName("message").setDescription("Announcement message").setRequired(false)
+    .addStringOption((option) =>
+      option
+        .setName('rank')
+        .setDescription('New team rank')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Intern', value: 'intern' },
+          { name: 'Management', value: 'management' },
+          { name: 'Senior Management', value: 'senior_management' },
+          { name: 'Corporate', value: 'corporate' },
+          { name: 'Corporate Board', value: 'corporate_board' },
+          { name: 'Presidential', value: 'presidential' },
+        ),
     ),
 
   async execute(interaction) {
-    const username = interaction.options.getString("username");
-    const newRank = interaction.options.getString("rank");
-    const promoterUser = interaction.options.getUser("promoter");
-    const date = interaction.options.getString("date") || getTodayMmDdYyyy();
-    const memberUser = interaction.options.getUser("member");
-    const announceMessage = interaction.options.getString("message")?.trim() || "";
+    await interaction.deferReply({ ephemeral: true });
 
-    const rankConfig = RANK_CONFIG[newRank];
+    const target = interaction.options.getMember('username');
+    const rankKey = interaction.options.getString('rank', true);
+    const rank = TEAM_RANKS[rankKey];
 
-    if (!BOARD_ID) {
-      return interaction.reply({
-        content: "❌ Missing STAFF_JOURNEY_BOARD_ID env.",
-        ephemeral: true,
-      });
+    if (!target || !rank) {
+      await interaction.editReply('❌ I could not find that member or rank.');
+      return;
     }
 
-    if (!PROMOTIONS_LIST_ID || !LABEL_RECENTLY_PROMOTED) {
-      return interaction.reply({
-        content: "❌ Missing PROMOTIONS_LIST_ID or LABEL_RECENTLY_PROMOTED env.",
-        ephemeral: true,
-      });
-    }
-
-    if (!rankConfig) {
-      return interaction.reply({
-        content: `❌ Rank "${newRank}" is not configured.`,
-        ephemeral: true,
-      });
-    }
-
-    if (!rankConfig.listId || !rankConfig.rankLabel || !rankConfig.teamLabel) {
-      return interaction.reply({
-        content: `❌ Missing env vars for "${newRank}".`,
-        ephemeral: true,
-      });
-    }
-
-    const prettyDate = formatPrettyDate(date);
-    const dueDate = formatDueNextMonth(date);
-
-    if (!prettyDate || !dueDate) {
-      return interaction.reply({
-        content: "❌ Invalid date. Use MM/DD/YYYY.",
-        ephemeral: true,
-      });
-    }
-
-    const stepStatus = {
-      mainCard: false,
-      mainLabels: false,
-      promoCard: false,
-      announcement: false,
-    };
-
-    try {
-      const card = await findStaffCardByUsername(username);
-
-      if (!card) {
-        return interaction.reply({
-          content: "❌ Oops, it seems you have not used the /enroll command.",
-          ephemeral: true,
-        });
-      }
-
-      // main staff card
-      const finalizedDesc = finalizePreviousRankLine(card.desc || "", date);
-      const updatedDesc = appendNewRankLine(finalizedDesc, prettyDate, newRank);
-
-      await trelloPut(`https://api.trello.com/1/cards/${card.id}`, {
-        idList: rankConfig.listId,
-        due: dueDate,
-        desc: updatedDesc,
-        pos: "bottom",
-      });
-      stepStatus.mainCard = true;
-
-      const labelsToRemove = (card.idLabels || []).filter(
-        (id) => ALL_RANK_LABELS.includes(id) || ALL_TEAM_LABELS.includes(id)
+    const actorLevel = getActorLevel(interaction.member);
+    if (actorLevel < rank.requiredLevel) {
+      await interaction.editReply(
+        rank.requiredLevel >= 7
+          ? '❌ Only Presidential+ can add Corporate, Corporate Board, or Presidential team roles.'
+          : '❌ Only Corporate+ can add Intern, Management, or Senior Management team roles.',
       );
-
-      for (const labelId of labelsToRemove) {
-        await trelloDelete(`https://api.trello.com/1/cards/${card.id}/idLabels/${labelId}`);
-      }
-
-      await trelloPost(`https://api.trello.com/1/cards/${card.id}/idLabels`, {
-        value: rankConfig.rankLabel,
-      });
-
-      await trelloPost(`https://api.trello.com/1/cards/${card.id}/idLabels`, {
-        value: rankConfig.teamLabel,
-      });
-
-      await trelloPost(`https://api.trello.com/1/cards/${card.id}/actions/comments`, {
-        text: `Promoted to **${newRank}** by **${promoterUser.username}**`,
-      });
-
-      stepStatus.mainLabels = true;
-
-      // promo card: reuse existing if same username/rank/date
-      const promoCardName = `${username} - ${newRank} - ${date}`;
-
-      let promoCard = await findPromotionCard(username, newRank, date);
-
-      if (promoCard) {
-        await trelloPut(`https://api.trello.com/1/cards/${promoCard.id}`, {
-          name: promoCardName,
-          desc: updatedDesc,
-          due: dueDate,
-          pos: "bottom",
-          closed: false,
-        });
-
-        await ensureLabelOnCard(promoCard.id, LABEL_RECENTLY_PROMOTED);
-      } else {
-        const createdPromoCard = await trelloPost("https://api.trello.com/1/cards", {
-          idList: PROMOTIONS_LIST_ID,
-          name: promoCardName,
-          desc: updatedDesc,
-          due: dueDate,
-          pos: "bottom",
-        });
-
-        promoCard = createdPromoCard.data;
-        await ensureLabelOnCard(promoCard.id, LABEL_RECENTLY_PROMOTED);
-      }
-
-      stepStatus.promoCard = true;
-
-      // announce
-      const refreshedCard = await trelloGet(`https://api.trello.com/1/cards/${card.id}`, {
-        fields: "shortUrl,name",
-      });
-
-      const announced = await sendPromotionAnnouncement(interaction.client, {
-        username,
-        rank: newRank,
-        promoterUser,
-        memberUser,
-        message: announceMessage,
-        trelloLink: refreshedCard.data?.shortUrl || card.shortUrl || "",
-      });
-
-      stepStatus.announcement = announced;
-
-      let summary = `✅ Promoted ${username} to ${newRank}.\n\n`;
-      summary += `Main staff card updated: ${stepStatus.mainCard ? "✅" : "❌"}\n`;
-      summary += `Main labels applied: ${stepStatus.mainLabels ? "✅" : "❌"}\n`;
-      summary += `Promotion card updated/created: ${stepStatus.promoCard ? "✅" : "❌"}\n`;
-      summary += `Announcement posted: ${stepStatus.announcement ? "✅" : "❌"}`;
-
-      await interaction.reply({ content: summary, ephemeral: true });
-    } catch (err) {
-      console.error("[PROMOTION ERROR]", err.response?.data || err.message || err);
-
-      let summary = `❌ Promotion finished with an error.\n\n`;
-      summary += `Main staff card updated: ${stepStatus.mainCard ? "✅" : "❌"}\n`;
-      summary += `Main labels applied: ${stepStatus.mainLabels ? "✅" : "❌"}\n`;
-      summary += `Promotion card updated/created: ${stepStatus.promoCard ? "✅" : "❌"}\n`;
-      summary += `Announcement posted: ${stepStatus.announcement ? "✅" : "❌"}`;
-
-      await interaction.reply({ content: summary, ephemeral: true });
+      return;
     }
+
+    const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+    if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      await interaction.editReply('❌ I need the **Manage Roles** permission to update roles.');
+      return;
+    }
+
+    const teamRemoveIds = TEAM_REMOVE_KEYS.flatMap(configuredIdsForKey);
+    const ticketRemoveIds = envIds(TICKET_REMOVE_ENV_NAMES);
+
+    const teamRolesToRemove = target.roles.cache.filter((role) =>
+      teamRemoveIds.includes(role.id) || roleMatches(role, TEAM_REMOVE_MATCHERS, { requireTeam: true }),
+    );
+
+    const ticketRolesToRemove = target.roles.cache.filter((role) =>
+      ticketRemoveIds.includes(role.id) || roleMatches(role, TICKET_REMOVE_MATCHERS),
+    );
+
+    let targetTeamRoles = findRolesByIdsAndNames(
+      interaction.guild,
+      configuredIdsForKey(rank.teamIdsKey),
+      rank.teamNameMatchers,
+      { requireTeam: true },
+    );
+
+    if (Array.isArray(rank.excludeTargetKeywords) && rank.excludeTargetKeywords.length) {
+      targetTeamRoles = targetTeamRoles.filter((role) => {
+        const name = normalizeName(role.name);
+        return !rank.excludeTargetKeywords.some((keyword) => name.includes(keyword));
+      });
+    }
+
+    const targetTicketRoles = findRolesByIdsAndNames(
+      interaction.guild,
+      envIds(rank.ticketEnvNames),
+      rank.ticketNameMatchers,
+    );
+
+    if (!targetTeamRoles.length) {
+      await interaction.editReply(
+        `❌ I could not find the **${rank.label} Team** role. Add the role ID in \`src/config/roles.js\` or make sure the role name includes “${rank.label} Team”.`,
+      );
+      return;
+    }
+
+    if (!targetTicketRoles.length) {
+      await interaction.editReply(
+        `❌ I could not find the **${rank.ticketLabel}** role. Add the matching env var (${rank.ticketEnvNames.join(' or ')}) or make sure the Discord role is named **${rank.ticketLabel}**.`,
+      );
+      return;
+    }
+
+    const removeRoles = uniqueRoles([...teamRolesToRemove.values(), ...ticketRolesToRemove.values()])
+      .filter((role) => !targetTeamRoles.some((targetRole) => targetRole.id === role.id))
+      .filter((role) => !targetTicketRoles.some((targetRole) => targetRole.id === role.id));
+
+    const addRoles = uniqueRoles([...targetTeamRoles, ...targetTicketRoles]);
+
+    const manageableProblem = [...removeRoles, ...addRoles].find(
+      (role) => role.managed || role.position >= botMember.roles.highest.position,
+    );
+
+    if (manageableProblem) {
+      await interaction.editReply(
+        `❌ I cannot manage **${manageableProblem.name}**. Move my bot role above that role in the role list, then try again.`,
+      );
+      return;
+    }
+
+    const reason = `/promotion used by ${interaction.user.tag} (${interaction.user.id})`;
+
+    if (removeRoles.length) {
+      await target.roles.remove(removeRoles, reason);
+    }
+
+    await target.roles.add(addRoles, reason);
+
+    await interaction.editReply(
+      [
+        `✅ Updated ${target} to **${rank.label}**.`,
+        '',
+        `Removed old team/ticket roles: ${roleMentionList(removeRoles)}`,
+        `Added team role: ${roleMentionList(targetTeamRoles)}`,
+        `Added ticket role: ${roleMentionList(targetTicketRoles)}`,
+      ].join('\n'),
+    );
   },
 };

@@ -1,9 +1,10 @@
 // src/utils/sessionAnnouncements.js
-// Stubbed out – no automatic "session starting soon" posts.
+// Compatibility wrapper used by src/index.js.
 
-async function runSessionAnnouncementTick(_client) {
-  // Intentionally left empty.
-  return;
+const { runSessionAutomation } = require('./sessionAutomation');
+
+async function runSessionAnnouncementTick(client) {
+  return runSessionAutomation(client);
 }
 
 module.exports = { runSessionAnnouncementTick };

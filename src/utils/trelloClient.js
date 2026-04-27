@@ -8,6 +8,7 @@ const {
   TRELLO_LIST_TRAINING_ID,
   TRELLO_LIST_MASS_SHIFT_ID,
   TRELLO_LIST_COMPLETED_ID,
+  TRELLO_LIST_IN_PROGRESS_ID,
   TRELLO_LABEL_SCHEDULED_ID,
   TRELLO_LABEL_INTERVIEW_ID,
   TRELLO_LABEL_TRAINING_ID,
@@ -80,6 +81,26 @@ function getListIdForSessionType(sessionType) {
   }
 }
 
+function getSessionTypeForListId(listId) {
+  if (listId && listId === TRELLO_LIST_INTERVIEW_ID) return "interview";
+  if (listId && listId === TRELLO_LIST_TRAINING_ID) return "training";
+  if (listId && listId === TRELLO_LIST_MASS_SHIFT_ID) return "mass_shift";
+  return null;
+}
+
+function getSessionTypeFromCard(card = {}) {
+  const byList = getSessionTypeForListId(card.idList);
+  if (byList) return byList;
+
+  const text = `${card.name || ""} ${card.desc || ""}`.toLowerCase();
+  if (text.includes("interview")) return "interview";
+  if (text.includes("training")) return "training";
+  if (text.includes("mass shift") || text.includes("massshift") || text.includes("mass-shift")) {
+    return "mass_shift";
+  }
+  return "session";
+}
+
 function getTypeLabelId(sessionType) {
   switch (sessionType) {
     case "interview":
@@ -91,6 +112,68 @@ function getTypeLabelId(sessionType) {
     default:
       return null;
   }
+}
+
+function extractCardIdentifier(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  const urlMatch = raw.match(/trello\.com\/c\/([A-Za-z0-9]+)/i);
+  if (urlMatch) return urlMatch[1];
+
+  return raw;
+}
+
+async function resolveCardId(input) {
+  const identifier = extractCardIdentifier(input);
+  if (!identifier) return null;
+
+  const res = await trelloRequest(`/cards/${encodeURIComponent(identifier)}`, "GET", {
+    fields: "id,shortLink,shortUrl,url",
+  });
+
+  if (res.ok && res.data?.id) return res.data.id;
+  return identifier;
+}
+
+function getSessionListSources() {
+  return [
+    { listId: TRELLO_LIST_INTERVIEW_ID, listName: "Interview", fallbackType: "interview" },
+    { listId: TRELLO_LIST_TRAINING_ID, listName: "Training", fallbackType: "training" },
+    { listId: TRELLO_LIST_MASS_SHIFT_ID, listName: "Mass Shift", fallbackType: "mass_shift" },
+    { listId: TRELLO_LIST_IN_PROGRESS_ID, listName: "In Progress", fallbackType: null },
+    { listId: TRELLO_LIST_COMPLETED_ID, listName: "Completed", fallbackType: null },
+  ].filter((source, index, arr) => {
+    if (!source.listId) return false;
+    return arr.findIndex((item) => item.listId === source.listId) === index;
+  });
+}
+
+async function listSessionCards() {
+  const sources = getSessionListSources();
+  const cards = [];
+
+  for (const source of sources) {
+    const res = await trelloRequest(`/lists/${source.listId}/cards`, "GET", {
+      fields: "id,name,desc,due,dueComplete,idList,idLabels,shortUrl,url",
+      limit: "1000",
+    });
+
+    if (!res.ok || !Array.isArray(res.data)) {
+      console.error("[TRELLO] listSessionCards failed for list", source.listId, res.status, res.data);
+      continue;
+    }
+
+    for (const card of res.data) {
+      cards.push({
+        ...card,
+        sessionType: source.fallbackType || getSessionTypeFromCard(card),
+        listName: source.listName,
+      });
+    }
+  }
+
+  return cards;
 }
 
 /**
@@ -393,6 +476,9 @@ async function moveToCompletedList(cardId) {
 
 module.exports = {
   trelloRequest,
+  resolveCardId,
+  listSessionCards,
+  getSessionTypeFromCard,
   createSessionCard,
   cancelSessionCard,
   completeSessionCard,

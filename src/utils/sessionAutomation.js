@@ -1,221 +1,119 @@
 // src/utils/sessionAutomation.js
+// Creates 30-minute session notices and clears them when /logsession or /cancelsession runs.
 
-const {
-  TRELLO_KEY,
-  TRELLO_TOKEN,
-  TRELLO_LIST_INTERVIEW_ID,
-  TRELLO_LIST_TRAINING_ID,
-  TRELLO_LIST_MASS_SHIFT_ID,
-  TRELLO_LIST_IN_PROGRESS_ID,
-  TRELLO_LABEL_SCHEDULED_ID,
-  TRELLO_LABEL_COMPLETED_ID,
-  TRELLO_LABEL_CANCELED_ID,
-  TRELLO_LABEL_IN_PROGRESS_ID,
-} = require('../config/trello');
-
-const {
-  SESSION_ANNOUNCEMENTS_CHANNEL_ID,
-  INTERVIEW_SESSION_ROLE_ID,
-  TRAINING_SESSION_ROLE_ID,
-  MASS_SHIFT_SESSION_ROLE_ID,
-  GAME_LINK_INTERVIEW,
-  GAME_LINK_TRAINING,
-  GAME_LINK_MASS_SHIFT,
-} = require('../config/sessionAnnouncements');
-
+const { listSessionCards } = require('./trelloClient');
+const { SESSION_CONFIG } = require('../config/sessionAnnouncements');
 const {
   setSessionPost,
   getSessionPost,
   clearSessionPost,
 } = require('./sessionPostsStore');
 
-// Simple Trello HTTP helper
-async function trelloRequest(path, method = 'GET', query = {}) {
-  if (!TRELLO_KEY || !TRELLO_TOKEN) {
-    console.error('[TRELLO] Missing KEY/TOKEN');
-    return { ok: false, status: 0, data: null };
-  }
+const GAME_LINKS = {
+  interview:
+    process.env.GAME_LINK_INTERVIEW ||
+    'https://www.roblox.com/games/71896062227595/GH-Interview-Center',
+  training:
+    process.env.GAME_LINK_TRAINING ||
+    'https://www.roblox.com/games/88554128028552/GH-Training-Center',
+  mass_shift:
+    process.env.GAME_LINK_MASS_SHIFT ||
+    'https://www.roblox.com/games/127619749760478/Glace-Hotels-BETA-V1',
+};
 
-  const url = new URL(`https://api.trello.com/1${path}`);
-  url.searchParams.set('key', TRELLO_KEY);
-  url.searchParams.set('token', TRELLO_TOKEN);
-
-  for (const [k, v] of Object.entries(query)) {
-    if (v !== undefined && v !== null) {
-      url.searchParams.set(k, String(v));
-    }
-  }
-
-  try {
-    const res = await fetch(url, { method });
-    const data = await res.json().catch(() => null);
-    if (![200, 201].includes(res.status)) {
-      console.error('[TRELLO] API error', res.status, data);
-      return { ok: false, status: res.status, data };
-    }
-    return { ok: true, status: res.status, data };
-  } catch (err) {
-    console.error('[TRELLO] Network error', err);
-    return { ok: false, status: 0, data: null };
-  }
+function normalizeSessionType(type) {
+  if (type === 'massshift') return 'mass_shift';
+  return type || 'session';
 }
 
-function getTypeByListId(listId) {
-  if (listId === TRELLO_LIST_INTERVIEW_ID) return 'interview';
-  if (listId === TRELLO_LIST_TRAINING_ID) return 'training';
-  if (listId === TRELLO_LIST_MASS_SHIFT_ID) return 'mass_shift';
-  return null;
+function typeName(type) {
+  if (type === 'interview') return 'Interview';
+  if (type === 'training') return 'Training';
+  if (type === 'mass_shift') return 'Mass Shift';
+  return 'Session';
 }
 
-function getSessionMeta(type) {
-  switch (type) {
-    case 'interview':
-      return {
-        gameLink: GAME_LINK_INTERVIEW,
-        roleId: INTERVIEW_SESSION_ROLE_ID,
-        name: 'Interview',
-      };
-    case 'training':
-      return {
-        gameLink: GAME_LINK_TRAINING,
-        roleId: TRAINING_SESSION_ROLE_ID,
-        name: 'Training',
-      };
-    case 'mass_shift':
-      return {
-        gameLink: GAME_LINK_MASS_SHIFT,
-        roleId: MASS_SHIFT_SESSION_ROLE_ID,
-        name: 'Mass Shift',
-      };
-    default:
-      return { gameLink: null, roleId: null, name: 'Session' };
-  }
+function getNoticeConfig(type) {
+  const normalized = normalizeSessionType(type);
+  return SESSION_CONFIG?.[normalized] || null;
 }
 
-/**
- * Auto-session tick:
- * - 30 minutes before due: create Discord post with ping, game link, Trello link.
- * - At/after due: move card to In Progress list + IN PROGRESS label.
- */
 async function runSessionAutomation(client) {
-  const listIds = [
-    TRELLO_LIST_INTERVIEW_ID,
-    TRELLO_LIST_TRAINING_ID,
-    TRELLO_LIST_MASS_SHIFT_ID,
-  ].filter(Boolean);
+  if (!client) return;
 
-  if (!listIds.length) return;
+  let cards = [];
+  try {
+    cards = await listSessionCards();
+  } catch (err) {
+    console.error('[SESSIONS] Failed to load cards for notices:', err);
+    return;
+  }
 
-  const now = new Date();
+  const now = Date.now();
 
-  for (const listId of listIds) {
-    const cardsRes = await trelloRequest(`/lists/${listId}/cards`, 'GET', {
-      fields: 'id,name,due,idLabels,idList,shortUrl,url',
-    });
+  for (const card of cards) {
+    const sessionType = normalizeSessionType(card.sessionType);
+    const config = getNoticeConfig(sessionType);
+    if (!config?.channelId) continue;
+    if (!card?.id || !card?.due || card.dueComplete) continue;
+    if (String(card.listName || '').toLowerCase().includes('completed')) continue;
 
-    if (!cardsRes.ok || !Array.isArray(cardsRes.data)) continue;
+    const dueMs = new Date(card.due).getTime();
+    if (!Number.isFinite(dueMs)) continue;
 
-    const sessionType = getTypeByListId(listId);
-    const { gameLink, roleId, name: typeName } = getSessionMeta(sessionType);
+    const diffMs = dueMs - now;
+    if (diffMs <= 0 || diffMs > 30 * 60 * 1000) continue;
 
-    for (const card of cardsRes.data) {
-      const labels = Array.isArray(card.idLabels) ? card.idLabels : [];
+    if (getSessionPost(card.id)) continue;
 
-      if (!card.due) continue;
-      const due = new Date(card.due);
-      const diffMs = due.getTime() - now.getTime();
+    try {
+      const channel = await client.channels.fetch(config.channelId).catch(() => null);
+      if (!channel || !channel.isTextBased?.()) continue;
 
-      const hasScheduled = TRELLO_LABEL_SCHEDULED_ID && labels.includes(TRELLO_LABEL_SCHEDULED_ID);
-      const isCompleted = TRELLO_LABEL_COMPLETED_ID && labels.includes(TRELLO_LABEL_COMPLETED_ID);
-      const isCanceled = TRELLO_LABEL_CANCELED_ID && labels.includes(TRELLO_LABEL_CANCELED_ID);
-      const isInProgress = TRELLO_LABEL_IN_PROGRESS_ID && labels.includes(TRELLO_LABEL_IN_PROGRESS_ID);
+      const unix = Math.floor(dueMs / 1000);
+      const trelloUrl = card.shortUrl || card.url || `https://trello.com/c/${card.id}`;
+      const ping = config.pingRoleId ? `<@&${config.pingRoleId}>` : '';
+      const gameLink = GAME_LINKS[sessionType] || '';
 
-      // Skip completed/canceled
-      if (isCompleted || isCanceled) continue;
+      const content = [
+        ping,
+        `A **${typeName(sessionType)}** session is starting in **30 minutes**!`,
+        '',
+        `**Name:** ${card.name || typeName(sessionType)}`,
+        `**Starts at:** <t:${unix}:T> (<t:${unix}:R>)`,
+        gameLink ? `**Game link:** ${gameLink}` : null,
+        `**Trello card:** ${trelloUrl}`,
+      ]
+        .filter((line) => line !== null && line !== undefined)
+        .join('\n');
 
-      // 1) 30 minutes before due → create Discord post if not already created
-      if (
-        hasScheduled &&
-        diffMs > 0 &&
-        diffMs <= 30 * 60 * 1000 && // <= 30 mins
-        gameLink &&
-        SESSION_ANNOUNCEMENTS_CHANNEL_ID
-      ) {
-        const existingPost = getSessionPost(card.id);
-        if (!existingPost) {
-          try {
-            const channel = await client.channels.fetch(SESSION_ANNOUNCEMENTS_CHANNEL_ID);
-            if (!channel || !channel.isTextBased?.()) {
-              console.warn('[SESSIONS] Announcement channel is invalid or not text-based.');
-            } else {
-              const unix = Math.floor(due.getTime() / 1000);
-              const trelloUrl = card.shortUrl || card.url || `https://trello.com/c/${card.id}`;
-              const ping = roleId ? `<@&${roleId}>` : '';
+      const msg = await channel.send({
+        content,
+        allowedMentions: {
+          roles: config.pingRoleId ? [config.pingRoleId] : [],
+        },
+      });
 
-              const content =
-                `${ping}\n\n` +
-                `A **${typeName}** session is starting in **30 minutes**!\n\n` +
-                `**Name:** ${card.name}\n` +
-                `**Starts at:** <t:${unix}:T> (<t:${unix}:R>)\n\n` +
-                `**Game link:** ${gameLink}\n` +
-                `**Trello card:** ${trelloUrl}`;
-
-              const msg = await channel.send({ content });
-              setSessionPost(card.id, channel.id, msg.id);
-              console.log('[SESSIONS] Created announcement for card', card.id);
-            }
-          } catch (err) {
-            console.error('[SESSIONS] Failed to send announcement:', err);
-          }
-        }
-      }
-
-      // 2) Due time reached or passed → move to In Progress list + IN PROGRESS label
-      if (
-        hasScheduled &&
-        !isInProgress &&
-        diffMs <= 0 &&
-        TRELLO_LIST_IN_PROGRESS_ID &&
-        TRELLO_LABEL_IN_PROGRESS_ID
-      ) {
-        try {
-          const statusLabels = [
-            TRELLO_LABEL_SCHEDULED_ID,
-            TRELLO_LABEL_COMPLETED_ID,
-            TRELLO_LABEL_CANCELED_ID,
-          ].filter(Boolean);
-
-          let newLabels = labels.filter((id) => !statusLabels.includes(id));
-
-          if (!newLabels.includes(TRELLO_LABEL_IN_PROGRESS_ID)) {
-            newLabels.push(TRELLO_LABEL_IN_PROGRESS_ID);
-          }
-
-          await trelloRequest(`/cards/${card.id}`, 'PUT', {
-            idList: TRELLO_LIST_IN_PROGRESS_ID,
-            idLabels: newLabels.join(','),
-            dueComplete: 'false',
-          });
-
-          console.log('[SESSIONS] Moved card to In Progress:', card.id);
-        } catch (err) {
-          console.error('[SESSIONS] Failed to move card to In Progress:', err);
-        }
-      }
+      setSessionPost(card.id, channel.id, msg.id);
+      console.log('[SESSIONS] Created session notice for card', card.id);
+    } catch (err) {
+      console.error('[SESSIONS] Failed to send session notice:', err);
     }
   }
 }
 
 /**
- * Delete the Discord announcement for a given Trello card (if exists).
+ * Delete the Discord notice for a given Trello card (if one exists).
  * Called by /cancelsession and /logsession.
  */
 async function deleteSessionAnnouncement(client, cardId) {
+  if (!client || !cardId) return;
+
   const record = getSessionPost(cardId);
   if (!record) return;
 
   try {
-    const channel = await client.channels.fetch(record.channelId);
+    const channel = await client.channels.fetch(record.channelId).catch(() => null);
     if (!channel || !channel.isTextBased?.()) {
       clearSessionPost(cardId);
       return;
@@ -224,10 +122,10 @@ async function deleteSessionAnnouncement(client, cardId) {
     const msg = await channel.messages.fetch(record.messageId).catch(() => null);
     if (msg) {
       await msg.delete().catch(() => {});
-      console.log('[SESSIONS] Deleted session announcement for card', cardId);
+      console.log('[SESSIONS] Deleted session notice for card', cardId);
     }
   } catch (err) {
-    console.error('[SESSIONS] Failed to delete announcement:', err);
+    console.error('[SESSIONS] Failed to delete session notice:', err);
   }
 
   clearSessionPost(cardId);

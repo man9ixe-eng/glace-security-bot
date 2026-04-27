@@ -1,7 +1,8 @@
 // src/commands/sessions/logsession.js
 
 const { SlashCommandBuilder } = require('discord.js');
-const { completeSessionCard } = require('../../utils/trelloClient');
+const { completeSessionCard, resolveCardId } = require('../../utils/trelloClient');
+const { deleteSessionAnnouncement } = require('../../utils/sessionAutomation');
 const {
   logAttendeesForCard,
   cleanupQueueForCard,
@@ -22,13 +23,9 @@ module.exports = {
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const cardInput = interaction.options.getString('card', true);
-
-    let cardId = cardInput;
-    if (cardInput.includes('trello.com')) {
-      const match = cardInput.match(/\/c\/([A-Za-z0-9]+)/);
-      if (match) cardId = match[1];
-    }
+    const cardInput = interaction.options.getString('card', true).trim();
+    const resolvedCardId = await resolveCardId(cardInput);
+    const cardId = resolvedCardId || cardInput;
 
     const success = await completeSessionCard({ cardId });
 
@@ -40,6 +37,15 @@ module.exports = {
     }
 
     try {
+      await deleteSessionAnnouncement(interaction.client, cardId);
+      if (cardId !== cardInput) {
+        await deleteSessionAnnouncement(interaction.client, cardInput);
+      }
+    } catch (err) {
+      console.error('[LOGSESSION] Could not clear session notice:', err);
+    }
+
+    try {
       const result = await logAttendeesForCard(interaction.client, cardInput, {
         recordAttendance: true,
         cancelled: false,
@@ -47,7 +53,7 @@ module.exports = {
 
       if (!result?.ok) {
         await interaction.editReply(
-          '⚠️ The Trello card was completed, but I could not create the session log/activity entry. Please make sure the queue exists and the session log channel is configured correctly.',
+          '⚠️ The Trello card was completed and the session notice was cleared, but I could not create the session log/activity entry. Please make sure the queue exists and the session log channel is configured correctly.',
         );
         return;
       }
@@ -62,7 +68,7 @@ module.exports = {
     }
 
     await interaction.editReply(
-      '✅ Session successfully marked as completed on Trello.\n✅ Attendees logged and queue messages cleaned up.',
+      '✅ Session successfully marked as completed on Trello.\n✅ Session notice cleared.\n✅ Attendees logged and queue messages cleaned up.',
     );
   },
 };
