@@ -150,9 +150,19 @@ function canManageLoa(member) {
 }
 
 function stripLoaPrefix(name) {
-  let clean = String(name || '').trim();
-  while (clean.startsWith(LOA_PREFIX)) clean = clean.slice(LOA_PREFIX.length).trim();
-  return clean;
+  return String(name || '')
+    .replace(/^(?:\s*\u{1F515}\uFE0F?\s*)+/u, '')
+    .trim();
+}
+
+function hasLoaPrefix(name) {
+  return /^(?:\s*\u{1F515}\uFE0F?\s*)+/u.test(String(name || ''));
+}
+
+function cleanSavedNickname(name) {
+  if (name === null || typeof name === 'undefined') return null;
+  const clean = stripLoaPrefix(name);
+  return clean || null;
 }
 
 function nicknameWithPrefix(name) {
@@ -563,6 +573,12 @@ async function addLoa(interaction, target, options = {}) {
   const existing = getLoaRecord(interaction.guild.id, target.id);
   const startedAt = existing?.startedAt || new Date().toISOString();
   const cleanDisplayName = stripLoaPrefix(target.displayName);
+  const originalNickname = existing
+    ? cleanSavedNickname(existing.originalNickname)
+    : cleanSavedNickname(target.nickname);
+  const originalDisplayName = existing
+    ? stripLoaPrefix(existing.originalDisplayName || cleanDisplayName)
+    : cleanDisplayName;
   const newNickname = nicknameWithPrefix(cleanDisplayName);
 
   try {
@@ -610,8 +626,8 @@ async function addLoa(interaction, target, options = {}) {
     loaRoleId: staffClass.loaRoleId,
     staffClassKey: staffClass.key,
     staffClassLabel: staffClass.label,
-    originalNickname: existing ? existing.originalNickname : (target.nickname ?? null),
-    originalDisplayName: existing ? existing.originalDisplayName : cleanDisplayName,
+    originalNickname,
+    originalDisplayName,
     staffCardId: trello.card?.id || existing?.staffCardId || null,
     staffCardName: trello.card?.name || existing?.staffCardName || null,
     staffCardUrl: trello.card?.shortUrl || trello.card?.url || existing?.staffCardUrl || null,
@@ -692,12 +708,19 @@ async function removeLoa(interaction, target, options = {}) {
   }
 
   const fallbackName = stripLoaPrefix(target.displayName);
+  const savedOriginalNickname = existing ? cleanSavedNickname(existing.originalNickname) : undefined;
+  const nicknameToRestore = existing
+    ? savedOriginalNickname
+    : (fallbackName || null);
+
   try {
     if (target.manageable) {
-      if (existing) {
-        await target.setNickname(existing.originalNickname ?? null, `/removeloa used by ${interaction.user.tag} (${interaction.user.id})`);
-      } else if (target.displayName !== fallbackName) {
-        await target.setNickname(fallbackName || null, `/removeloa used by ${interaction.user.tag} (${interaction.user.id})`);
+      const shouldChangeNickname = hasLoaPrefix(target.nickname)
+        || hasLoaPrefix(target.displayName)
+        || target.nickname !== nicknameToRestore;
+
+      if (shouldChangeNickname) {
+        await target.setNickname(nicknameToRestore, `/removeloa used by ${interaction.user.tag} (${interaction.user.id})`);
       }
     } else {
       warnings.push('I removed the LOA role, but I could not change their nickname because their role is too high.');
@@ -707,7 +730,7 @@ async function removeLoa(interaction, target, options = {}) {
     warnings.push('I removed the LOA role, but I could not revert their nickname.');
   }
 
-  const trelloName = existing?.originalDisplayName || fallbackName;
+  const trelloName = stripLoaPrefix(existing?.originalDisplayName || fallbackName);
   const officialStartDate = existing?.officialStartDate || 'Unknown';
   const oldEndDate = existing?.officialEndDate || null;
   const endDateChanged = oldEndDate && oldEndDate !== validated.endDate;
