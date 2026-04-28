@@ -179,6 +179,95 @@ function formatDuration(ms) {
   return parts.join(', ');
 }
 
+function parseLoaDate(value, fieldLabel = 'Date') {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return { ok: false, message: `❌ **${fieldLabel}** must be in this format: **YYYY-MM-DD**.` };
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    return { ok: false, message: `❌ **${fieldLabel}** is not a valid calendar date.` };
+  }
+
+  return { ok: true, value: raw, date };
+}
+
+function isMonday(date) {
+  return date instanceof Date && date.getUTCDay() === 1;
+}
+
+function compareDateOnly(a, b) {
+  const left = parseLoaDate(a, 'Start Date');
+  const right = parseLoaDate(b, 'End Date');
+  if (!left.ok || !right.ok) return 0;
+  return left.date.getTime() - right.date.getTime();
+}
+
+function formatDateOnly(dateString) {
+  const parsed = parseLoaDate(dateString, 'Date');
+  if (!parsed.ok) return String(dateString || 'Unknown');
+
+  return parsed.date.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    month: 'long',
+    day: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function validateAddLoaOptions(options = {}) {
+  const start = parseLoaDate(options.startDate, 'Start Date');
+  if (!start.ok) return start;
+
+  if (!isMonday(start.date)) {
+    return { ok: false, message: '❌ **Start Date** must be a **Monday**.' };
+  }
+
+  const end = parseLoaDate(options.endDate, 'End Date');
+  if (!end.ok) return end;
+
+  if (end.date.getTime() < start.date.getTime()) {
+    return { ok: false, message: '❌ **End Date** cannot be before the start date.' };
+  }
+
+  const reviewerUsername = String(options.reviewerUsername || '').trim();
+  if (!reviewerUsername) {
+    return { ok: false, message: '❌ Please include the **Reviewer Username** for this LOA.' };
+  }
+
+  return {
+    ok: true,
+    startDate: start.value,
+    endDate: end.value,
+    reviewerUsername,
+  };
+}
+
+function validateRemoveLoaOptions(options = {}, existing = null) {
+  const end = parseLoaDate(options.endDate, 'End Date');
+  if (!end.ok) return end;
+
+  if (existing?.officialStartDate) {
+    const start = parseLoaDate(existing.officialStartDate, 'Start Date');
+    if (start.ok && end.date.getTime() < start.date.getTime()) {
+      return { ok: false, message: '❌ **End Date** cannot be before the LOA start date.' };
+    }
+  }
+
+  return { ok: true, endDate: end.value };
+}
+
 async function trelloRequest(method, path, params = {}) {
   if (!TRELLO_KEY || !TRELLO_TOKEN) {
     return { ok: false, skipped: true, reason: 'Missing Trello key/token.' };
@@ -364,8 +453,96 @@ async function ensureBotCanManageRoles(guild) {
   return { ok: true, botMember, mrRole, hrRole };
 }
 
-async function addLoa(interaction, target) {
+function buildLoaLogEmbed(details, warnings = []) {
+  const completed = details.status === 'Removed';
+  const embed = new EmbedBuilder()
+    .setColor(completed ? 0x22c55e : 0xf59e0b)
+    .setTitle(completed ? '🔕 LOA Log • Removed' : '🔕 LOA Log • Active')
+    .setDescription(`${details.target} ${completed ? 'has been removed from LOA.' : 'has been placed on LOA.'}`)
+    .addFields(
+      { name: 'User', value: `${details.target.user.tag}\n<@${details.target.id}>`, inline: true },
+      { name: completed ? 'Removed By' : 'Added By', value: `${details.actionBy.tag}\n<@${details.actionBy.id}>`, inline: true },
+      { name: 'Reviewer Username', value: String(details.reviewerUsername || 'Not provided'), inline: true },
+      { name: 'LOA Type', value: String(details.loaType || 'Unknown'), inline: true },
+      { name: 'Team', value: String(details.staffClassLabel || 'Unknown'), inline: true },
+      { name: 'Status', value: completed ? 'Removed' : 'Active', inline: true },
+      { name: 'Start Date', value: formatDateOnly(details.officialStartDate), inline: true },
+      { name: completed ? 'Final End Date' : 'Planned End Date', value: formatDateOnly(details.officialEndDate), inline: true },
+      {
+        name: 'Role Duration',
+        value: completed ? String(details.duration || 'Unknown') : 'Still on LOA',
+        inline: true,
+      },
+    )
+    .setFooter({ text: 'Glace Hotels | LOA System' })
+    .setTimestamp(details.timestamp || new Date());
+
+  if (details.startedAt) {
+    const startedAtDate = details.startedAt instanceof Date ? details.startedAt : new Date(details.startedAt);
+    if (!Number.isNaN(startedAtDate.getTime())) {
+      embed.addFields({ name: 'LOA Role Added', value: `<t:${Math.floor(startedAtDate.getTime() / 1000)}:F>`, inline: false });
+    }
+  }
+
+  if (completed && details.endedAt) {
+    const endedAtDate = details.endedAt instanceof Date ? details.endedAt : new Date(details.endedAt);
+    if (!Number.isNaN(endedAtDate.getTime())) {
+      embed.addFields({ name: 'LOA Role Removed', value: `<t:${Math.floor(endedAtDate.getTime() / 1000)}:F>`, inline: false });
+    }
+  }
+
+  if (details.trelloCardName) {
+    embed.addFields({
+      name: 'Trello Card',
+      value: details.trelloCardUrl ? `[${details.trelloCardName}](${details.trelloCardUrl})` : details.trelloCardName,
+      inline: false,
+    });
+  }
+
+  if (warnings.length) {
+    embed.addFields({ name: 'Warnings', value: warnings.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
+  }
+
+  return embed;
+}
+
+async function sendLoaLog(client, details, warnings = []) {
+  try {
+    const channel = await client.channels.fetch(LOA_LOG_CHANNEL_ID).catch(() => null);
+    if (!channel?.isTextBased?.()) {
+      return { ok: false, warning: 'Could not find the LOA log channel.' };
+    }
+
+    const message = await channel.send({ embeds: [buildLoaLogEmbed(details, warnings)] });
+    return { ok: true, messageId: message.id, channelId: channel.id };
+  } catch (err) {
+    console.error('[LOA] Failed to send LOA log:', err);
+    return { ok: false, warning: 'Could not send the LOA log message.' };
+  }
+}
+
+async function editOrSendLoaLog(client, record, details, warnings = []) {
+  try {
+    const channel = await client.channels.fetch(record?.logChannelId || LOA_LOG_CHANNEL_ID).catch(() => null);
+    if (channel?.isTextBased?.() && record?.logMessageId) {
+      const message = await channel.messages.fetch(record.logMessageId).catch(() => null);
+      if (message) {
+        await message.edit({ embeds: [buildLoaLogEmbed(details, warnings)] });
+        return { ok: true, edited: true, messageId: message.id, channelId: channel.id };
+      }
+    }
+  } catch (err) {
+    console.error('[LOA] Failed to edit existing LOA log:', err);
+  }
+
+  const sent = await sendLoaLog(client, details, warnings);
+  return { ...sent, edited: false };
+}
+
+async function addLoa(interaction, target, options = {}) {
   const warnings = [];
+  const validated = validateAddLoaOptions(options);
+  if (!validated.ok) return { ok: false, message: validated.message };
 
   if (!canManageLoa(interaction.member)) {
     return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
@@ -415,14 +592,20 @@ async function addLoa(interaction, target) {
     '**LOA Added**',
     `**User:** ${cleanDisplayName}`,
     `**Discord:** ${target.user.tag} (${target.id})`,
+    `**Reviewer Username:** ${validated.reviewerUsername}`,
+    `**Start Date:** ${formatDateOnly(validated.startDate)}`,
+    `**Planned End Date:** ${formatDateOnly(validated.endDate)}`,
     `**Added By:** ${interaction.user.tag} (${interaction.user.id})`,
-    `**Date:** ${new Date(startedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`,
+    `**Logged At:** ${new Date(startedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`,
   ].join('\n'));
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
 
-  setLoaRecord(interaction.guild.id, target.id, {
+  const record = setLoaRecord(interaction.guild.id, target.id, {
     startedAt,
+    officialStartDate: validated.startDate,
+    officialEndDate: validated.endDate,
+    reviewerUsername: validated.reviewerUsername,
     loaType: staffClass.loaType,
     loaRoleId: staffClass.loaRoleId,
     staffClassKey: staffClass.key,
@@ -431,33 +614,66 @@ async function addLoa(interaction, target) {
     originalDisplayName: existing ? existing.originalDisplayName : cleanDisplayName,
     staffCardId: trello.card?.id || existing?.staffCardId || null,
     staffCardName: trello.card?.name || existing?.staffCardName || null,
+    staffCardUrl: trello.card?.shortUrl || trello.card?.url || existing?.staffCardUrl || null,
     addedById: interaction.user.id,
     addedByTag: interaction.user.tag,
   });
+
+  const logResult = await sendLoaLog(interaction.client, {
+    target,
+    actionBy: interaction.user,
+    status: 'Active',
+    startedAt,
+    timestamp: new Date(),
+    officialStartDate: validated.startDate,
+    officialEndDate: validated.endDate,
+    reviewerUsername: validated.reviewerUsername,
+    loaType: staffClass.loaType,
+    staffClassLabel: staffClass.label,
+    trelloCardName: trello.card?.name || record.staffCardName || null,
+    trelloCardUrl: trello.card?.shortUrl || trello.card?.url || record.staffCardUrl || null,
+  }, warnings);
+
+  if (logResult.ok) {
+    setLoaRecord(interaction.guild.id, target.id, {
+      ...record,
+      logChannelId: logResult.channelId,
+      logMessageId: logResult.messageId,
+    });
+  } else if (logResult.warning) {
+    warnings.push(logResult.warning);
+  }
 
   return {
     ok: true,
     message: [
       `✅ Added LOA for ${target}.`,
+      `Start Date: **${formatDateOnly(validated.startDate)}**`,
+      `End Date: **${formatDateOnly(validated.endDate)}**`,
+      `Reviewer Username: **${validated.reviewerUsername}**`,
       `Role: <@&${staffClass.loaRoleId}>`,
       `Team: **${staffClass.label}**`,
       trello.ok ? `Trello: added **LOA** label to **${trello.card.name}**.` : null,
+      logResult.ok ? `Logged in <#${LOA_LOG_CHANNEL_ID}>.` : null,
       warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
     ].filter(Boolean).join('\n'),
   };
 }
 
-async function removeLoa(interaction, target) {
+async function removeLoa(interaction, target, options = {}) {
   const warnings = [];
 
   if (!canManageLoa(interaction.member)) {
     return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
   }
 
+  const existing = getLoaRecord(interaction.guild.id, target.id);
+  const validated = validateRemoveLoaOptions(options, existing);
+  if (!validated.ok) return { ok: false, message: validated.message };
+
   const roleCheck = await ensureBotCanManageRoles(interaction.guild);
   if (!roleCheck.ok) return { ok: false, message: roleCheck.message };
 
-  const existing = getLoaRecord(interaction.guild.id, target.id);
   const startedAt = existing?.startedAt ? new Date(existing.startedAt) : null;
   const endedAt = new Date();
   const duration = startedAt ? formatDuration(endedAt.getTime() - startedAt.getTime()) : 'Unknown';
@@ -492,28 +708,43 @@ async function removeLoa(interaction, target) {
   }
 
   const trelloName = existing?.originalDisplayName || fallbackName;
+  const officialStartDate = existing?.officialStartDate || 'Unknown';
+  const oldEndDate = existing?.officialEndDate || null;
+  const endDateChanged = oldEndDate && oldEndDate !== validated.endDate;
+
   const trello = await removeLoaLabelFromStaffCard(trelloName, existing?.staffCardId, [
     '**LOA Removed**',
     `**User:** ${trelloName}`,
     `**Discord:** ${target.user.tag} (${target.id})`,
+    existing?.reviewerUsername ? `**Reviewer Username:** ${existing.reviewerUsername}` : null,
+    officialStartDate !== 'Unknown' ? `**Start Date:** ${formatDateOnly(officialStartDate)}` : '**Start Date:** Unknown',
+    `**Final End Date:** ${formatDateOnly(validated.endDate)}`,
+    endDateChanged ? `**Previous End Date:** ${formatDateOnly(oldEndDate)}` : null,
     `**Removed By:** ${interaction.user.tag} (${interaction.user.id})`,
-    `**Duration:** ${duration}`,
-    `**Date:** ${endedAt.toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`,
-  ].join('\n'));
+    `**Role Duration:** ${duration}`,
+    `**Removed At:** ${endedAt.toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`,
+  ].filter(Boolean).join('\n'));
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
 
-  await sendLoaRemovalLog(interaction.client, {
+  const logResult = await editOrSendLoaLog(interaction.client, existing, {
     target,
-    removedBy: interaction.user,
+    actionBy: interaction.user,
+    status: 'Removed',
     startedAt,
     endedAt,
+    timestamp: endedAt,
     duration,
+    officialStartDate,
+    officialEndDate: validated.endDate,
+    reviewerUsername: existing?.reviewerUsername || 'Not provided',
     loaType: existing?.loaType || 'Unknown',
     staffClassLabel: existing?.staffClassLabel || classifyStaffMember(target)?.label || 'Unknown',
     trelloCardName: trello.card?.name || existing?.staffCardName || null,
-    trelloCardUrl: trello.card?.shortUrl || trello.card?.url || null,
+    trelloCardUrl: trello.card?.shortUrl || trello.card?.url || existing?.staffCardUrl || null,
   }, warnings);
+
+  if (!logResult.ok && logResult.warning) warnings.push(logResult.warning);
 
   clearLoaRecord(interaction.guild.id, target.id);
 
@@ -521,57 +752,16 @@ async function removeLoa(interaction, target) {
     ok: true,
     message: [
       `✅ Removed LOA for ${target}.`,
-      `LOA Duration: **${duration}**`,
+      `Final End Date: **${formatDateOnly(validated.endDate)}**`,
+      endDateChanged ? `Updated the log end date from **${formatDateOnly(oldEndDate)}** to **${formatDateOnly(validated.endDate)}**.` : null,
+      `LOA Role Duration: **${duration}**`,
       trello.ok ? `Trello: removed **LOA** label from **${trello.card.name}**.` : null,
-      `Logged in <#${LOA_LOG_CHANNEL_ID}>.`,
+      logResult.ok
+        ? `${logResult.edited ? 'Updated' : 'Sent'} the LOA log in <#${LOA_LOG_CHANNEL_ID}>.`
+        : null,
       warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
     ].filter(Boolean).join('\n'),
   };
-}
-
-async function sendLoaRemovalLog(client, details, warnings = []) {
-  try {
-    const channel = await client.channels.fetch(LOA_LOG_CHANNEL_ID).catch(() => null);
-    if (!channel?.isTextBased?.()) return;
-
-    const embed = new EmbedBuilder()
-      .setColor(0xf59e0b)
-      .setTitle('🔕 LOA Removed')
-      .setDescription(`${details.target} has been removed from LOA.`)
-      .addFields(
-        { name: 'User', value: `${details.target.user.tag}\n<@${details.target.id}>`, inline: true },
-        { name: 'Removed By', value: `${details.removedBy.tag}\n<@${details.removedBy.id}>`, inline: true },
-        { name: 'LOA Type', value: String(details.loaType || 'Unknown'), inline: true },
-        { name: 'Team', value: String(details.staffClassLabel || 'Unknown'), inline: true },
-        { name: 'Duration', value: String(details.duration || 'Unknown'), inline: true },
-        {
-          name: 'Started',
-          value: details.startedAt
-            ? `<t:${Math.floor(details.startedAt.getTime() / 1000)}:F>`
-            : 'Unknown',
-          inline: false,
-        },
-        { name: 'Ended', value: `<t:${Math.floor(details.endedAt.getTime() / 1000)}:F>`, inline: false },
-      )
-      .setFooter({ text: 'Glace Hotels | LOA System' })
-      .setTimestamp(details.endedAt);
-
-    if (details.trelloCardName) {
-      embed.addFields({
-        name: 'Trello Card',
-        value: details.trelloCardUrl ? `[${details.trelloCardName}](${details.trelloCardUrl})` : details.trelloCardName,
-        inline: false,
-      });
-    }
-
-    if (warnings.length) {
-      embed.addFields({ name: 'Warnings', value: warnings.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
-    }
-
-    await channel.send({ embeds: [embed] });
-  } catch (err) {
-    console.error('[LOA] Failed to send removal log:', err);
-  }
 }
 
 module.exports = {

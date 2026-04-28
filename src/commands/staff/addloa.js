@@ -13,18 +13,45 @@ module.exports = {
         .setName('username')
         .setDescription('Staff member to place on LOA')
         .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('start_date')
+        .setDescription('LOA start date. Must be a Monday. Format: YYYY-MM-DD')
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('end_date')
+        .setDescription('Official LOA end date. Format: YYYY-MM-DD')
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('reviewer_username')
+        .setDescription('Reviewer username for this LOA')
+        .setRequired(true),
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     const target = interaction.options.getMember('username');
+    const startDate = interaction.options.getString('start_date', true);
+    const endDate = interaction.options.getString('end_date', true);
+    const reviewerUsername = interaction.options.getString('reviewer_username', true);
+
     if (!target) {
       await interaction.editReply('❌ I could not find that member in this server.');
       return;
     }
 
-    const result = await addLoa(interaction, target);
+    const result = await addLoa(interaction, target, {
+      startDate,
+      endDate,
+      reviewerUsername,
+    });
+
     await interaction.editReply(result.message || (result.ok ? '✅ LOA added.' : '❌ Could not add LOA.'));
   },
 };
