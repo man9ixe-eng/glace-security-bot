@@ -15,7 +15,8 @@ const TEAM_EMOJIS = {
   intern: '<:intern_team:1476916364877758505>',
   management: '<:manager_team:1476916258036514837>',
   senior_management: '<:senior_team:1476916038602985614>',
-  corporate_intern: '<:corp_team:1478642239155474533>',
+  // Corporate Intern is part of the Senior Management team visually, but keeps its own quota class.
+  corporate_intern: '<:senior_team:1476916038602985614>',
   junior_corporate: '<:corp_team:1478642239155474533>',
   head_corporate: '<:corp_team:1478642239155474533>',
   corporate_board: '<:board_team:1476915796730187868>',
@@ -24,6 +25,12 @@ const TEAM_EMOJIS = {
 
 function getTeamEmoji(profile) {
   return TEAM_EMOJIS[profile?.key] || '🔹';
+}
+
+function getTeamDisplayLabel(profile) {
+  // Corporate Intern should look like Senior Management, while still using its unique quota.
+  if (profile?.key === 'corporate_intern') return 'Senior Management';
+  return profile?.label || 'Unknown Team';
 }
 
 function buildSectionBox(lines) {
@@ -132,7 +139,7 @@ module.exports = {
     const listLines = missing.length
       ? shown.flatMap(({ member, quotaProfile, summary }) => [
           `• ${getTeamEmoji(quotaProfile)} **${member.displayName || member.user.username}**`,
-          `  ${quotaProfile.label}`,
+          `  ${getTeamDisplayLabel(quotaProfile)}`,
           ...buildRequirementChecks(summary, quotaProfile).map((line) => `  ${line}`),
           '',
         ])

@@ -15,7 +15,8 @@ const TEAM_EMOJIS = {
   intern: '<:intern_team:1476916364877758505>',
   management: '<:manager_team:1476916258036514837>',
   senior_management: '<:senior_team:1476916038602985614>',
-  corporate_intern: '<:corp_team:1478642239155474533>',
+  // Corporate Intern is part of the Senior Management team visually, but keeps its own quota class.
+  corporate_intern: '<:senior_team:1476916038602985614>',
   junior_corporate: '<:corp_team:1478642239155474533>',
   head_corporate: '<:corp_team:1478642239155474533>',
   corporate_board: '<:board_team:1476915796730187868>',
@@ -40,13 +41,20 @@ function getTeamEmoji(profile) {
   return TEAM_EMOJIS[profile?.key] || '🔹';
 }
 
+function getTeamDisplayLabel(profile) {
+  // Corporate Intern should look like Senior Management, while still using its unique quota.
+  if (profile?.key === 'corporate_intern') return 'Senior Management';
+  return profile?.label || 'Unknown Team';
+}
+
 function getTeamColor(profile, metQuota) {
   const colors = {
     presidential: metQuota ? 0xFFD700 : 0xC9A227,
     corporate_board: metQuota ? 0xFF8C00 : 0xCC7000,
     head_corporate: metQuota ? 0xFF3B3B : 0xCC2F2F,
     junior_corporate: metQuota ? 0xEF4444 : 0xB91C1C,
-    corporate_intern: metQuota ? 0xF87171 : 0xDC2626,
+    // Corporate Intern uses the same green Senior Management embed color.
+    corporate_intern: metQuota ? 0x22C55E : 0x16A34A,
     senior_management: metQuota ? 0x22C55E : 0x16A34A,
     management: metQuota ? 0x8B5CF6 : 0x6D28D9,
     intern: metQuota ? 0xEC4899 : 0xC026D3,
@@ -88,7 +96,7 @@ function shouldShowRole(profile, roleKey) {
 
 function buildQuotaLines(profile) {
   const q = profile.quota || {};
-  const lines = [`${getTeamEmoji(profile)} ${profile.label}`];
+  const lines = [`${getTeamEmoji(profile)} ${getTeamDisplayLabel(profile)}`];
 
   if (q.total > 0 && q.mode === 'regular') lines.push(`- ${q.total} Total Sessions`);
   if (q.mode === 'regular_and_cohost') {
