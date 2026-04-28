@@ -8,15 +8,18 @@ const {
   summarizeActivity,
   hasMetQuota,
   formatRangeLabel,
+  getQuotaSource,
 } = require('../../utils/activityTracker');
 
 const TEAM_EMOJIS = {
-  intern: ':intern_team:',
-  management: ':manager_team:',
-  senior_management: ':senior_team:',
-  corporate: ':corp_team:',
-  corporate_board: ':board_team:',
-  presidential: ':pres_team:',
+  intern: '<:intern_team:1476916364877758505>',
+  management: '<:manager_team:1476916258036514837>',
+  senior_management: '<:senior_team:1476916038602985614>',
+  corporate_intern: '<:corp_team:1478642239155474533>',
+  junior_corporate: '<:corp_team:1478642239155474533>',
+  head_corporate: '<:corp_team:1478642239155474533>',
+  corporate_board: '<:board_team:1476915796730187868>',
+  presidential: '<:pres_team:1476915718644699136>',
 };
 
 function getTeamEmoji(profile) {
@@ -24,7 +27,22 @@ function getTeamEmoji(profile) {
 }
 
 function getModeLabel(profile) {
-  return profile?.isCorporatePlus ? 'Host' : 'Attendee';
+  switch (profile?.quota?.mode) {
+    case 'regular':
+      return 'Support';
+    case 'cohost':
+      return 'Co-Host';
+    case 'hosted':
+      return 'Host';
+    case 'head_corporate_mixed':
+      return 'Host + Overseer';
+    case 'overseer_only':
+      return 'Overseer';
+    case 'combined_any':
+      return 'Any Counted Session';
+    default:
+      return profile?.isCorporatePlus ? 'Host' : 'Support';
+  }
 }
 
 function buildSectionBox(lines) {
@@ -32,26 +50,42 @@ function buildSectionBox(lines) {
 }
 
 function buildRequirementChecks(summary, quotaProfile) {
-  const source =
-    quotaProfile.quota.mode === 'hosted' ? summary.hosted : summary.support;
+  const source = getQuotaSource(summary, quotaProfile);
+  const quota = quotaProfile.quota || {};
 
-  const totalRequired = quotaProfile.quota.total || 0;
-  const interviewRequired = quotaProfile.quota.minInterview || 0;
-  const trainingRequired = quotaProfile.quota.minTraining || 0;
+  if (quota.mode === 'head_corporate_mixed') {
+    return [
+      `Hosted: ${source.hostedTotal || 0}/${quota.hostedTotal || 0} ${(source.hostedTotal || 0) >= (quota.hostedTotal || 0) ? '✅' : '❌'}`,
+      `Hosted Interviews: ${source.hostedInterview || 0}/${quota.hostedInterview || 0} ${(source.hostedInterview || 0) >= (quota.hostedInterview || 0) ? '✅' : '❌'}`,
+      `Hosted Trainings: ${source.hostedTraining || 0}/${quota.hostedTraining || 0} ${(source.hostedTraining || 0) >= (quota.hostedTraining || 0) ? '✅' : '❌'}`,
+      `Overseers: ${source.overseerTotal || 0}/${quota.minOverseer || 0} ${(source.overseerTotal || 0) >= (quota.minOverseer || 0) ? '✅' : '❌'}`,
+    ];
+  }
+
+  if (quota.mode === 'overseer_only') {
+    const required = quota.minOverseer || quota.total || 0;
+    return [
+      `Overseers: ${source.overseerTotal || 0}/${required} ${(source.overseerTotal || 0) >= required ? '✅' : '❌'}`,
+    ];
+  }
+
+  const totalRequired = quota.total || 0;
+  const interviewRequired = quota.minInterview || 0;
+  const trainingRequired = quota.minTraining || 0;
 
   const lines = [
-    `Total: ${source.total}/${totalRequired} ${source.total >= totalRequired ? '✅' : '❌'}`,
+    `Total: ${source.total || 0}/${totalRequired} ${(source.total || 0) >= totalRequired ? '✅' : '❌'}`,
   ];
 
   if (interviewRequired > 0) {
     lines.push(
-      `Interviews: ${source.interview}/${interviewRequired} ${source.interview >= interviewRequired ? '✅' : '❌'}`,
+      `Interviews: ${source.interview || 0}/${interviewRequired} ${(source.interview || 0) >= interviewRequired ? '✅' : '❌'}`,
     );
   }
 
   if (trainingRequired > 0) {
     lines.push(
-      `Trainings: ${source.training}/${trainingRequired} ${source.training >= trainingRequired ? '✅' : '❌'}`,
+      `Trainings: ${source.training || 0}/${trainingRequired} ${(source.training || 0) >= trainingRequired ? '✅' : '❌'}`,
     );
   }
 
@@ -116,22 +150,10 @@ module.exports = {
 
     const listLines = missing.length
       ? shown.flatMap(({ member, quotaProfile, summary }) => {
-          const source =
-            quotaProfile.quota.mode === 'hosted'
-              ? summary.hosted
-              : summary.support;
-
           return [
             `• ${getTeamEmoji(quotaProfile)} **${member.displayName || member.user.username}**`,
             `  ${quotaProfile.label} • ${getModeLabel(quotaProfile)}`,
-            ...buildRequirementChecks(
-              { hosted: source, support: source },
-              {
-                quota: quotaProfile.quota,
-                quotaProfile,
-                quotaMode: quotaProfile.quota.mode,
-              },
-            ).map((line) => `  ${line}`),
+            ...buildRequirementChecks(summary, quotaProfile).map((line) => `  ${line}`),
             '',
           ];
         })

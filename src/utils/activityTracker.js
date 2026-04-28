@@ -123,23 +123,32 @@ function normalizeRoleName(name) {
     .trim();
 }
 
-function hasTeamRoleName(member, requiredKeywords) {
+function roleNameIsActiveTeamName(name) {
+  if (name.includes('former')) return false;
+  if (name.includes('retired')) return false;
+  if (name.includes('alumni')) return false;
+  return true;
+}
+
+function hasRoleNameKeywords(member, requiredKeywords, { requireTeam = false } = {}) {
+  if (!member?.roles?.cache) return false;
+
+  const keywords = requiredKeywords.map((keyword) => normalizeRoleName(keyword));
+
   return member.roles.cache.some((role) => {
     const name = normalizeRoleName(role.name);
-    if (!name.includes('team')) return false;
-    if (name.includes('former')) return false;
-    if (name.includes('retired')) return false;
-    if (name.includes('alumni')) return false;
-    return requiredKeywords.every((keyword) => name.includes(keyword));
+    if (!roleNameIsActiveTeamName(name)) return false;
+    if (requireTeam && !name.includes('team')) return false;
+    return keywords.every((keyword) => name.includes(keyword));
   });
 }
 
-function getQuotaConfig() {
-  if (quotaSettings && typeof quotaSettings.getAllQuotas === 'function') {
-    return quotaSettings.getAllQuotas();
-  }
+function hasTeamRoleName(member, requiredKeywords) {
+  return hasRoleNameKeywords(member, requiredKeywords, { requireTeam: true });
+}
 
-  return {
+function getQuotaConfig() {
+  const fallback = {
     intern: {
       label: 'Interns',
       mode: 'regular',
@@ -185,7 +194,7 @@ function getQuotaConfig() {
       minOverseer: 1,
     },
     corporate_board: {
-      label: 'Board Of Directors+',
+      label: 'Corporate Board',
       mode: 'overseer_only',
       total: 3,
       minOverseer: 3,
@@ -196,6 +205,48 @@ function getQuotaConfig() {
       total: 1,
       minInterview: 0,
       minTraining: 0,
+    },
+  };
+
+  let stored = {};
+  if (quotaSettings && typeof quotaSettings.getAllQuotas === 'function') {
+    stored = quotaSettings.getAllQuotas() || {};
+  }
+
+  const merge = (key, sourceKey = key) => ({
+    ...fallback[key],
+    ...(stored[sourceKey] || {}),
+  });
+
+  const juniorCorporate = {
+    ...fallback.junior_corporate,
+    ...(stored.junior_corporate || stored.corporate || {}),
+    mode: 'hosted',
+  };
+
+  const corporateBoardStored = stored.corporate_board || {};
+  const corporateBoard = {
+    ...fallback.corporate_board,
+    ...corporateBoardStored,
+    mode: 'overseer_only',
+    minOverseer:
+      corporateBoardStored.minOverseer ??
+      corporateBoardStored.overseerTotal ??
+      corporateBoardStored.total ??
+      fallback.corporate_board.minOverseer,
+  };
+
+  return {
+    intern: merge('intern'),
+    management: merge('management'),
+    senior_management: merge('senior_management'),
+    corporate_intern: merge('corporate_intern'),
+    junior_corporate: juniorCorporate,
+    head_corporate: merge('head_corporate'),
+    corporate_board: corporateBoard,
+    presidential: {
+      ...merge('presidential'),
+      mode: 'combined_any',
     },
   };
 }
@@ -219,26 +270,36 @@ function getQuotaProfileForMember(member) {
   const quotas = getQuotaConfig();
   const roleDisplayConfig = buildRoleDisplayConfig();
 
+  const isPresidentialIntern = () =>
+    hasRoleNameKeywords(member, ['presidential', 'intern']) ||
+    hasRoleNameKeywords(member, ['presidential', 'intern', 'team']);
+
   const profiles = [
+    {
+      key: 'corporate_board',
+      label: quotas.corporate_board?.label || 'Corporate Board',
+      ids: getRoleIds('CORPORATE_BOARD_ROLE_IDS'),
+      nameCheck: () =>
+        hasTeamRoleName(member, ['corporate', 'board']) ||
+        hasTeamRoleName(member, ['board', 'directors']) ||
+        hasTeamRoleName(member, ['board', 'director']) ||
+        hasRoleNameKeywords(member, ['board', 'directors']) ||
+        hasRoleNameKeywords(member, ['board', 'director']) ||
+        isPresidentialIntern(),
+      quota: quotas.corporate_board,
+      isCorporatePlus: true,
+      isCorporateInternPlus: true,
+      visibleRoleKeys: roleDisplayConfig.corporate_board,
+    },
     {
       key: 'presidential',
       label: quotas.presidential?.label || 'Presidentials',
       ids: getRoleIds('PRESIDENTIAL_ROLE_IDS'),
-      nameCheck: () => hasTeamRoleName(member, ['presidential']),
+      nameCheck: () => hasTeamRoleName(member, ['presidential']) && !isPresidentialIntern(),
       quota: quotas.presidential,
       isCorporatePlus: true,
+      isCorporateInternPlus: true,
       visibleRoleKeys: roleDisplayConfig.presidential,
-    },
-    {
-      key: 'corporate_board',
-      label: quotas.corporate_board?.label || 'Board Of Directors+',
-      ids: getRoleIds('CORPORATE_BOARD_ROLE_IDS'),
-      nameCheck: () =>
-        hasTeamRoleName(member, ['corporate', 'board']) ||
-        hasTeamRoleName(member, ['board', 'directors']),
-      quota: quotas.corporate_board,
-      isCorporatePlus: true,
-      visibleRoleKeys: roleDisplayConfig.corporate_board,
     },
     {
       key: 'head_corporate',
@@ -247,17 +308,20 @@ function getQuotaProfileForMember(member) {
       nameCheck: () => hasTeamRoleName(member, ['head', 'corporate']),
       quota: quotas.head_corporate,
       isCorporatePlus: true,
+      isCorporateInternPlus: true,
       visibleRoleKeys: roleDisplayConfig.head_corporate,
     },
     {
       key: 'junior_corporate',
       label: quotas.junior_corporate?.label || 'Junior Corporate+',
-      ids: [],
+      ids: getRoleIds('CORPORATE_ROLE_IDS'),
       nameCheck: () =>
         hasTeamRoleName(member, ['junior', 'corporate']) ||
-        hasTeamRoleName(member, ['senior', 'corporate']),
+        hasTeamRoleName(member, ['senior', 'corporate']) ||
+        hasTeamRoleName(member, ['corporate']),
       quota: quotas.junior_corporate,
       isCorporatePlus: true,
+      isCorporateInternPlus: true,
       visibleRoleKeys: roleDisplayConfig.junior_corporate,
     },
     {
@@ -267,6 +331,7 @@ function getQuotaProfileForMember(member) {
       nameCheck: () => hasTeamRoleName(member, ['corporate', 'intern']),
       quota: quotas.corporate_intern,
       isCorporatePlus: false,
+      isCorporateInternPlus: true,
       visibleRoleKeys: roleDisplayConfig.corporate_intern,
     },
     {
@@ -278,6 +343,7 @@ function getQuotaProfileForMember(member) {
         hasTeamRoleName(member, ['director']),
       quota: quotas.senior_management,
       isCorporatePlus: false,
+      isCorporateInternPlus: false,
       visibleRoleKeys: roleDisplayConfig.senior_management,
     },
     {
@@ -287,6 +353,7 @@ function getQuotaProfileForMember(member) {
       nameCheck: () => hasTeamRoleName(member, ['management']),
       quota: quotas.management,
       isCorporatePlus: false,
+      isCorporateInternPlus: false,
       visibleRoleKeys: roleDisplayConfig.management,
     },
     {
@@ -296,6 +363,7 @@ function getQuotaProfileForMember(member) {
       nameCheck: () => hasTeamRoleName(member, ['intern']),
       quota: quotas.intern,
       isCorporatePlus: false,
+      isCorporateInternPlus: false,
       visibleRoleKeys: roleDisplayConfig.intern,
     },
   ];
@@ -319,6 +387,7 @@ function getTimeZoneParts(date, timeZone = TIME_ZONE) {
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
+    hourCycle: 'h23',
     weekday: 'short',
   });
 
@@ -338,11 +407,13 @@ function getTimeZoneParts(date, timeZone = TIME_ZONE) {
     Sat: 6,
   };
 
+  const hour = Number(map.hour) === 24 ? 0 : Number(map.hour);
+
   return {
     year: Number(map.year),
     month: Number(map.month),
     day: Number(map.day),
-    hour: Number(map.hour),
+    hour,
     minute: Number(map.minute),
     second: Number(map.second),
     weekday: weekdayMap[map.weekday],
@@ -613,7 +684,7 @@ function detectSessionTypeFromEmbed(embed) {
 
   if (title.includes('interview') || description.includes('interview')) return 'interview';
   if (title.includes('training') || description.includes('training')) return 'training';
-  if (title.includes('mass shift') || title.includes('massshift')) return 'massshift';
+  if (title.includes('mass shift') || title.includes('massshift') || description.includes('mass shift') || description.includes('massshift')) return 'mass_shift';
 
   return null;
 }
@@ -768,6 +839,23 @@ function emptyRoleBuckets() {
   };
 }
 
+function normalizeSessionType(sessionType) {
+  const type = String(sessionType || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (type === 'massshift' || type === 'mass_shift') return 'mass_shift';
+  if (type.includes('interview')) return 'interview';
+  if (type.includes('training')) return 'training';
+  return type || 'session';
+}
+
+function emptyCounts() {
+  return {
+    total: 0,
+    interview: 0,
+    training: 0,
+    shift: 0,
+  };
+}
+
 function summarizeEntries(entries, range, entryType) {
   const filtered = entries.filter(
     (entry) => entry.timestamp >= range.startMs && entry.timestamp <= range.endMs,
@@ -777,39 +865,36 @@ function summarizeEntries(entries, range, entryType) {
     total: filtered.length,
     interview: 0,
     training: 0,
+    shift: 0,
     roles: emptyRoleBuckets(),
     rolesBySession: {},
     entries: filtered,
   };
 
   function bumpRoleSession(roleKey, sessionType) {
+    const type = normalizeSessionType(sessionType);
+
     if (!summary.rolesBySession[roleKey]) {
-      summary.rolesBySession[roleKey] = {
-        total: 0,
-        interview: 0,
-        training: 0,
-      };
+      summary.rolesBySession[roleKey] = emptyCounts();
     }
 
     summary.rolesBySession[roleKey].total += 1;
 
-    if (sessionType === 'interview') {
-      summary.rolesBySession[roleKey].interview += 1;
-    }
-    if (sessionType === 'training' || sessionType === 'massshift') {
-      summary.rolesBySession[roleKey].training += 1;
-    }
+    if (type === 'interview') summary.rolesBySession[roleKey].interview += 1;
+    if (type === 'training') summary.rolesBySession[roleKey].training += 1;
+    if (type === 'mass_shift') summary.rolesBySession[roleKey].shift += 1;
   }
 
   for (const entry of filtered) {
-    if (entry.sessionType === 'interview') summary.interview += 1;
-    if (entry.sessionType === 'training' || entry.sessionType === 'massshift') {
-      summary.training += 1;
-    }
+    const type = normalizeSessionType(entry.sessionType);
+
+    if (type === 'interview') summary.interview += 1;
+    if (type === 'training') summary.training += 1;
+    if (type === 'mass_shift') summary.shift += 1;
 
     if (entryType === 'hosted') {
       summary.roles.host += 1;
-      bumpRoleSession('host', entry.sessionType);
+      bumpRoleSession('host', type);
       continue;
     }
 
@@ -819,7 +904,7 @@ function summarizeEntries(entries, range, entryType) {
         summary.roles[key] = 0;
       }
       summary.roles[key] += 1;
-      bumpRoleSession(key, entry.sessionType);
+      bumpRoleSession(key, type);
     }
   }
 
@@ -833,17 +918,30 @@ function summarizeActivity(activity, range) {
   };
 }
 
-function makeQuotaSource(total = 0, interview = 0, training = 0, extra = {}) {
+function makeQuotaSource(total = 0, interview = 0, training = 0, shift = 0, extra = {}) {
   return {
     total,
     interview,
     training,
+    shift,
     ...extra,
   };
 }
 
+function addCounts(...countsList) {
+  return countsList.reduce(
+    (sum, counts) => ({
+      total: sum.total + (counts?.total || 0),
+      interview: sum.interview + (counts?.interview || 0),
+      training: sum.training + (counts?.training || 0),
+      shift: sum.shift + (counts?.shift || 0),
+    }),
+    emptyCounts(),
+  );
+}
+
 function getRoleSessionCounts(summary, roleKey) {
-  return summary?.rolesBySession?.[roleKey] || { total: 0, interview: 0, training: 0 };
+  return summary?.rolesBySession?.[roleKey] || emptyCounts();
 }
 
 function getQuotaSource(summary, quotaProfile) {
@@ -854,17 +952,13 @@ function getQuotaSource(summary, quotaProfile) {
     const interviewer = getRoleSessionCounts(summary.support, 'interviewer');
     const trainer = getRoleSessionCounts(summary.support, 'trainer');
     const supervisor = getRoleSessionCounts(summary.support, 'supervisor');
-
-    return makeQuotaSource(
-      interviewer.total + trainer.total + supervisor.total,
-      interviewer.interview,
-      trainer.training + supervisor.training,
-    );
+    const counted = addCounts(interviewer, trainer, supervisor);
+    return makeQuotaSource(counted.total, counted.interview, counted.training, counted.shift);
   }
 
   if (mode === 'cohost') {
     const cohost = getRoleSessionCounts(summary.support, 'cohost');
-    return makeQuotaSource(cohost.total, cohost.interview, cohost.training);
+    return makeQuotaSource(cohost.total, cohost.interview, cohost.training, cohost.shift);
   }
 
   if (mode === 'hosted') {
@@ -872,6 +966,7 @@ function getQuotaSource(summary, quotaProfile) {
       summary.hosted.total,
       summary.hosted.interview,
       summary.hosted.training,
+      summary.hosted.shift,
     );
   }
 
@@ -881,35 +976,51 @@ function getQuotaSource(summary, quotaProfile) {
       summary.hosted.total + overseer.total,
       summary.hosted.interview,
       summary.hosted.training,
+      summary.hosted.shift,
       {
         hostedTotal: summary.hosted.total,
         hostedInterview: summary.hosted.interview,
         hostedTraining: summary.hosted.training,
+        hostedShift: summary.hosted.shift,
         overseerTotal: overseer.total,
+        overseerInterview: overseer.interview,
+        overseerTraining: overseer.training,
+        overseerShift: overseer.shift,
       },
     );
   }
 
   if (mode === 'overseer_only') {
     const overseer = getRoleSessionCounts(summary.support, 'overseer');
-    return makeQuotaSource(overseer.total, overseer.interview, overseer.training, {
+    return makeQuotaSource(overseer.total, overseer.interview, overseer.training, overseer.shift, {
       overseerTotal: overseer.total,
+      overseerInterview: overseer.interview,
+      overseerTraining: overseer.training,
+      overseerShift: overseer.shift,
     });
   }
 
   if (mode === 'combined_any') {
-    const countedSupportTotal = Object.entries(summary.support.roles)
+    const countedSupport = Object.entries(summary.support.rolesBySession || {})
       .filter(([roleKey]) => roleKey !== 'spectator')
-      .reduce((sum, [, count]) => sum + count, 0);
+      .map(([, counts]) => counts);
+
+    const supportCounts = addCounts(...countedSupport);
 
     return makeQuotaSource(
-      summary.hosted.total + countedSupportTotal,
-      summary.hosted.interview + summary.support.interview,
-      summary.hosted.training + summary.support.training,
+      summary.hosted.total + supportCounts.total,
+      summary.hosted.interview + supportCounts.interview,
+      summary.hosted.training + supportCounts.training,
+      summary.hosted.shift + supportCounts.shift,
     );
   }
 
-  return makeQuotaSource(summary.support.total, summary.support.interview, summary.support.training);
+  return makeQuotaSource(
+    summary.support.total,
+    summary.support.interview,
+    summary.support.training,
+    summary.support.shift,
+  );
 }
 
 function hasMetQuota(summary, quotaProfile) {

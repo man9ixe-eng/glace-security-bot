@@ -3,9 +3,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { listSessionCards } = require('../../utils/trelloClient');
 
-const TIME_ZONE = process.env.SESSIONS_VIEW_TIME_ZONE || 'America/New_York';
+const DEFAULT_TIME_ZONE = process.env.SESSIONS_VIEW_TIME_ZONE || 'America/New_York';
 
-function getTimeZoneParts(date, timeZone = TIME_ZONE) {
+function getTimeZoneParts(date, timeZone = DEFAULT_TIME_ZONE) {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',
@@ -15,6 +15,7 @@ function getTimeZoneParts(date, timeZone = TIME_ZONE) {
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
+    hourCycle: 'h23',
     weekday: 'short',
   });
 
@@ -25,27 +26,28 @@ function getTimeZoneParts(date, timeZone = TIME_ZONE) {
   }
 
   const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const hour = Number(map.hour) === 24 ? 0 : Number(map.hour);
 
   return {
     year: Number(map.year),
     month: Number(map.month),
     day: Number(map.day),
-    hour: Number(map.hour),
+    hour,
     minute: Number(map.minute),
     second: Number(map.second),
     weekday: weekdayMap[map.weekday],
   };
 }
 
-function zonedLocalToUtcMs(local, timeZone = TIME_ZONE) {
+function zonedLocalToUtcMs(local, timeZone = DEFAULT_TIME_ZONE) {
   const targetLocalMs = Date.UTC(
     local.year,
     local.month - 1,
     local.day,
-    local.hour || 0,
-    local.minute || 0,
-    local.second || 0,
-    local.millisecond || 0,
+    local.hour ?? 0,
+    local.minute ?? 0,
+    local.second ?? 0,
+    local.millisecond ?? 0,
   );
 
   let guess = targetLocalMs;
@@ -75,15 +77,16 @@ function addDays(local, days) {
   };
 }
 
-function getRange(rangeKey) {
-  const nowParts = getTimeZoneParts(new Date(), TIME_ZONE);
+function getRange(rangeKey, timeZone = DEFAULT_TIME_ZONE, now = new Date()) {
+  const nowParts = getTimeZoneParts(now, timeZone);
 
   if (rangeKey === 'day') {
     const start = { year: nowParts.year, month: nowParts.month, day: nowParts.day };
     return {
-      startMs: zonedLocalToUtcMs({ ...start, hour: 0, minute: 0, second: 0, millisecond: 0 }),
-      endMs: zonedLocalToUtcMs({ ...start, hour: 23, minute: 59, second: 59, millisecond: 999 }),
+      startMs: zonedLocalToUtcMs({ ...start, hour: 0, minute: 0, second: 0, millisecond: 0 }, timeZone),
+      endMs: zonedLocalToUtcMs({ ...start, hour: 23, minute: 59, second: 59, millisecond: 999 }, timeZone),
       label: 'Today',
+      timeZone,
     };
   }
 
@@ -92,23 +95,34 @@ function getRange(rangeKey) {
   const sunday = addDays(monday, 6);
 
   return {
-    startMs: zonedLocalToUtcMs({ ...monday, hour: 0, minute: 0, second: 0, millisecond: 0 }),
-    endMs: zonedLocalToUtcMs({ ...sunday, hour: 23, minute: 59, second: 59, millisecond: 999 }),
+    startMs: zonedLocalToUtcMs({ ...monday, hour: 0, minute: 0, second: 0, millisecond: 0 }, timeZone),
+    endMs: zonedLocalToUtcMs({ ...sunday, hour: 23, minute: 59, second: 59, millisecond: 999 }, timeZone),
     label: 'This Week',
+    timeZone,
   };
 }
 
+function normalizeSessionType(type) {
+  const normalized = String(type || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'massshift' || normalized === 'mass_shift') return 'mass_shift';
+  if (normalized.includes('interview')) return 'interview';
+  if (normalized.includes('training')) return 'training';
+  return normalized || 'session';
+}
+
 function sessionEmoji(type) {
-  if (type === 'training') return '🔴';
-  if (type === 'interview') return '🟡';
-  if (type === 'mass_shift') return '🟣';
+  const normalized = normalizeSessionType(type);
+  if (normalized === 'training') return '🔴';
+  if (normalized === 'interview') return '🟡';
+  if (normalized === 'mass_shift') return '🟣';
   return '🔹';
 }
 
 function sessionLabel(type) {
-  if (type === 'training') return 'Training';
-  if (type === 'interview') return 'Interview';
-  if (type === 'mass_shift') return 'Mass Shift';
+  const normalized = normalizeSessionType(type);
+  if (normalized === 'training') return 'Training';
+  if (normalized === 'interview') return 'Interview';
+  if (normalized === 'mass_shift') return 'Mass Shift';
   return 'Session';
 }
 
@@ -119,13 +133,25 @@ function extractHost(cardName = '') {
 
 function formatWindowLabel(range) {
   const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIME_ZONE,
+    timeZone: range.timeZone || DEFAULT_TIME_ZONE,
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 
   return `${formatter.format(new Date(range.startMs))} — ${formatter.format(new Date(range.endMs))}`;
+}
+
+function getTimeZoneDisplayName(timeZone) {
+  const map = {
+    'America/New_York': 'Eastern Time',
+    'America/Chicago': 'Central Time',
+    'America/Denver': 'Mountain Time',
+    'America/Los_Angeles': 'Pacific Time',
+    UTC: 'UTC',
+  };
+
+  return map[timeZone] || timeZone;
 }
 
 module.exports = {
@@ -150,9 +176,22 @@ module.exports = {
         .setRequired(false)
         .addChoices(
           { name: 'All', value: 'all' },
-          { name: 'Interview', value: 'interview' },
-          { name: 'Training', value: 'training' },
-          { name: 'Mass Shift', value: 'mass_shift' },
+          { name: '🟡 Interview', value: 'interview' },
+          { name: '🔴 Training', value: 'training' },
+          { name: '🟣 Mass Shift', value: 'mass_shift' },
+        ),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('timezone')
+        .setDescription('Timezone to use for Day/Week. Default is Eastern Time.')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Eastern Time', value: 'America/New_York' },
+          { name: 'Central Time', value: 'America/Chicago' },
+          { name: 'Mountain Time', value: 'America/Denver' },
+          { name: 'Pacific Time', value: 'America/Los_Angeles' },
+          { name: 'UTC', value: 'UTC' },
         ),
     ),
 
@@ -161,7 +200,8 @@ module.exports = {
 
     const rangeKey = interaction.options.getString('range', true);
     const typeFilter = interaction.options.getString('type') || 'all';
-    const range = getRange(rangeKey);
+    const timeZone = interaction.options.getString('timezone') || DEFAULT_TIME_ZONE;
+    const range = getRange(rangeKey, timeZone, new Date(interaction.createdTimestamp || Date.now()));
 
     let cards;
     try {
@@ -174,10 +214,14 @@ module.exports = {
 
     const filtered = cards
       .filter((card) => card.due)
-      .map((card) => ({ ...card, dueMs: new Date(card.due).getTime() }))
+      .map((card) => ({
+        ...card,
+        dueMs: new Date(card.due).getTime(),
+        normalizedType: normalizeSessionType(card.sessionType),
+      }))
       .filter((card) => Number.isFinite(card.dueMs))
       .filter((card) => card.dueMs >= range.startMs && card.dueMs <= range.endMs)
-      .filter((card) => typeFilter === 'all' || card.sessionType === typeFilter)
+      .filter((card) => typeFilter === 'all' || card.normalizedType === typeFilter)
       .sort((a, b) => a.dueMs - b.dueMs || String(a.name || '').localeCompare(String(b.name || '')));
 
     const shown = filtered.slice(0, 25);
@@ -189,7 +233,7 @@ module.exports = {
       const url = card.shortUrl || card.url || `https://trello.com/c/${card.id}`;
       const done = card.dueComplete ? ' ✅' : '';
       return [
-        `**${index + 1}. ${sessionEmoji(card.sessionType)} ${sessionLabel(card.sessionType)}${done}**`,
+        `**${index + 1}. ${sessionEmoji(card.normalizedType)} ${sessionLabel(card.normalizedType)}${done}**`,
         `Host: ${extractHost(card.name)}`,
         `Time: <t:${unix}:F> (<t:${unix}:R>)`,
         `Status/List: ${card.listName || 'Trello'}`,
@@ -201,11 +245,18 @@ module.exports = {
       .setTitle(`📅 Sessions • ${range.label}`)
       .setColor(0x3b82f6)
       .setDescription(lines.length ? lines.join('\n\n') : emptyText)
-      .addFields({
-        name: 'Window',
-        value: `${formatWindowLabel(range)}\nTimezone: ${TIME_ZONE}`,
-        inline: false,
-      })
+      .addFields(
+        {
+          name: 'Legend',
+          value: '🟡 Interview • 🔴 Training • 🟣 Mass Shift',
+          inline: false,
+        },
+        {
+          name: 'Window',
+          value: `${formatWindowLabel(range)}\nTimezone: ${getTimeZoneDisplayName(timeZone)} (${timeZone})`,
+          inline: false,
+        },
+      )
       .setFooter({
         text: filtered.length > shown.length
           ? `Showing first ${shown.length} of ${filtered.length} sessions.`

@@ -22,6 +22,20 @@ const TEAM_EMOJIS = {
   presidential: '<:pres_team:1476915718644699136>',
 };
 
+const TYPE_DOTS = {
+  interview: '🟡',
+  training: '🔴',
+  shift: '🟣',
+};
+
+const CORPORATE_INTERN_PLUS_KEYS = new Set([
+  'corporate_intern',
+  'junior_corporate',
+  'head_corporate',
+  'corporate_board',
+  'presidential',
+]);
+
 function getTeamEmoji(profile) {
   return TEAM_EMOJIS[profile?.key] || '🔹';
 }
@@ -39,7 +53,7 @@ function getModeLabel(profile) {
     case 'overseer_only':
       return 'Overseer';
     case 'combined_any':
-      return 'Any Session';
+      return 'Any Counted Session';
     default:
       return 'Support';
   }
@@ -61,7 +75,7 @@ function getTeamColor(profile, metQuota) {
 }
 
 function box(lines) {
-  return `╭────────────────────╮\n${lines.map((l) => `│ ${l}`).join('\n')}\n╰────────────────────╯`;
+  return `╭────────────────────────╮\n${lines.map((l) => `│ ${l}`).join('\n')}\n╰────────────────────────╯`;
 }
 
 function buildProgressBar(current, required, size = 5) {
@@ -72,12 +86,12 @@ function buildProgressBar(current, required, size = 5) {
 }
 
 function buildDetailedQuota(profile) {
-  const q = profile.quota;
-  const lines = [`${profile.label}: ${q.total} Sessions`, ''];
+  const q = profile.quota || {};
+  const lines = [`${profile.label}: ${q.total || 0} Sessions`, ''];
 
   if (profile.key === 'intern') {
-    lines.push('1 Interview');
-    lines.push('1 Training');
+    lines.push(`${TYPE_DOTS.interview} 1 Interview`);
+    lines.push(`${TYPE_DOTS.training} 1 Training`);
     lines.push('Spectator does not count.');
     return lines;
   }
@@ -90,24 +104,24 @@ function buildDetailedQuota(profile) {
   }
 
   if (profile.key === 'senior_management') {
-    lines.push('2 Interview');
-    lines.push('2 Training');
+    lines.push(`${TYPE_DOTS.interview} 2 Interviews`);
+    lines.push(`${TYPE_DOTS.training} 2 Trainings`);
     lines.push('Spectator does not count.');
     return lines;
   }
 
   if (profile.key === 'corporate_intern') {
     lines.push('2 Co-Hosted Sessions');
-    lines.push('1 Co-Hosted Interview');
-    lines.push('1 Co-Hosted Training');
+    lines.push(`${TYPE_DOTS.interview} 1 Co-Hosted Interview`);
+    lines.push(`${TYPE_DOTS.training} 1 Co-Hosted Training`);
     lines.push('Other roles are extra only.');
     return lines;
   }
 
   if (profile.key === 'junior_corporate') {
     lines.push('2 Hosted Sessions');
-    lines.push('1 Hosted Interview');
-    lines.push('1 Hosted Training');
+    lines.push(`${TYPE_DOTS.interview} 1 Hosted Interview`);
+    lines.push(`${TYPE_DOTS.training} 1 Hosted Training`);
     lines.push('Co-Host does not count toward quota.');
     return lines;
   }
@@ -115,14 +129,15 @@ function buildDetailedQuota(profile) {
   if (profile.key === 'head_corporate') {
     lines.push('1 Overseered Session');
     lines.push('2 Hosted Sessions');
-    lines.push('1 Hosted Interview');
-    lines.push('1 Hosted Training');
+    lines.push(`${TYPE_DOTS.interview} 1 Hosted Interview`);
+    lines.push(`${TYPE_DOTS.training} 1 Hosted Training`);
     return lines;
   }
 
   if (profile.key === 'corporate_board') {
-    lines.push('3 Overseered Sessions');
-    lines.push('Optional extra sessions do not count.');
+    lines.push(`${getTeamEmoji(profile)} Overseer-based quota`);
+    lines.push('Board Of Director + Presidential Intern');
+    lines.push('are tracked here.');
     return lines;
   }
 
@@ -139,15 +154,16 @@ function buildQuotaProgressLines(source, quota, profileKey) {
   if (profileKey === 'head_corporate') {
     return [
       `Hosted: ${buildProgressBar(source.hostedTotal || 0, quota.hostedTotal || 0)} ${source.hostedTotal || 0}/${quota.hostedTotal || 0}`,
-      `Hosted Interviews: ${buildProgressBar(source.hostedInterview || 0, quota.hostedInterview || 0)} ${source.hostedInterview || 0}/${quota.hostedInterview || 0}`,
-      `Hosted Trainings: ${buildProgressBar(source.hostedTraining || 0, quota.hostedTraining || 0)} ${source.hostedTraining || 0}/${quota.hostedTraining || 0}`,
+      `${TYPE_DOTS.interview} Hosted Interviews: ${buildProgressBar(source.hostedInterview || 0, quota.hostedInterview || 0)} ${source.hostedInterview || 0}/${quota.hostedInterview || 0}`,
+      `${TYPE_DOTS.training} Hosted Trainings: ${buildProgressBar(source.hostedTraining || 0, quota.hostedTraining || 0)} ${source.hostedTraining || 0}/${quota.hostedTraining || 0}`,
       `Overseers: ${buildProgressBar(source.overseerTotal || 0, quota.minOverseer || 0)} ${source.overseerTotal || 0}/${quota.minOverseer || 0}`,
     ];
   }
 
   if (profileKey === 'corporate_board') {
+    const required = quota.minOverseer || quota.total || 0;
     return [
-      `Overseers: ${buildProgressBar(source.overseerTotal || 0, quota.minOverseer || quota.total || 0)} ${source.overseerTotal || 0}/${quota.minOverseer || quota.total || 0}`,
+      `Overseers: ${buildProgressBar(source.overseerTotal || 0, required)} ${source.overseerTotal || 0}/${required}`,
     ];
   }
 
@@ -161,13 +177,13 @@ function buildQuotaProgressLines(source, quota, profileKey) {
 
   if (interviewRequired > 0) {
     lines.push(
-      `Interviews: ${buildProgressBar(source.interview || 0, interviewRequired)} ${source.interview || 0}/${interviewRequired}`,
+      `${TYPE_DOTS.interview} Interviews: ${buildProgressBar(source.interview || 0, interviewRequired)} ${source.interview || 0}/${interviewRequired}`,
     );
   }
 
   if (trainingRequired > 0) {
     lines.push(
-      `Trainings: ${buildProgressBar(source.training || 0, trainingRequired)} ${source.training || 0}/${trainingRequired}`,
+      `${TYPE_DOTS.training} Trainings: ${buildProgressBar(source.training || 0, trainingRequired)} ${source.training || 0}/${trainingRequired}`,
     );
   }
 
@@ -188,21 +204,95 @@ function formatRoleLabel(roleKey) {
   return map[roleKey] || roleKey;
 }
 
-function getRoleCountsForDisplay(summary, roleKey) {
-  if (roleKey === 'host') {
-    return summary.hosted.rolesBySession?.host || { total: 0, interview: 0, training: 0 };
-  }
-
-  return summary.support.rolesBySession?.[roleKey] || { total: 0, interview: 0, training: 0 };
+function emptyCounts() {
+  return { total: 0, interview: 0, training: 0, shift: 0 };
 }
 
-function buildRoleLines(summary, visibleRoleKeys) {
-  const lines = visibleRoleKeys.map((roleKey) => {
-    const counts = getRoleCountsForDisplay(summary, roleKey);
-    return `${formatRoleLabel(roleKey)}: ${counts.total || 0} • I: ${counts.interview || 0} / T: ${counts.training || 0}`;
-  });
+function getRoleCountsForDisplay(summary, roleKey) {
+  if (roleKey === 'host') {
+    return summary.hosted.rolesBySession?.host || emptyCounts();
+  }
 
-  return lines.length ? lines : ['No tracked roles for this rank.'];
+  return summary.support.rolesBySession?.[roleKey] || emptyCounts();
+}
+
+function formatTypeMix(counts) {
+  const parts = [];
+
+  if (counts.interview) parts.push(`${TYPE_DOTS.interview} ${counts.interview}`);
+  if (counts.training) parts.push(`${TYPE_DOTS.training} ${counts.training}`);
+  if (counts.shift) parts.push(`${TYPE_DOTS.shift} ${counts.shift}`);
+
+  return parts.length ? parts.join(' • ') : 'No interview/training/shift split';
+}
+
+function formatTotalMix(counts) {
+  return `${counts.total || 0} total • ${TYPE_DOTS.interview} ${counts.interview || 0} • ${TYPE_DOTS.training} ${counts.training || 0} • ${TYPE_DOTS.shift} ${counts.shift || 0}`;
+}
+
+function buildRoleBreakdown(summary, visibleRoleKeys) {
+  const lines = visibleRoleKeys
+    .map((roleKey) => {
+      const counts = getRoleCountsForDisplay(summary, roleKey);
+      if (!counts.total) return null;
+
+      return `**${formatRoleLabel(roleKey)}:** ${counts.total} total • ${formatTypeMix(counts)}`;
+    })
+    .filter(Boolean);
+
+  return lines.length ? lines.join('\n') : 'No tracked role activity for this week.';
+}
+
+function buildMainSessionLines(summary, source, quotaProfile) {
+  if (
+    quotaProfile.key === 'junior_corporate' ||
+    quotaProfile.key === 'head_corporate' ||
+    quotaProfile.key === 'presidential'
+  ) {
+    return [
+      `${TYPE_DOTS.interview} Hosted Interviews: ${summary.hosted.interview}`,
+      `${TYPE_DOTS.training} Hosted Trainings: ${summary.hosted.training}`,
+      `${TYPE_DOTS.shift} Hosted Shifts: ${summary.hosted.shift || 0}`,
+      `Total Hosted: ${summary.hosted.total}`,
+    ];
+  }
+
+  if (quotaProfile.key === 'corporate_board') {
+    return [
+      `${TYPE_DOTS.interview} Overseered Interviews: ${source.overseerInterview || 0}`,
+      `${TYPE_DOTS.training} Overseered Trainings: ${source.overseerTraining || 0}`,
+      `${TYPE_DOTS.shift} Overseered Shifts: ${source.overseerShift || 0}`,
+      `Total Overseered: ${source.overseerTotal || 0}`,
+    ];
+  }
+
+  if (quotaProfile.key === 'corporate_intern') {
+    return [
+      `${TYPE_DOTS.interview} Co-Hosted Interviews: ${source.interview || 0}`,
+      `${TYPE_DOTS.training} Co-Hosted Trainings: ${source.training || 0}`,
+      `${TYPE_DOTS.shift} Co-Hosted Shifts: ${source.shift || 0}`,
+      `Total Co-Hosted: ${source.total || 0}`,
+    ];
+  }
+
+  return [
+    `${TYPE_DOTS.interview} Interviews: ${source.interview || 0}`,
+    `${TYPE_DOTS.training} Trainings: ${source.training || 0}`,
+    `${TYPE_DOTS.shift} Shifts: ${source.shift || 0}`,
+    `Total: ${source.total || 0}`,
+  ];
+}
+
+function buildCoHostSection(current, last) {
+  const currentCounts = current.support.rolesBySession?.cohost || emptyCounts();
+  const lastCounts = last.support.rolesBySession?.cohost || emptyCounts();
+
+  return [
+    `Current Week: ${formatTotalMix(currentCounts)}`,
+    `Last Week: ${formatTotalMix(lastCounts)}`,
+    '',
+    'Co-Host is shown for Corporate Intern+.',
+  ].join('\n');
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
@@ -229,118 +319,81 @@ async function buildActivityEmbed(interaction, targetMember) {
     targetMember.user?.globalName ||
     targetMember.user?.username;
 
+  const fields = [
+    {
+      name: '🏨 Quota',
+      value: box([
+        `${getTeamEmoji(quotaProfile)}  ${quotaProfile.label}`,
+        '',
+        `Mode: ${getModeLabel(quotaProfile)}`,
+        '',
+        ...buildDetailedQuota(quotaProfile),
+      ]),
+    },
+    {
+      name: '📊 Current Week',
+      value: box([
+        `📅 ${formatRangeLabel(currentRange)}`,
+        '',
+        ...buildMainSessionLines(current, currentQuotaSource, quotaProfile),
+        '',
+        ...buildQuotaProgressLines(currentQuotaSource, quotaProfile.quota, quotaProfile.key),
+        '',
+        `Status: ${met ? '✅ Met' : '❌ Below'}`,
+      ]),
+      inline: true,
+    },
+    {
+      name: '📁 Last Week',
+      value: box([
+        `📅 ${formatRangeLabel(lastRange)}`,
+        '',
+        ...buildMainSessionLines(last, lastQuotaSource, quotaProfile),
+        '',
+        ...buildQuotaProgressLines(lastQuotaSource, quotaProfile.quota, quotaProfile.key),
+        '',
+        `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
+      ]),
+      inline: true,
+    },
+    {
+      name: '🏨 Helped Sessions',
+      value: box([
+        `${TYPE_DOTS.interview} Interviews: ${current.support.interview}`,
+        `${TYPE_DOTS.training} Trainings: ${current.support.training}`,
+        `${TYPE_DOTS.shift} Shifts: ${current.support.shift || 0}`,
+        `Total: ${current.support.total}`,
+      ]),
+    },
+  ];
+
+  if (CORPORATE_INTERN_PLUS_KEYS.has(quotaProfile.key)) {
+    fields.push({
+      name: '🤝 Co-Host Sessions',
+      value: buildCoHostSection(current, last),
+    });
+  }
+
+  fields.push(
+    {
+      name: '👥 Current Week Role Breakdown',
+      value: buildRoleBreakdown(current, quotaProfile.visibleRoleKeys || []),
+      inline: true,
+    },
+    {
+      name: '📂 Last Week Role Breakdown',
+      value: buildRoleBreakdown(last, quotaProfile.visibleRoleKeys || []),
+      inline: true,
+    },
+  );
+
   const embed = new EmbedBuilder()
     .setColor(getTeamColor(quotaProfile, met))
     .setTitle(`${getTeamEmoji(quotaProfile)} ${name} • Activity`)
-    .setDescription(`⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})`)
-    .addFields(
-      {
-        name: '🏨 Quota',
-        value: box([
-          `${getTeamEmoji(quotaProfile)}  ${quotaProfile.label}`,
-          '',
-          `Mode: ${getModeLabel(quotaProfile)}`,
-          '',
-          ...buildDetailedQuota(quotaProfile),
-        ]),
-      },
-      {
-        name: '📊 Current Week',
-        value: box([
-          `📅 ${formatRangeLabel(currentRange)}`,
-          '',
-          ...(
-            quotaProfile.key === 'junior_corporate' ||
-            quotaProfile.key === 'head_corporate' ||
-            quotaProfile.key === 'presidential'
-              ? [
-                  `Hosted Interviews: ${current.hosted.interview}`,
-                  `Hosted Trainings: ${current.hosted.training}`,
-                  `Total Hosted: ${current.hosted.total}`,
-                ]
-              : quotaProfile.key === 'corporate_board'
-              ? [
-                  `Overseered Interviews: ${current.support.rolesBySession?.overseer?.interview || 0}`,
-                  `Overseered Trainings: ${current.support.rolesBySession?.overseer?.training || 0}`,
-                  `Total Overseered: ${current.support.rolesBySession?.overseer?.total || 0}`,
-                ]
-              : quotaProfile.key === 'corporate_intern'
-              ? [
-                  `Co-Hosted Interviews: ${current.support.rolesBySession?.cohost?.interview || 0}`,
-                  `Co-Hosted Trainings: ${current.support.rolesBySession?.cohost?.training || 0}`,
-                  `Total Co-Hosted: ${current.support.rolesBySession?.cohost?.total || 0}`,
-                ]
-              : [
-                  `Interviews: ${currentQuotaSource.interview || 0}`,
-                  `Trainings: ${currentQuotaSource.training || 0}`,
-                  `Total: ${currentQuotaSource.total || 0}`,
-                ]
-          ),
-          '',
-          ...buildQuotaProgressLines(currentQuotaSource, quotaProfile.quota, quotaProfile.key),
-          '',
-          `Status: ${met ? '✅ Met' : '❌ Below'}`,
-        ]),
-        inline: true,
-      },
-      {
-        name: '📁 Last Week',
-        value: box([
-          `📅 ${formatRangeLabel(lastRange)}`,
-          '',
-          ...(
-            quotaProfile.key === 'junior_corporate' ||
-            quotaProfile.key === 'head_corporate' ||
-            quotaProfile.key === 'presidential'
-              ? [
-                  `Hosted Interviews: ${last.hosted.interview}`,
-                  `Hosted Trainings: ${last.hosted.training}`,
-                  `Total Hosted: ${last.hosted.total}`,
-                ]
-              : quotaProfile.key === 'corporate_board'
-              ? [
-                  `Overseered Interviews: ${last.support.rolesBySession?.overseer?.interview || 0}`,
-                  `Overseered Trainings: ${last.support.rolesBySession?.overseer?.training || 0}`,
-                  `Total Overseered: ${last.support.rolesBySession?.overseer?.total || 0}`,
-                ]
-              : quotaProfile.key === 'corporate_intern'
-              ? [
-                  `Co-Hosted Interviews: ${last.support.rolesBySession?.cohost?.interview || 0}`,
-                  `Co-Hosted Trainings: ${last.support.rolesBySession?.cohost?.training || 0}`,
-                  `Total Co-Hosted: ${last.support.rolesBySession?.cohost?.total || 0}`,
-                ]
-              : [
-                  `Interviews: ${lastQuotaSource.interview || 0}`,
-                  `Trainings: ${lastQuotaSource.training || 0}`,
-                  `Total: ${lastQuotaSource.total || 0}`,
-                ]
-          ),
-          '',
-          ...buildQuotaProgressLines(lastQuotaSource, quotaProfile.quota, quotaProfile.key),
-          '',
-          `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
-        ]),
-        inline: true,
-      },
-      {
-        name: '🏨 Helped Sessions',
-        value: box([
-          `Interviews: ${current.support.interview}`,
-          `Trainings: ${current.support.training}`,
-          `Total: ${current.support.total}`,
-        ]),
-      },
-      {
-        name: '👥 Current Week Role Breakdown',
-        value: box(buildRoleLines(current, quotaProfile.visibleRoleKeys || [])),
-        inline: true,
-      },
-      {
-        name: '📂 Last Week Role Breakdown',
-        value: box(buildRoleLines(last, quotaProfile.visibleRoleKeys || [])),
-        inline: true,
-      },
+    .setDescription(
+      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})\n${TYPE_DOTS.interview} Interview • ${TYPE_DOTS.training} Training • ${TYPE_DOTS.shift} Shift`,
     )
+    .addFields(fields)
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))
     .setFooter({ text: 'Glace Hotels | Activity System' });
 
