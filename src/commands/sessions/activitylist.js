@@ -18,7 +18,7 @@ const TEAM_EMOJIS = {
   corporate_intern: '<:corp_team:1478642239155474533>',
   junior_corporate: '<:corp_team:1478642239155474533>',
   head_corporate: '<:corp_team:1478642239155474533>',
-  corporate_board: '<:board_team:1476915796730187868>',
+  corporate_board: '<:senior_team:1476916038602985614>',
   presidential: '<:pres_team:1476915718644699136>',
 };
 

@@ -18,7 +18,7 @@ const TEAM_EMOJIS = {
   corporate_intern: '<:corp_team:1478642239155474533>',
   junior_corporate: '<:corp_team:1478642239155474533>',
   head_corporate: '<:corp_team:1478642239155474533>',
-  corporate_board: '<:board_team:1476915796730187868>',
+  corporate_board: '<:senior_team:1476916038602985614>',
   presidential: '<:pres_team:1476915718644699136>',
 };
 
@@ -43,7 +43,7 @@ function getTeamEmoji(profile) {
 function getTeamColor(profile, metQuota) {
   const colors = {
     presidential: metQuota ? 0xFFD700 : 0xC9A227,
-    corporate_board: metQuota ? 0xFF8C00 : 0xCC7000,
+    corporate_board: metQuota ? 0x22C55E : 0x16A34A,
     head_corporate: metQuota ? 0xFF3B3B : 0xCC2F2F,
     junior_corporate: metQuota ? 0xEF4444 : 0xB91C1C,
     corporate_intern: metQuota ? 0xF87171 : 0xDC2626,
@@ -328,12 +328,6 @@ async function buildActivityEmbed(interaction, targetMember) {
     },
   ];
 
-  if (CORPORATE_INTERN_PLUS_KEYS.has(quotaProfile.key)) {
-    fields.splice(3, 0, {
-      name: '🤝 Co-Host Sessions',
-      value: buildCoHostSection(current, last),
-    });
-  }
 
   const embed = new EmbedBuilder()
     .setColor(getTeamColor(quotaProfile, met))

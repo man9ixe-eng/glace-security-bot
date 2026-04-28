@@ -147,6 +147,26 @@ function hasTeamRoleName(member, requiredKeywords) {
   return hasRoleNameKeywords(member, requiredKeywords, { requireTeam: true });
 }
 
+function hasCorporateBoardRoleName(member) {
+  if (!member?.roles?.cache) return false;
+
+  return member.roles.cache.some((role) => {
+    const name = normalizeRoleName(role.name);
+    if (!roleNameIsActiveTeamName(name)) return false;
+
+    const compact = name.replace(/\s+/g, '');
+
+    return (
+      compact.includes('bod') ||
+      name.includes('corporate board') ||
+      name.includes('board of director') ||
+      name.includes('board of directors') ||
+      (name.includes('board') && name.includes('director')) ||
+      (name.includes('board') && name.includes('directors'))
+    );
+  });
+}
+
 function getQuotaConfig() {
   const fallback = {
     intern: {
@@ -314,13 +334,15 @@ function getQuotaProfileForMember(member) {
     {
       key: 'corporate_board',
       label: quotas.corporate_board?.label || 'Corporate Board',
-      ids: getRoleIds('CORPORATE_BOARD_ROLE_IDS'),
+      ids: [
+        ...getRoleIds('CORPORATE_BOARD_ROLE_IDS'),
+        ...getRoleIds('BOARD_OF_DIRECTOR_ROLE_IDS'),
+        ...getRoleIds('BOD_ROLE_IDS'),
+        ...getRoleIds('PRESIDENTIAL_INTERN_ROLE_IDS'),
+      ],
       nameCheck: () =>
+        hasCorporateBoardRoleName(member) ||
         hasTeamRoleName(member, ['corporate', 'board']) ||
-        hasTeamRoleName(member, ['board', 'directors']) ||
-        hasTeamRoleName(member, ['board', 'director']) ||
-        hasRoleNameKeywords(member, ['board', 'directors']) ||
-        hasRoleNameKeywords(member, ['board', 'director']) ||
         isPresidentialIntern(),
       quota: quotas.corporate_board,
       isCorporatePlus: true,
@@ -374,9 +396,7 @@ function getQuotaProfileForMember(member) {
       key: 'senior_management',
       label: quotas.senior_management?.label || 'Senior Management',
       ids: getRoleIds('SENIOR_MANAGEMENT_ROLE_IDS'),
-      nameCheck: () =>
-        hasTeamRoleName(member, ['senior', 'management']) ||
-        hasTeamRoleName(member, ['director']),
+      nameCheck: () => hasTeamRoleName(member, ['senior', 'management']),
       quota: quotas.senior_management,
       isCorporatePlus: false,
       isCorporateInternPlus: false,
