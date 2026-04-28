@@ -189,17 +189,38 @@ function formatDuration(ms) {
   return parts.join(', ');
 }
 
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function normalizeDateValue(month, day, year) {
+  return `${pad2(month)}/${pad2(day)}/${year}`;
+}
+
 function parseLoaDate(value, fieldLabel = 'Date') {
   const raw = String(value || '').trim();
-  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
-  if (!match) {
-    return { ok: false, message: `❌ **${fieldLabel}** must be in this format: **YYYY-MM-DD**.` };
+  // Commands should use MM/DD/YYYY, but this also understands old saved YYYY-MM-DD
+  // records so /removeloa can still clean up older LOAs safely.
+  let month;
+  let day;
+  let year;
+
+  const slashMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const legacyDashMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (slashMatch) {
+    month = Number(slashMatch[1]);
+    day = Number(slashMatch[2]);
+    year = Number(slashMatch[3]);
+  } else if (legacyDashMatch) {
+    year = Number(legacyDashMatch[1]);
+    month = Number(legacyDashMatch[2]);
+    day = Number(legacyDashMatch[3]);
+  } else {
+    return { ok: false, message: `❌ **${fieldLabel}** must be in this format: **MM/DD/YYYY**.` };
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
 
   if (
@@ -210,7 +231,7 @@ function parseLoaDate(value, fieldLabel = 'Date') {
     return { ok: false, message: `❌ **${fieldLabel}** is not a valid calendar date.` };
   }
 
-  return { ok: true, value: raw, date };
+  return { ok: true, value: normalizeDateValue(month, day, year), date, raw };
 }
 
 function isMonday(date) {
@@ -227,13 +248,7 @@ function compareDateOnly(a, b) {
 function formatDateOnly(dateString) {
   const parsed = parseLoaDate(dateString, 'Date');
   if (!parsed.ok) return String(dateString || 'Unknown');
-
-  return parsed.date.toLocaleDateString('en-US', {
-    timeZone: 'UTC',
-    month: 'long',
-    day: '2-digit',
-    year: 'numeric',
-  });
+  return parsed.value;
 }
 
 const LOA_REASONS = new Set([
@@ -271,9 +286,9 @@ function parseStaffJourneyCardName(cardName) {
   const usernamePart = stripLoaPrefix(match[1]).trim();
   const datePart = String(match[2] || '').trim();
 
-  // Staff Journey cards should look like: USERNAME - DATE.
+  // Staff Journey cards must look like: USERNAME - MM/DD/YYYY.
   // This blocks milestone cards like "USERNAME - Milestone 1" from being selected.
-  const dateLike = /^(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})$/.test(datePart);
+  const dateLike = /^\d{2}\/\d{2}\/\d{4}$/.test(datePart);
   if (!usernamePart || !dateLike) return null;
 
   return { usernamePart, datePart };
@@ -282,6 +297,9 @@ function parseStaffJourneyCardName(cardName) {
 function validateAddLoaOptions(options = {}) {
   const start = parseLoaDate(options.startDate, 'Start Date');
   if (!start.ok) return start;
+  if (String(options.startDate || '').trim() !== start.value) {
+    return { ok: false, message: '❌ **Start Date** must be in this exact format: **MM/DD/YYYY**.' };
+  }
 
   if (!isMonday(start.date)) {
     return { ok: false, message: '❌ **Start Date** must be a **Monday**.' };
@@ -289,6 +307,9 @@ function validateAddLoaOptions(options = {}) {
 
   const end = parseLoaDate(options.endDate, 'End Date');
   if (!end.ok) return end;
+  if (String(options.endDate || '').trim() !== end.value) {
+    return { ok: false, message: '❌ **End Date** must be in this exact format: **MM/DD/YYYY**.' };
+  }
 
   if (end.date.getTime() < start.date.getTime()) {
     return { ok: false, message: '❌ **End Date** cannot be before the start date.' };
@@ -314,6 +335,9 @@ function validateAddLoaOptions(options = {}) {
 function validateRemoveLoaOptions(options = {}, existing = null) {
   const end = parseLoaDate(options.endDate, 'End Date');
   if (!end.ok) return end;
+  if (String(options.endDate || '').trim() !== end.value) {
+    return { ok: false, message: '❌ **End Date** must be in this exact format: **MM/DD/YYYY**.' };
+  }
 
   if (existing?.officialStartDate) {
     const start = parseLoaDate(existing.officialStartDate, 'Start Date');
@@ -334,6 +358,7 @@ async function trelloRequest(method, path, params = {}) {
     const response = await axios({
       method,
       url: `https://api.trello.com/1${path}`,
+      timeout: 10000,
       params: {
         key: TRELLO_KEY,
         token: TRELLO_TOKEN,

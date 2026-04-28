@@ -17,22 +17,34 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('end_date')
-        .setDescription('Official LOA end date to show on the log. Format: YYYY-MM-DD')
+        .setDescription('Official LOA end date to show on the log. Format: MM/DD/YYYY')
         .setRequired(true),
     ),
 
   async execute(interaction) {
-    await interaction.deferReply();
+    try {
+      await interaction.deferReply();
 
-    const target = interaction.options.getMember('username');
-    const endDate = interaction.options.getString('end_date', true);
+      const targetUser = interaction.options.getUser('username', true);
+      const target = interaction.options.getMember('username')
+        || await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+      const endDate = interaction.options.getString('end_date', true);
 
-    if (!target) {
-      await interaction.editReply('❌ I could not find that member in this server.');
-      return;
+      if (!target) {
+        await interaction.editReply('❌ I could not find that member in this server.');
+        return;
+      }
+
+      const result = await removeLoa(interaction, target, { endDate });
+      await interaction.editReply(result.message || (result.ok ? '✅ LOA removed.' : '❌ Could not remove LOA.'));
+    } catch (err) {
+      console.error('[REMOVELOA COMMAND ERROR]', err);
+      const message = '❌ Something went wrong while running `/removeloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(message).catch(() => null);
+      } else {
+        await interaction.reply({ content: message, ephemeral: false }).catch(() => null);
+      }
     }
-
-    const result = await removeLoa(interaction, target, { endDate });
-    await interaction.editReply(result.message || (result.ok ? '✅ LOA removed.' : '❌ Could not remove LOA.'));
   },
 };

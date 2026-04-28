@@ -17,13 +17,13 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('start_date')
-        .setDescription('LOA start date. Must be a Monday. Format: YYYY-MM-DD')
+        .setDescription('LOA start date. Must be a Monday. Format: MM/DD/YYYY')
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName('end_date')
-        .setDescription('Official LOA end date. Format: YYYY-MM-DD')
+        .setDescription('Official LOA end date. Format: MM/DD/YYYY')
         .setRequired(true),
     )
     .addStringOption((option) =>
@@ -54,28 +54,40 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await interaction.deferReply();
+    try {
+      await interaction.deferReply();
 
-    const target = interaction.options.getMember('username');
-    const startDate = interaction.options.getString('start_date', true);
-    const endDate = interaction.options.getString('end_date', true);
-    const reviewerUsername = interaction.options.getString('reviewer_username', true);
-    const reason = interaction.options.getString('reason', true);
-    const otherReason = interaction.options.getString('other_reason') || '';
+      const targetUser = interaction.options.getUser('username', true);
+      const target = interaction.options.getMember('username')
+        || await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+      const startDate = interaction.options.getString('start_date', true);
+      const endDate = interaction.options.getString('end_date', true);
+      const reviewerUsername = interaction.options.getString('reviewer_username', true);
+      const reason = interaction.options.getString('reason', true);
+      const otherReason = interaction.options.getString('other_reason') || '';
 
-    if (!target) {
-      await interaction.editReply('❌ I could not find that member in this server.');
-      return;
+      if (!target) {
+        await interaction.editReply('❌ I could not find that member in this server.');
+        return;
+      }
+
+      const result = await addLoa(interaction, target, {
+        startDate,
+        endDate,
+        reviewerUsername,
+        reason,
+        otherReason,
+      });
+
+      await interaction.editReply(result.message || (result.ok ? '✅ LOA added.' : '❌ Could not add LOA.'));
+    } catch (err) {
+      console.error('[ADDLOA COMMAND ERROR]', err);
+      const message = '❌ Something went wrong while running `/addloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(message).catch(() => null);
+      } else {
+        await interaction.reply({ content: message, ephemeral: false }).catch(() => null);
+      }
     }
-
-    const result = await addLoa(interaction, target, {
-      startDate,
-      endDate,
-      reviewerUsername,
-      reason,
-      otherReason,
-    });
-
-    await interaction.editReply(result.message || (result.ok ? '✅ LOA added.' : '❌ Could not add LOA.'));
   },
 };
