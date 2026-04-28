@@ -91,6 +91,10 @@ function buildQuotaLines(profile) {
   const lines = [`${getTeamEmoji(profile)} ${profile.label}`];
 
   if (q.total > 0 && q.mode === 'regular') lines.push(`- ${q.total} Total Sessions`);
+  if (q.mode === 'regular_and_cohost') {
+    lines.push(`- ${(q.total || 0) + (q.cohostTotal || 0)} Total Sessions`);
+    if (q.total > 0) lines.push(`- ${q.total} Non-Co-Host Sessions`);
+  }
   if (q.hostedTotal > 0) lines.push(`- ${q.hostedTotal} Hosted Sessions`);
   if (q.cohostTotal > 0) lines.push(`- ${q.cohostTotal} Co-Host Sessions`);
   if (q.minOverseer > 0) lines.push(`- ${q.minOverseer} Overseer Sessions`);
@@ -156,6 +160,22 @@ function buildRoleQuotaProgressLines(summary, source, profile) {
     if ((q.total || 0) > (q.minInterview || 0) + (q.minTraining || 0)) {
       lines.push(progressLine('Total Sessions', source.total, q.total));
     }
+  }
+
+  if (q.mode === 'regular_and_cohost') {
+    const regularProgress = [];
+    if ((q.minInterview || 0) > 0) {
+      regularProgress.push(progressLine('Interview', source.regularInterview, q.minInterview));
+    }
+    if ((q.minTraining || 0) > 0) {
+      regularProgress.push(progressLine('Training', source.regularTraining, q.minTraining));
+    }
+    if (!regularProgress.length) {
+      regularProgress.push(progressLine('Session', source.regularTotal, q.total));
+    } else if ((q.total || 0) > (q.minInterview || 0) + (q.minTraining || 0)) {
+      regularProgress.push(progressLine('Total Non-Co-Host', source.regularTotal, q.total));
+    }
+    addProgressGroup(lines, 'Non-Co-Host', regularProgress);
   }
 
   if ((q.hostedTotal || 0) > 0) {

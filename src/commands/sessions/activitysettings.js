@@ -6,8 +6,14 @@ const {
 
 function addQuotaFields(embed, entry) {
   const raw = entry.raw || {};
+  const displayTotal =
+    raw.mode === 'regular_and_cohost'
+      ? Number(raw.total || 0) + Number(raw.cohostTotal || 0)
+      : Number(raw.total || 0) + Number(raw.hostedTotal || 0) + Number(raw.cohostTotal || 0) + Number(raw.minOverseer || 0);
+
   return embed.addFields(
-    { name: '📊 Req Total Sessions', value: String(entry.total ?? 0), inline: true },
+    { name: '📊 Req Total/Regular', value: String(entry.total ?? 0), inline: true },
+    { name: '✨ Display Total', value: String(displayTotal || 0), inline: true },
     { name: '🏨 Req Hosted', value: String(entry.hosting ?? 0), inline: true },
     { name: '🤝 Req Co-Host', value: String(entry.cohost ?? 0), inline: true },
     { name: '👀 Req Overseer', value: String(entry.overseer ?? 0), inline: true },
@@ -47,7 +53,7 @@ module.exports = {
     .addIntegerOption((option) =>
       option
         .setName('total')
-        .setDescription('Required total support sessions')
+        .setDescription('Required regular/non-cohost support sessions')
         .setRequired(false)
         .setMinValue(0),
     )

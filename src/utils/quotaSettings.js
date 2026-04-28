@@ -50,10 +50,12 @@ const DEFAULTS = {
   },
   corporate_intern: {
     label: 'Corporate Intern',
-    mode: 'cohost',
+    mode: 'regular_and_cohost',
+    // Corporate Interns need 4 sessions total:
+    // 2 non-cohost/support sessions (1 interview + 1 training) PLUS 2 co-hosted sessions.
     total: 2,
-    minInterview: 0,
-    minTraining: 0,
+    minInterview: 1,
+    minTraining: 1,
     hostedTotal: 0,
     cohostTotal: 2,
     cohostInterview: 1,
@@ -156,7 +158,7 @@ const FORCED_MODES = {
   intern: 'regular',
   management: 'regular',
   senior_management: 'regular',
-  corporate_intern: 'cohost',
+  corporate_intern: 'regular_and_cohost',
   junior_corporate: 'hosted_and_cohost',
   head_corporate: 'hosted_and_cohost',
   corporate_board: 'hosted_and_overseer',
@@ -176,7 +178,7 @@ function withDerivedSplits(key, quota) {
   const next = { ...quota };
   next.mode = FORCED_MODES[key] || next.mode;
 
-  if (['intern', 'management', 'senior_management'].includes(key)) {
+  if (['intern', 'management', 'senior_management', 'corporate_intern'].includes(key)) {
     const split = splitRequirement(next.total);
     if (next.minInterview == null) next.minInterview = split.interview;
     if (next.minTraining == null) next.minTraining = split.training;
@@ -323,7 +325,7 @@ function updateQuotaSettings(tierKey, next) {
   const interview = next.interview != null ? Number(next.interview) : null;
   const training = next.training != null ? Number(next.training) : null;
 
-  if (current.mode === 'regular') {
+  if (current.mode === 'regular' || current.mode === 'regular_and_cohost') {
     deriveAndApplyTypeSplits(patch, 'regular', patch.total ?? current.total, interview, training);
   }
 
@@ -333,7 +335,7 @@ function updateQuotaSettings(tierKey, next) {
     patch.hostedTraining = training ?? split.training;
   }
 
-  if ((patch.cohostTotal != null || ['cohost', 'hosted_and_cohost'].includes(current.mode)) && (patch.cohostTotal ?? current.cohostTotal ?? 0) > 0) {
+  if ((patch.cohostTotal != null || ['cohost', 'regular_and_cohost', 'hosted_and_cohost'].includes(current.mode)) && (patch.cohostTotal ?? current.cohostTotal ?? 0) > 0) {
     const split = splitRequirement(patch.cohostTotal ?? current.cohostTotal);
     patch.cohostInterview = interview ?? split.interview;
     patch.cohostTraining = training ?? split.training;

@@ -34,10 +34,10 @@
   },
   "corporate_intern": {
     "label": "Corporate Intern",
-    "mode": "cohost",
+    "mode": "regular_and_cohost",
     "total": 2,
-    "minInterview": 0,
-    "minTraining": 0,
+    "minInterview": 1,
+    "minTraining": 1,
     "hostedTotal": 0,
     "cohostTotal": 2,
     "cohostInterview": 1,

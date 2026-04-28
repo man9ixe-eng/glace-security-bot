@@ -184,10 +184,11 @@ function getQuotaConfig() {
     },
     corporate_intern: {
       label: 'Corporate Intern',
-      mode: 'cohost',
+      mode: 'regular_and_cohost',
+      // 2 non-cohost/support sessions (1 interview + 1 training) + 2 co-hosted sessions.
       total: 2,
-      minInterview: 0,
-      minTraining: 0,
+      minInterview: 1,
+      minTraining: 1,
       hostedTotal: 0,
       cohostTotal: 2,
       cohostInterview: 1,
@@ -278,7 +279,7 @@ function getQuotaConfig() {
     intern: { ...merge('intern'), mode: 'regular' },
     management: { ...merge('management'), mode: 'regular' },
     senior_management: { ...merge('senior_management'), mode: 'regular' },
-    corporate_intern: { ...merge('corporate_intern'), mode: 'cohost' },
+    corporate_intern: { ...merge('corporate_intern'), mode: 'regular_and_cohost' },
     junior_corporate: juniorCorporate,
     head_corporate: { ...merge('head_corporate'), mode: 'hosted_and_cohost' },
     corporate_board: { ...merge('corporate_board'), mode: 'hosted_and_overseer' },
@@ -339,7 +340,7 @@ function getQuotaProfileForMember(member) {
     {
       key: 'head_corporate',
       label: quotas.head_corporate?.label || 'Head Corporate+',
-      ids: [],
+      ids: getRoleIds('HEAD_CORPORATE_ROLE_IDS'),
       nameCheck: () => hasTeamRoleName(member, ['head', 'corporate']),
       quota: quotas.head_corporate,
       isCorporatePlus: true,
@@ -362,7 +363,7 @@ function getQuotaProfileForMember(member) {
     {
       key: 'corporate_intern',
       label: quotas.corporate_intern?.label || 'Corporate Interns',
-      ids: [],
+      ids: [...getRoleIds('CORPORATE_INTERN_ROLE_IDS'), '1036289067182207008'],
       nameCheck: () => hasTeamRoleName(member, ['corporate', 'intern']),
       quota: quotas.corporate_intern,
       isCorporatePlus: false,
@@ -1020,6 +1021,10 @@ function getQuotaSource(summary, quotaProfile) {
     helperTraining: helper.training,
     supervisorTotal: supervisor.total,
     supervisorTraining: supervisor.training,
+    regularTotal: countedRegular.total,
+    regularInterview: countedRegular.interview,
+    regularTraining: countedRegular.training,
+    regularShift: countedRegular.shift,
     attendeeShift: attendee.shift,
     shiftMinutes: 0,
   };
@@ -1032,6 +1037,11 @@ function getQuotaSource(summary, quotaProfile) {
       countedRegular.shift,
       common,
     );
+  }
+
+  if (mode === 'regular_and_cohost') {
+    const counted = addCounts(countedRegular, cohost);
+    return makeQuotaSource(counted.total, counted.interview, counted.training, counted.shift, common);
   }
 
   if (mode === 'cohost') {
@@ -1098,6 +1108,15 @@ function hasMetQuota(summary, quotaProfile) {
   }
 
   if (quota.mode === 'cohost') {
+    if (!checkSplit('cohost', 'cohostTotal', 'cohostInterview', 'cohostTraining')) return false;
+    if ((quota.shiftMinutes || 0) > 0 && !meets(source.shiftMinutes, quota.shiftMinutes)) return false;
+    return true;
+  }
+
+  if (quota.mode === 'regular_and_cohost') {
+    if (!meets(source.regularTotal, quota.total)) return false;
+    if ((quota.minInterview || 0) > 0 && !meets(source.regularInterview, quota.minInterview)) return false;
+    if ((quota.minTraining || 0) > 0 && !meets(source.regularTraining, quota.minTraining)) return false;
     if (!checkSplit('cohost', 'cohostTotal', 'cohostInterview', 'cohostTraining')) return false;
     if ((quota.shiftMinutes || 0) > 0 && !meets(source.shiftMinutes, quota.shiftMinutes)) return false;
     return true;

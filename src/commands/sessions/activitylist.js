@@ -46,6 +46,12 @@ function buildRequirementChecks(summary, quotaProfile) {
     lines.push(checkLine('Trainings', source.training, q.minTraining));
   }
 
+  if ((q.total || 0) > 0 && q.mode === 'regular_and_cohost') {
+    lines.push(checkLine('Non-Co-Host Sessions', source.regularTotal, q.total));
+    lines.push(checkLine('Non-Co-Host Interviews', source.regularInterview, q.minInterview));
+    lines.push(checkLine('Non-Co-Host Trainings', source.regularTraining, q.minTraining));
+  }
+
   if ((q.hostedTotal || 0) > 0) {
     lines.push(checkLine('Hosted Sessions', source.hostedTotal, q.hostedTotal));
     lines.push(checkLine('Hosted Interviews', source.hostedInterview, q.hostedInterview));
