@@ -26,70 +26,49 @@ function getTeamEmoji(profile) {
   return TEAM_EMOJIS[profile?.key] || '🔹';
 }
 
-function getModeLabel(profile) {
-  switch (profile?.quota?.mode) {
-    case 'regular':
-      return 'Support';
-    case 'cohost':
-      return 'Co-Host';
-    case 'hosted':
-      return 'Host';
-    case 'head_corporate_mixed':
-      return 'Host + Overseer';
-    case 'overseer_only':
-      return 'Overseer';
-    case 'combined_any':
-      return 'Any Counted Session';
-    default:
-      return profile?.isCorporatePlus ? 'Host' : 'Support';
-  }
-}
-
 function buildSectionBox(lines) {
   return `╭────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────╯`;
 }
 
+function checkLine(label, actual, required) {
+  if (!required || required <= 0) return null;
+  return `${label}: ${actual || 0}/${required} ${(actual || 0) >= required ? '✅' : '❌'}`;
+}
+
 function buildRequirementChecks(summary, quotaProfile) {
   const source = getQuotaSource(summary, quotaProfile);
-  const quota = quotaProfile.quota || {};
+  const q = quotaProfile.quota || {};
+  const lines = [];
 
-  if (quota.mode === 'head_corporate_mixed') {
-    return [
-      `Hosted: ${source.hostedTotal || 0}/${quota.hostedTotal || 0} ${(source.hostedTotal || 0) >= (quota.hostedTotal || 0) ? '✅' : '❌'}`,
-      `Hosted Interviews: ${source.hostedInterview || 0}/${quota.hostedInterview || 0} ${(source.hostedInterview || 0) >= (quota.hostedInterview || 0) ? '✅' : '❌'}`,
-      `Hosted Trainings: ${source.hostedTraining || 0}/${quota.hostedTraining || 0} ${(source.hostedTraining || 0) >= (quota.hostedTraining || 0) ? '✅' : '❌'}`,
-      `Overseers: ${source.overseerTotal || 0}/${quota.minOverseer || 0} ${(source.overseerTotal || 0) >= (quota.minOverseer || 0) ? '✅' : '❌'}`,
-    ];
+  if ((q.total || 0) > 0 && q.mode === 'regular') {
+    lines.push(checkLine('Total Sessions', source.total, q.total));
+    lines.push(checkLine('Interviews', source.interview, q.minInterview));
+    lines.push(checkLine('Trainings', source.training, q.minTraining));
   }
 
-  if (quota.mode === 'overseer_only') {
-    const required = quota.minOverseer || quota.total || 0;
-    return [
-      `Overseers: ${source.overseerTotal || 0}/${required} ${(source.overseerTotal || 0) >= required ? '✅' : '❌'}`,
-    ];
+  if ((q.hostedTotal || 0) > 0) {
+    lines.push(checkLine('Hosted Sessions', source.hostedTotal, q.hostedTotal));
+    lines.push(checkLine('Hosted Interviews', source.hostedInterview, q.hostedInterview));
+    lines.push(checkLine('Hosted Trainings', source.hostedTraining, q.hostedTraining));
   }
 
-  const totalRequired = quota.total || 0;
-  const interviewRequired = quota.minInterview || 0;
-  const trainingRequired = quota.minTraining || 0;
-
-  const lines = [
-    `Total: ${source.total || 0}/${totalRequired} ${(source.total || 0) >= totalRequired ? '✅' : '❌'}`,
-  ];
-
-  if (interviewRequired > 0) {
-    lines.push(
-      `Interviews: ${source.interview || 0}/${interviewRequired} ${(source.interview || 0) >= interviewRequired ? '✅' : '❌'}`,
-    );
+  if ((q.cohostTotal || 0) > 0) {
+    lines.push(checkLine('Co-Host Sessions', source.cohostTotal, q.cohostTotal));
+    lines.push(checkLine('Co-Host Interviews', source.cohostInterview, q.cohostInterview));
+    lines.push(checkLine('Co-Host Trainings', source.cohostTraining, q.cohostTraining));
   }
 
-  if (trainingRequired > 0) {
-    lines.push(
-      `Trainings: ${source.training || 0}/${trainingRequired} ${(source.training || 0) >= trainingRequired ? '✅' : '❌'}`,
-    );
+  if ((q.minOverseer || 0) > 0) {
+    lines.push(checkLine('Overseer Sessions', source.overseerTotal, q.minOverseer));
+    lines.push(checkLine('Overseer Interviews', source.overseerInterview, q.overseerInterview));
+    lines.push(checkLine('Overseer Trainings', source.overseerTraining, q.overseerTraining));
   }
 
-  return lines;
+  if ((q.shiftMinutes || 0) > 0) {
+    lines.push(checkLine('Shift Minutes', source.shiftMinutes || 0, q.shiftMinutes));
+  }
+
+  return lines.filter(Boolean);
 }
 
 module.exports = {
@@ -129,11 +108,7 @@ module.exports = {
 
       if (hasMetQuota(summary, quotaProfile)) continue;
 
-      missing.push({
-        member,
-        quotaProfile,
-        summary,
-      });
+      missing.push({ member, quotaProfile, summary });
     }
 
     missing.sort((a, b) => {
@@ -149,14 +124,12 @@ module.exports = {
     const shown = missing.slice(0, 20);
 
     const listLines = missing.length
-      ? shown.flatMap(({ member, quotaProfile, summary }) => {
-          return [
-            `• ${getTeamEmoji(quotaProfile)} **${member.displayName || member.user.username}**`,
-            `  ${quotaProfile.label} • ${getModeLabel(quotaProfile)}`,
-            ...buildRequirementChecks(summary, quotaProfile).map((line) => `  ${line}`),
-            '',
-          ];
-        })
+      ? shown.flatMap(({ member, quotaProfile, summary }) => [
+          `• ${getTeamEmoji(quotaProfile)} **${member.displayName || member.user.username}**`,
+          `  ${quotaProfile.label}`,
+          ...buildRequirementChecks(summary, quotaProfile).map((line) => `  ${line}`),
+          '',
+        ])
       : ['All Glace Interns+ have met quota for the selected week.'];
 
     const embed = new EmbedBuilder()
@@ -173,7 +146,7 @@ module.exports = {
         name: '📅 Week Window',
         value: buildSectionBox([
           `${formatRangeLabel(selectedRange)}`,
-          `Monday 12:00 AM → Sunday 11:59 PM`,
+          'Monday 12:00 AM → Sunday 11:59 PM',
           `${TIME_ZONE}`,
         ]),
       })

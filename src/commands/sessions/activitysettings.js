@@ -1,9 +1,27 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const {
-  getQuotaSettings,
   updateQuotaSettings,
   getQuotaEntry,
 } = require('../../utils/quotaSettings');
+
+function addQuotaFields(embed, entry) {
+  const raw = entry.raw || {};
+  return embed.addFields(
+    { name: '📊 Req Total Sessions', value: String(entry.total ?? 0), inline: true },
+    { name: '🏨 Req Hosted', value: String(entry.hosting ?? 0), inline: true },
+    { name: '🤝 Req Co-Host', value: String(entry.cohost ?? 0), inline: true },
+    { name: '👀 Req Overseer', value: String(entry.overseer ?? 0), inline: true },
+    { name: '🟣 Req Shift Minutes', value: String(entry.shiftMinutes ?? 0), inline: true },
+    {
+      name: '🟡 / 🔴 Split',
+      value: [
+        `Interview Min: ${raw.minInterview ?? raw.hostedInterview ?? raw.cohostInterview ?? raw.overseerInterview ?? 0}`,
+        `Training Min: ${raw.minTraining ?? raw.hostedTraining ?? raw.cohostTraining ?? raw.overseerTraining ?? 0}`,
+      ].join('\n'),
+      inline: true,
+    },
+  );
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,7 +37,9 @@ module.exports = {
           { name: 'Intern', value: 'Intern' },
           { name: 'Management', value: 'Management' },
           { name: 'Senior Management', value: 'Senior Management' },
+          { name: 'Corporate Intern', value: 'Corporate Intern' },
           { name: 'Corporate', value: 'Corporate' },
+          { name: 'Head Corporate', value: 'Head Corporate' },
           { name: 'Corporate Board', value: 'Corporate Board' },
           { name: 'Presidential', value: 'Presidential' },
         ),
@@ -27,28 +47,49 @@ module.exports = {
     .addIntegerOption((option) =>
       option
         .setName('total')
-        .setDescription('Total required sessions')
-        .setRequired(false)
-        .setMinValue(0),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName('training')
-        .setDescription('Minimum required training sessions')
-        .setRequired(false)
-        .setMinValue(0),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName('interview')
-        .setDescription('Minimum required interview sessions')
+        .setDescription('Required total support sessions')
         .setRequired(false)
         .setMinValue(0),
     )
     .addIntegerOption((option) =>
       option
         .setName('hosting')
-        .setDescription('Minimum required hosted sessions (Corporate+ only)')
+        .setDescription('Required hosted sessions')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName('cohost')
+        .setDescription('Required co-host sessions')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName('overseer')
+        .setDescription('Required overseer sessions')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName('shift_minutes')
+        .setDescription('Required shift minutes')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName('interview')
+        .setDescription('Minimum interview requirement for the edited quota type')
+        .setRequired(false)
+        .setMinValue(0),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName('training')
+        .setDescription('Minimum training requirement for the edited quota type')
         .setRequired(false)
         .setMinValue(0),
     )
@@ -64,9 +105,12 @@ module.exports = {
     const showOnly = interaction.options.getBoolean('show') ?? false;
 
     const total = interaction.options.getInteger('total');
-    const training = interaction.options.getInteger('training');
-    const interview = interaction.options.getInteger('interview');
     const hosting = interaction.options.getInteger('hosting');
+    const cohost = interaction.options.getInteger('cohost');
+    const overseer = interaction.options.getInteger('overseer');
+    const shiftMinutes = interaction.options.getInteger('shift_minutes');
+    const interview = interaction.options.getInteger('interview');
+    const training = interaction.options.getInteger('training');
 
     const current = getQuotaEntry(tier);
 
@@ -77,52 +121,40 @@ module.exports = {
       });
     }
 
-    if (
-      showOnly ||
-      [total, training, interview, hosting].every((value) => value === null)
-    ) {
-      const embed = new EmbedBuilder()
-        .setColor(0x8fd3ff)
-        .setTitle('✨ Activity Settings')
-        .setDescription(`Viewing quota settings for **${tier}**`)
-        .addFields(
-          { name: '📊 Total Required', value: String(current.total ?? 0), inline: true },
-          { name: '🎓 Min Trainings', value: String(current.training ?? 0), inline: true },
-          { name: '🗣️ Min Interviews', value: String(current.interview ?? 0), inline: true },
-          { name: '🏨 Min Hosted', value: String(current.hosting ?? 0), inline: true },
-        );
+    const noChanges = [total, hosting, cohost, overseer, shiftMinutes, interview, training]
+      .every((value) => value === null);
+
+    if (showOnly || noChanges) {
+      const embed = addQuotaFields(
+        new EmbedBuilder()
+          .setColor(0x8fd3ff)
+          .setTitle('✨ Activity Settings')
+          .setDescription(`Viewing quota settings for **${tier}**`),
+        current,
+      );
 
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
-    const next = {
-      ...current,
+    const updated = updateQuotaSettings(tier, {
       ...(total !== null ? { total } : {}),
-      ...(training !== null ? { training } : {}),
-      ...(interview !== null ? { interview } : {}),
       ...(hosting !== null ? { hosting } : {}),
-    };
+      ...(cohost !== null ? { cohost } : {}),
+      ...(overseer !== null ? { overseer } : {}),
+      ...(shiftMinutes !== null ? { shiftMinutes } : {}),
+      ...(interview !== null ? { interview } : {}),
+      ...(training !== null ? { training } : {}),
+    });
 
-    if ((next.training ?? 0) + (next.interview ?? 0) > (next.total ?? 0)) {
-      return interaction.reply({
-        content:
-          'The sum of minimum trainings and minimum interviews cannot be greater than the total required sessions.',
-        ephemeral: true,
-      });
-    }
+    const next = getQuotaEntry(tier) || { raw: updated };
 
-    updateQuotaSettings(tier, next);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x57f287)
-      .setTitle('✅ Activity Settings Updated')
-      .setDescription(`Updated quota settings for **${tier}**`)
-      .addFields(
-        { name: '📊 Total Required', value: String(next.total ?? 0), inline: true },
-        { name: '🎓 Min Trainings', value: String(next.training ?? 0), inline: true },
-        { name: '🗣️ Min Interviews', value: String(next.interview ?? 0), inline: true },
-        { name: '🏨 Min Hosted', value: String(next.hosting ?? 0), inline: true },
-      );
+    const embed = addQuotaFields(
+      new EmbedBuilder()
+        .setColor(0x57f287)
+        .setTitle('✅ Activity Settings Updated')
+        .setDescription(`Updated quota settings for **${tier}**`),
+      next,
+    );
 
     return interaction.reply({ embeds: [embed], ephemeral: true });
   },

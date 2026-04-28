@@ -1,23 +1,41 @@
-
 const fs = require('node:fs');
 const path = require('node:path');
 
 const DATA_PATH = path.join(__dirname, '..', 'data', 'quotaSettings.json');
 
+function splitRequirement(total) {
+  const value = Number(total || 0);
+  if (value <= 1) return { interview: 0, training: 0 };
+  if (value === 2) return { interview: 1, training: 1 };
+  if (value === 3) return { interview: 1, training: 1 };
+  return {
+    interview: Math.floor(value / 2),
+    training: Math.ceil(value / 2),
+  };
+}
+
 const DEFAULTS = {
   intern: {
-    label: 'Interns',
+    label: 'Intern',
     mode: 'regular',
     total: 2,
     minInterview: 1,
     minTraining: 1,
+    hostedTotal: 0,
+    cohostTotal: 0,
+    minOverseer: 0,
+    shiftMinutes: 0,
   },
   management: {
     label: 'Management',
     mode: 'regular',
     total: 3,
-    minInterview: 0,
-    minTraining: 0,
+    minInterview: 1,
+    minTraining: 1,
+    hostedTotal: 0,
+    cohostTotal: 0,
+    minOverseer: 0,
+    shiftMinutes: 0,
   },
   senior_management: {
     label: 'Senior Management',
@@ -25,51 +43,100 @@ const DEFAULTS = {
     total: 4,
     minInterview: 2,
     minTraining: 2,
+    hostedTotal: 0,
+    cohostTotal: 0,
+    minOverseer: 0,
+    shiftMinutes: 0,
   },
   corporate_intern: {
-    label: 'Corporate Interns',
+    label: 'Corporate Intern',
     mode: 'cohost',
     total: 2,
-    minInterview: 1,
-    minTraining: 1,
+    minInterview: 0,
+    minTraining: 0,
+    hostedTotal: 0,
+    cohostTotal: 2,
+    cohostInterview: 1,
+    cohostTraining: 1,
+    minOverseer: 0,
+    shiftMinutes: 0,
   },
   junior_corporate: {
-    label: 'Junior Corporate+',
-    mode: 'hosted',
-    total: 2,
-    minInterview: 1,
-    minTraining: 1,
-  },
-  head_corporate: {
-    label: 'Head Corporate+',
-    mode: 'head_corporate_mixed',
-    total: 3,
+    label: 'Corporate',
+    mode: 'hosted_and_cohost',
+    total: 0,
+    minInterview: 0,
+    minTraining: 0,
     hostedTotal: 2,
     hostedInterview: 1,
     hostedTraining: 1,
-    minOverseer: 1,
+    cohostTotal: 2,
+    cohostInterview: 1,
+    cohostTraining: 1,
+    minOverseer: 0,
+    shiftMinutes: 0,
+  },
+  head_corporate: {
+    label: 'Head Corporate',
+    mode: 'hosted_and_cohost',
+    total: 0,
+    minInterview: 0,
+    minTraining: 0,
+    hostedTotal: 2,
+    hostedInterview: 1,
+    hostedTraining: 1,
+    cohostTotal: 2,
+    cohostInterview: 1,
+    cohostTraining: 1,
+    minOverseer: 0,
+    shiftMinutes: 0,
   },
   corporate_board: {
     label: 'Corporate Board',
-    mode: 'overseer_only',
-    total: 3,
-    minOverseer: 3,
-  },
-  presidential: {
-    label: 'Presidentials',
-    mode: 'combined_any',
-    total: 1,
+    mode: 'hosted_and_overseer',
+    total: 0,
     minInterview: 0,
     minTraining: 0,
+    hostedTotal: 2,
+    hostedInterview: 1,
+    hostedTraining: 1,
+    cohostTotal: 0,
+    minOverseer: 2,
+    overseerInterview: 1,
+    overseerTraining: 1,
+    shiftMinutes: 0,
+  },
+  presidential: {
+    label: 'Presidential',
+    mode: 'hosted_and_overseer',
+    total: 0,
+    minInterview: 0,
+    minTraining: 0,
+    hostedTotal: 1,
+    hostedInterview: 0,
+    hostedTraining: 0,
+    cohostTotal: 0,
+    minOverseer: 1,
+    overseerInterview: 0,
+    overseerTraining: 0,
+    shiftMinutes: 0,
   },
 
-  // Kept as an alias so older /activitysettings data does not disappear.
+  // Alias kept so older saved settings still load safely.
   corporate: {
     label: 'Corporate',
-    mode: 'hosted',
-    total: 2,
-    minInterview: 1,
-    minTraining: 1,
+    mode: 'hosted_and_cohost',
+    total: 0,
+    minInterview: 0,
+    minTraining: 0,
+    hostedTotal: 2,
+    hostedInterview: 1,
+    hostedTraining: 1,
+    cohostTotal: 2,
+    cohostInterview: 1,
+    cohostTraining: 1,
+    minOverseer: 0,
+    shiftMinutes: 0,
   },
 };
 
@@ -85,6 +152,18 @@ const DISPLAY_NAME_TO_KEY = {
   Presidential: 'presidential',
 };
 
+const FORCED_MODES = {
+  intern: 'regular',
+  management: 'regular',
+  senior_management: 'regular',
+  corporate_intern: 'cohost',
+  junior_corporate: 'hosted_and_cohost',
+  head_corporate: 'hosted_and_cohost',
+  corporate_board: 'hosted_and_overseer',
+  presidential: 'hosted_and_overseer',
+  corporate: 'hosted_and_cohost',
+};
+
 function ensureStore() {
   const dir = path.dirname(DATA_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -93,40 +172,66 @@ function ensureStore() {
   }
 }
 
+function withDerivedSplits(key, quota) {
+  const next = { ...quota };
+  next.mode = FORCED_MODES[key] || next.mode;
+
+  if (['intern', 'management', 'senior_management'].includes(key)) {
+    const split = splitRequirement(next.total);
+    if (next.minInterview == null) next.minInterview = split.interview;
+    if (next.minTraining == null) next.minTraining = split.training;
+  }
+
+  if ((next.hostedTotal || 0) > 0) {
+    const split = splitRequirement(next.hostedTotal);
+    if (next.hostedInterview == null) next.hostedInterview = split.interview;
+    if (next.hostedTraining == null) next.hostedTraining = split.training;
+  }
+
+  if ((next.cohostTotal || 0) > 0) {
+    const split = splitRequirement(next.cohostTotal);
+    if (next.cohostInterview == null) next.cohostInterview = split.interview;
+    if (next.cohostTraining == null) next.cohostTraining = split.training;
+  }
+
+  if ((next.minOverseer || 0) > 0) {
+    const split = splitRequirement(next.minOverseer);
+    if (next.overseerInterview == null) next.overseerInterview = split.interview;
+    if (next.overseerTraining == null) next.overseerTraining = split.training;
+  }
+
+  next.total = Number(next.total || 0);
+  next.hostedTotal = Number(next.hostedTotal || 0);
+  next.cohostTotal = Number(next.cohostTotal || 0);
+  next.minOverseer = Number(next.minOverseer || 0);
+  next.shiftMinutes = Number(next.shiftMinutes || 0);
+
+  return next;
+}
+
 function normalize(data) {
   const merged = JSON.parse(JSON.stringify(DEFAULTS));
-  if (!data || typeof data !== 'object') return merged;
+  if (data && typeof data === 'object') {
+    for (const [key, value] of Object.entries(data)) {
+      if (!merged[key]) continue;
+      merged[key] = {
+        ...merged[key],
+        ...value,
+      };
+    }
 
-  for (const [key, value] of Object.entries(data)) {
-    if (!merged[key]) continue;
-    merged[key] = {
-      ...merged[key],
-      ...value,
-    };
+    if (!data.junior_corporate && data.corporate) {
+      merged.junior_corporate = {
+        ...merged.junior_corporate,
+        ...data.corporate,
+        label: merged.junior_corporate.label,
+      };
+    }
   }
 
-  if (!data.junior_corporate && data.corporate) {
-    merged.junior_corporate = {
-      ...merged.junior_corporate,
-      ...data.corporate,
-      label: merged.junior_corporate.label,
-      mode: 'hosted',
-    };
+  for (const key of Object.keys(merged)) {
+    merged[key] = withDerivedSplits(key, merged[key]);
   }
-
-  merged.corporate_board = {
-    ...merged.corporate_board,
-    mode: 'overseer_only',
-    minOverseer:
-      merged.corporate_board.minOverseer ??
-      merged.corporate_board.total ??
-      DEFAULTS.corporate_board.minOverseer,
-  };
-
-  merged.presidential = {
-    ...merged.presidential,
-    mode: 'combined_any',
-  };
 
   return merged;
 }
@@ -159,10 +264,12 @@ function setQuota(tierKey, patch) {
   const key = resolveKey(tierKey);
   const all = getAllQuotas();
   if (!all[key]) return null;
-  all[key] = {
+
+  all[key] = withDerivedSplits(key, {
     ...all[key],
     ...patch,
-  };
+  });
+
   saveAllQuotas(all);
   return all[key];
 }
@@ -177,12 +284,26 @@ function getQuotaEntry(tierKey) {
   if (!q) return null;
 
   return {
-    total: q.total ?? q.hostedTotal ?? q.minOverseer ?? 0,
-    training: q.minTraining ?? q.hostedTraining ?? 0,
-    interview: q.minInterview ?? q.hostedInterview ?? 0,
-    hosting: q.hostedTotal ?? (q.mode === 'hosted' ? q.total : 0),
+    total: q.total ?? 0,
+    training: q.minTraining ?? q.hostedTraining ?? q.cohostTraining ?? q.overseerTraining ?? 0,
+    interview: q.minInterview ?? q.hostedInterview ?? q.cohostInterview ?? q.overseerInterview ?? 0,
+    hosting: q.hostedTotal ?? 0,
+    cohost: q.cohostTotal ?? 0,
+    overseer: q.minOverseer ?? 0,
+    shiftMinutes: q.shiftMinutes ?? 0,
     raw: q,
   };
+}
+
+function deriveAndApplyTypeSplits(patch, baseKey, count, interview, training) {
+  if (count == null && interview == null && training == null) return;
+
+  const split = splitRequirement(count ?? patch[`${baseKey}Total`] ?? patch.minOverseer ?? 0);
+  const interviewKey = baseKey === 'regular' ? 'minInterview' : `${baseKey}Interview`;
+  const trainingKey = baseKey === 'regular' ? 'minTraining' : `${baseKey}Training`;
+
+  patch[interviewKey] = interview ?? split.interview;
+  patch[trainingKey] = training ?? split.training;
 }
 
 function updateQuotaSettings(tierKey, next) {
@@ -191,24 +312,37 @@ function updateQuotaSettings(tierKey, next) {
   if (!all[key]) return null;
 
   const current = all[key];
-  const patch = {
-    total: next.total ?? current.total,
-    minTraining: next.training ?? current.minTraining,
-    minInterview: next.interview ?? current.minInterview,
-  };
+  const patch = {};
 
-  if (current.mode === 'hosted') {
-    patch.total = next.hosting ?? next.total ?? current.total;
+  if (next.total != null) patch.total = Number(next.total);
+  if (next.hosting != null) patch.hostedTotal = Number(next.hosting);
+  if (next.cohost != null) patch.cohostTotal = Number(next.cohost);
+  if (next.overseer != null) patch.minOverseer = Number(next.overseer);
+  if (next.shiftMinutes != null) patch.shiftMinutes = Number(next.shiftMinutes);
+
+  const interview = next.interview != null ? Number(next.interview) : null;
+  const training = next.training != null ? Number(next.training) : null;
+
+  if (current.mode === 'regular') {
+    deriveAndApplyTypeSplits(patch, 'regular', patch.total ?? current.total, interview, training);
   }
 
-  if (current.mode === 'head_corporate_mixed') {
-    patch.hostedTotal = next.hosting ?? current.hostedTotal;
-    patch.hostedTraining = next.training ?? current.hostedTraining;
-    patch.hostedInterview = next.interview ?? current.hostedInterview;
+  if ((patch.hostedTotal != null || ['hosted', 'hosted_and_cohost', 'hosted_and_overseer'].includes(current.mode)) && (patch.hostedTotal ?? current.hostedTotal ?? 0) > 0) {
+    const split = splitRequirement(patch.hostedTotal ?? current.hostedTotal);
+    patch.hostedInterview = interview ?? split.interview;
+    patch.hostedTraining = training ?? split.training;
   }
 
-  if (current.mode === 'overseer_only') {
-    patch.minOverseer = next.total ?? current.minOverseer ?? current.total;
+  if ((patch.cohostTotal != null || ['cohost', 'hosted_and_cohost'].includes(current.mode)) && (patch.cohostTotal ?? current.cohostTotal ?? 0) > 0) {
+    const split = splitRequirement(patch.cohostTotal ?? current.cohostTotal);
+    patch.cohostInterview = interview ?? split.interview;
+    patch.cohostTraining = training ?? split.training;
+  }
+
+  if ((patch.minOverseer != null || ['overseer_only', 'hosted_and_overseer'].includes(current.mode)) && (patch.minOverseer ?? current.minOverseer ?? 0) > 0) {
+    const split = splitRequirement(patch.minOverseer ?? current.minOverseer);
+    patch.overseerInterview = interview ?? split.interview;
+    patch.overseerTraining = training ?? split.training;
   }
 
   return setQuota(key, patch);
@@ -217,6 +351,7 @@ function updateQuotaSettings(tierKey, next) {
 module.exports = {
   DATA_PATH,
   DEFAULTS,
+  splitRequirement,
   getAllQuotas,
   getQuota,
   setQuota,

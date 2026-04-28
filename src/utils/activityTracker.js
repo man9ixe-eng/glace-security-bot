@@ -150,18 +150,26 @@ function hasTeamRoleName(member, requiredKeywords) {
 function getQuotaConfig() {
   const fallback = {
     intern: {
-      label: 'Interns',
+      label: 'Intern',
       mode: 'regular',
       total: 2,
       minInterview: 1,
       minTraining: 1,
+      hostedTotal: 0,
+      cohostTotal: 0,
+      minOverseer: 0,
+      shiftMinutes: 0,
     },
     management: {
       label: 'Management',
       mode: 'regular',
       total: 3,
-      minInterview: 0,
-      minTraining: 0,
+      minInterview: 1,
+      minTraining: 1,
+      hostedTotal: 0,
+      cohostTotal: 0,
+      minOverseer: 0,
+      shiftMinutes: 0,
     },
     senior_management: {
       label: 'Senior Management',
@@ -169,42 +177,83 @@ function getQuotaConfig() {
       total: 4,
       minInterview: 2,
       minTraining: 2,
+      hostedTotal: 0,
+      cohostTotal: 0,
+      minOverseer: 0,
+      shiftMinutes: 0,
     },
     corporate_intern: {
-      label: 'Corporate Interns',
+      label: 'Corporate Intern',
       mode: 'cohost',
       total: 2,
-      minInterview: 1,
-      minTraining: 1,
+      minInterview: 0,
+      minTraining: 0,
+      hostedTotal: 0,
+      cohostTotal: 2,
+      cohostInterview: 1,
+      cohostTraining: 1,
+      minOverseer: 0,
+      shiftMinutes: 0,
     },
     junior_corporate: {
-      label: 'Junior Corporate+',
-      mode: 'hosted',
-      total: 2,
-      minInterview: 1,
-      minTraining: 1,
-    },
-    head_corporate: {
-      label: 'Head Corporate+',
-      mode: 'head_corporate_mixed',
-      total: 3,
+      label: 'Corporate',
+      mode: 'hosted_and_cohost',
+      total: 0,
+      minInterview: 0,
+      minTraining: 0,
       hostedTotal: 2,
       hostedInterview: 1,
       hostedTraining: 1,
-      minOverseer: 1,
+      cohostTotal: 2,
+      cohostInterview: 1,
+      cohostTraining: 1,
+      minOverseer: 0,
+      shiftMinutes: 0,
+    },
+    head_corporate: {
+      label: 'Head Corporate',
+      mode: 'hosted_and_cohost',
+      total: 0,
+      minInterview: 0,
+      minTraining: 0,
+      hostedTotal: 2,
+      hostedInterview: 1,
+      hostedTraining: 1,
+      cohostTotal: 2,
+      cohostInterview: 1,
+      cohostTraining: 1,
+      minOverseer: 0,
+      shiftMinutes: 0,
     },
     corporate_board: {
       label: 'Corporate Board',
-      mode: 'overseer_only',
-      total: 3,
-      minOverseer: 3,
-    },
-    presidential: {
-      label: 'Presidentials',
-      mode: 'combined_any',
-      total: 1,
+      mode: 'hosted_and_overseer',
+      total: 0,
       minInterview: 0,
       minTraining: 0,
+      hostedTotal: 2,
+      hostedInterview: 1,
+      hostedTraining: 1,
+      cohostTotal: 0,
+      minOverseer: 2,
+      overseerInterview: 1,
+      overseerTraining: 1,
+      shiftMinutes: 0,
+    },
+    presidential: {
+      label: 'Presidential',
+      mode: 'hosted_and_overseer',
+      total: 0,
+      minInterview: 0,
+      minTraining: 0,
+      hostedTotal: 1,
+      hostedInterview: 0,
+      hostedTraining: 0,
+      cohostTotal: 0,
+      minOverseer: 1,
+      overseerInterview: 0,
+      overseerTraining: 0,
+      shiftMinutes: 0,
     },
   };
 
@@ -221,46 +270,32 @@ function getQuotaConfig() {
   const juniorCorporate = {
     ...fallback.junior_corporate,
     ...(stored.junior_corporate || stored.corporate || {}),
-    mode: 'hosted',
-  };
-
-  const corporateBoardStored = stored.corporate_board || {};
-  const corporateBoard = {
-    ...fallback.corporate_board,
-    ...corporateBoardStored,
-    mode: 'overseer_only',
-    minOverseer:
-      corporateBoardStored.minOverseer ??
-      corporateBoardStored.overseerTotal ??
-      corporateBoardStored.total ??
-      fallback.corporate_board.minOverseer,
+    label: fallback.junior_corporate.label,
+    mode: 'hosted_and_cohost',
   };
 
   return {
-    intern: merge('intern'),
-    management: merge('management'),
-    senior_management: merge('senior_management'),
-    corporate_intern: merge('corporate_intern'),
+    intern: { ...merge('intern'), mode: 'regular' },
+    management: { ...merge('management'), mode: 'regular' },
+    senior_management: { ...merge('senior_management'), mode: 'regular' },
+    corporate_intern: { ...merge('corporate_intern'), mode: 'cohost' },
     junior_corporate: juniorCorporate,
-    head_corporate: merge('head_corporate'),
-    corporate_board: corporateBoard,
-    presidential: {
-      ...merge('presidential'),
-      mode: 'combined_any',
-    },
+    head_corporate: { ...merge('head_corporate'), mode: 'hosted_and_cohost' },
+    corporate_board: { ...merge('corporate_board'), mode: 'hosted_and_overseer' },
+    presidential: { ...merge('presidential'), mode: 'hosted_and_overseer' },
   };
 }
 
 function buildRoleDisplayConfig() {
   return {
-    intern: ['interviewer', 'trainer', 'spectator'],
-    management: ['supervisor', 'interviewer', 'trainer', 'spectator'],
-    senior_management: ['supervisor', 'interviewer', 'trainer', 'spectator'],
-    corporate_intern: ['cohost', 'supervisor', 'interviewer', 'trainer', 'spectator'],
-    junior_corporate: ['host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'spectator'],
-    head_corporate: ['overseer', 'host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'spectator'],
-    corporate_board: ['overseer', 'host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'spectator'],
-    presidential: ['overseer', 'host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'spectator'],
+    intern: ['interviewer', 'trainer', 'helper', 'spectator'],
+    management: ['supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
+    senior_management: ['supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
+    corporate_intern: ['cohost', 'supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
+    junior_corporate: ['host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
+    head_corporate: ['overseer', 'host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
+    corporate_board: ['overseer', 'host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
+    presidential: ['overseer', 'host', 'cohost', 'supervisor', 'interviewer', 'trainer', 'helper', 'spectator'],
   };
 }
 
@@ -318,7 +353,7 @@ function getQuotaProfileForMember(member) {
       nameCheck: () =>
         hasTeamRoleName(member, ['junior', 'corporate']) ||
         hasTeamRoleName(member, ['senior', 'corporate']) ||
-        hasTeamRoleName(member, ['corporate']),
+        (hasTeamRoleName(member, ['corporate']) && !hasTeamRoleName(member, ['corporate', 'intern'])),
       quota: quotas.junior_corporate,
       isCorporatePlus: true,
       isCorporateInternPlus: true,
@@ -696,6 +731,7 @@ function mapFieldNameToRoleKey(fieldName) {
   if (name.includes('overseer')) return 'overseer';
   if (name.includes('interviewer')) return 'interviewer';
   if (name.includes('trainer')) return 'trainer';
+  if (name.includes('helper')) return 'helper';
   if (name.includes('attendees')) return 'attendee';
   if (name.includes('spectator')) return 'spectator';
   if (name.includes('supervisor')) return 'supervisor';
@@ -833,6 +869,7 @@ function emptyRoleBuckets() {
     overseer: 0,
     supervisor: 0,
     trainer: 0,
+    helper: 0,
     interviewer: 0,
     spectator: 0,
     attendee: 0,
@@ -948,79 +985,90 @@ function getQuotaSource(summary, quotaProfile) {
   const quota = quotaProfile?.quota || {};
   const mode = quota.mode;
 
+  const host = getRoleSessionCounts(summary.hosted, 'host');
+  const cohost = getRoleSessionCounts(summary.support, 'cohost');
+  const overseer = getRoleSessionCounts(summary.support, 'overseer');
+  const interviewer = getRoleSessionCounts(summary.support, 'interviewer');
+  const trainer = getRoleSessionCounts(summary.support, 'trainer');
+  const helper = getRoleSessionCounts(summary.support, 'helper');
+  const supervisor = getRoleSessionCounts(summary.support, 'supervisor');
+  const attendee = getRoleSessionCounts(summary.support, 'attendee');
+
+  const countedRegular = addCounts(interviewer, trainer, helper, supervisor);
+  const countedAnySupport = addCounts(...Object.entries(summary.support.rolesBySession || {})
+    .filter(([roleKey]) => roleKey !== 'spectator')
+    .map(([, counts]) => counts));
+
+  const common = {
+    hostedTotal: host.total,
+    hostedInterview: host.interview,
+    hostedTraining: host.training,
+    hostedShift: host.shift,
+    cohostTotal: cohost.total,
+    cohostInterview: cohost.interview,
+    cohostTraining: cohost.training,
+    cohostShift: cohost.shift,
+    overseerTotal: overseer.total,
+    overseerInterview: overseer.interview,
+    overseerTraining: overseer.training,
+    overseerShift: overseer.shift,
+    interviewerTotal: interviewer.total,
+    interviewerInterview: interviewer.interview,
+    trainerTotal: trainer.total,
+    trainerTraining: trainer.training,
+    helperTotal: helper.total,
+    helperTraining: helper.training,
+    supervisorTotal: supervisor.total,
+    supervisorTraining: supervisor.training,
+    attendeeShift: attendee.shift,
+    shiftMinutes: 0,
+  };
+
   if (mode === 'regular') {
-    const interviewer = getRoleSessionCounts(summary.support, 'interviewer');
-    const trainer = getRoleSessionCounts(summary.support, 'trainer');
-    const supervisor = getRoleSessionCounts(summary.support, 'supervisor');
-    const counted = addCounts(interviewer, trainer, supervisor);
-    return makeQuotaSource(counted.total, counted.interview, counted.training, counted.shift);
+    return makeQuotaSource(
+      countedRegular.total,
+      countedRegular.interview,
+      countedRegular.training,
+      countedRegular.shift,
+      common,
+    );
   }
 
   if (mode === 'cohost') {
-    const cohost = getRoleSessionCounts(summary.support, 'cohost');
-    return makeQuotaSource(cohost.total, cohost.interview, cohost.training, cohost.shift);
+    return makeQuotaSource(cohost.total, cohost.interview, cohost.training, cohost.shift, common);
   }
 
   if (mode === 'hosted') {
-    return makeQuotaSource(
-      summary.hosted.total,
-      summary.hosted.interview,
-      summary.hosted.training,
-      summary.hosted.shift,
-    );
+    return makeQuotaSource(host.total, host.interview, host.training, host.shift, common);
   }
 
   if (mode === 'head_corporate_mixed') {
-    const overseer = getRoleSessionCounts(summary.support, 'overseer');
-    return makeQuotaSource(
-      summary.hosted.total + overseer.total,
-      summary.hosted.interview,
-      summary.hosted.training,
-      summary.hosted.shift,
-      {
-        hostedTotal: summary.hosted.total,
-        hostedInterview: summary.hosted.interview,
-        hostedTraining: summary.hosted.training,
-        hostedShift: summary.hosted.shift,
-        overseerTotal: overseer.total,
-        overseerInterview: overseer.interview,
-        overseerTraining: overseer.training,
-        overseerShift: overseer.shift,
-      },
-    );
-  }
-
-  if (mode === 'overseer_only') {
-    const overseer = getRoleSessionCounts(summary.support, 'overseer');
-    return makeQuotaSource(overseer.total, overseer.interview, overseer.training, overseer.shift, {
-      overseerTotal: overseer.total,
-      overseerInterview: overseer.interview,
-      overseerTraining: overseer.training,
-      overseerShift: overseer.shift,
+    return makeQuotaSource(host.total + overseer.total, host.interview, host.training, host.shift, {
+      ...common,
+      total: host.total + overseer.total,
     });
   }
 
-  if (mode === 'combined_any') {
-    const countedSupport = Object.entries(summary.support.rolesBySession || {})
-      .filter(([roleKey]) => roleKey !== 'spectator')
-      .map(([, counts]) => counts);
-
-    const supportCounts = addCounts(...countedSupport);
-
-    return makeQuotaSource(
-      summary.hosted.total + supportCounts.total,
-      summary.hosted.interview + supportCounts.interview,
-      summary.hosted.training + supportCounts.training,
-      summary.hosted.shift + supportCounts.shift,
-    );
+  if (mode === 'overseer_only') {
+    return makeQuotaSource(overseer.total, overseer.interview, overseer.training, overseer.shift, common);
   }
 
-  return makeQuotaSource(
-    summary.support.total,
-    summary.support.interview,
-    summary.support.training,
-    summary.support.shift,
-  );
+  if (mode === 'hosted_and_cohost') {
+    const counted = addCounts(host, cohost);
+    return makeQuotaSource(counted.total, counted.interview, counted.training, counted.shift, common);
+  }
+
+  if (mode === 'hosted_and_overseer') {
+    const counted = addCounts(host, overseer);
+    return makeQuotaSource(counted.total, counted.interview, counted.training, counted.shift, common);
+  }
+
+  if (mode === 'combined_any') {
+    const counted = addCounts(host, countedAnySupport);
+    return makeQuotaSource(counted.total, counted.interview, counted.training, counted.shift, common);
+  }
+
+  return makeQuotaSource(countedRegular.total, countedRegular.interview, countedRegular.training, countedRegular.shift, common);
 }
 
 function hasMetQuota(summary, quotaProfile) {
@@ -1029,16 +1077,64 @@ function hasMetQuota(summary, quotaProfile) {
   const quota = quotaProfile.quota;
   const source = getQuotaSource(summary, quotaProfile);
 
+  const meets = (actual, required) => Number(actual || 0) >= Number(required || 0);
+  const checkSplit = (prefix, totalKey, interviewKey, trainingKey) => {
+    const totalRequired = Number(quota[totalKey] || 0);
+    const interviewRequired = Number(quota[interviewKey] || 0);
+    const trainingRequired = Number(quota[trainingKey] || 0);
+
+    if (totalRequired > 0 && !meets(source[prefix + 'Total'], totalRequired)) return false;
+    if (interviewRequired > 0 && !meets(source[prefix + 'Interview'], interviewRequired)) return false;
+    if (trainingRequired > 0 && !meets(source[prefix + 'Training'], trainingRequired)) return false;
+    return true;
+  };
+
+  if (quota.mode === 'regular') {
+    if (!meets(source.total, quota.total)) return false;
+    if ((quota.minInterview || 0) > 0 && !meets(source.interview, quota.minInterview)) return false;
+    if ((quota.minTraining || 0) > 0 && !meets(source.training, quota.minTraining)) return false;
+    if ((quota.shiftMinutes || 0) > 0 && !meets(source.shiftMinutes, quota.shiftMinutes)) return false;
+    return true;
+  }
+
+  if (quota.mode === 'cohost') {
+    if (!checkSplit('cohost', 'cohostTotal', 'cohostInterview', 'cohostTraining')) return false;
+    if ((quota.shiftMinutes || 0) > 0 && !meets(source.shiftMinutes, quota.shiftMinutes)) return false;
+    return true;
+  }
+
+  if (quota.mode === 'hosted') {
+    const totalRequired = quota.hostedTotal ?? quota.total ?? 0;
+    const interviewRequired = quota.hostedInterview ?? quota.minInterview ?? 0;
+    const trainingRequired = quota.hostedTraining ?? quota.minTraining ?? 0;
+    if (totalRequired > 0 && !meets(source.hostedTotal, totalRequired)) return false;
+    if (interviewRequired > 0 && !meets(source.hostedInterview, interviewRequired)) return false;
+    if (trainingRequired > 0 && !meets(source.hostedTraining, trainingRequired)) return false;
+    return true;
+  }
+
   if (quota.mode === 'head_corporate_mixed') {
-    if ((source.hostedTotal || 0) < (quota.hostedTotal || 0)) return false;
-    if ((source.hostedInterview || 0) < (quota.hostedInterview || 0)) return false;
-    if ((source.hostedTraining || 0) < (quota.hostedTraining || 0)) return false;
-    if ((source.overseerTotal || 0) < (quota.minOverseer || 0)) return false;
+    if (!checkSplit('hosted', 'hostedTotal', 'hostedInterview', 'hostedTraining')) return false;
+    if (!meets(source.overseerTotal, quota.minOverseer)) return false;
     return true;
   }
 
   if (quota.mode === 'overseer_only') {
-    if ((source.overseerTotal || 0) < (quota.minOverseer || quota.total || 0)) return false;
+    if (!checkSplit('overseer', 'minOverseer', 'overseerInterview', 'overseerTraining')) return false;
+    return true;
+  }
+
+  if (quota.mode === 'hosted_and_cohost') {
+    if (!checkSplit('hosted', 'hostedTotal', 'hostedInterview', 'hostedTraining')) return false;
+    if (!checkSplit('cohost', 'cohostTotal', 'cohostInterview', 'cohostTraining')) return false;
+    if ((quota.shiftMinutes || 0) > 0 && !meets(source.shiftMinutes, quota.shiftMinutes)) return false;
+    return true;
+  }
+
+  if (quota.mode === 'hosted_and_overseer') {
+    if (!checkSplit('hosted', 'hostedTotal', 'hostedInterview', 'hostedTraining')) return false;
+    if (!checkSplit('overseer', 'minOverseer', 'overseerInterview', 'overseerTraining')) return false;
+    if ((quota.shiftMinutes || 0) > 0 && !meets(source.shiftMinutes, quota.shiftMinutes)) return false;
     return true;
   }
 

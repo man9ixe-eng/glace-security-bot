@@ -1,69 +1,123 @@
 {
   "intern": {
-    "label": "Interns",
+    "label": "Intern",
     "mode": "regular",
     "total": 2,
     "minInterview": 1,
-    "minTraining": 1
+    "minTraining": 1,
+    "hostedTotal": 0,
+    "cohostTotal": 0,
+    "minOverseer": 0,
+    "shiftMinutes": 0
   },
   "management": {
     "label": "Management",
     "mode": "regular",
     "total": 3,
-    "minInterview": 0,
-    "minTraining": 0
+    "minInterview": 1,
+    "minTraining": 1,
+    "hostedTotal": 0,
+    "cohostTotal": 0,
+    "minOverseer": 0,
+    "shiftMinutes": 0
   },
   "senior_management": {
     "label": "Senior Management",
     "mode": "regular",
     "total": 4,
     "minInterview": 2,
-    "minTraining": 2
+    "minTraining": 2,
+    "hostedTotal": 0,
+    "cohostTotal": 0,
+    "minOverseer": 0,
+    "shiftMinutes": 0
   },
   "corporate_intern": {
-    "label": "Corporate Interns",
+    "label": "Corporate Intern",
     "mode": "cohost",
     "total": 2,
-    "minInterview": 1,
-    "minTraining": 1
+    "minInterview": 0,
+    "minTraining": 0,
+    "hostedTotal": 0,
+    "cohostTotal": 2,
+    "cohostInterview": 1,
+    "cohostTraining": 1,
+    "minOverseer": 0,
+    "shiftMinutes": 0
   },
   "junior_corporate": {
-    "label": "Junior Corporate+",
-    "mode": "hosted",
-    "total": 2,
-    "minInterview": 1,
-    "minTraining": 1
-  },
-  "head_corporate": {
-    "label": "Head Corporate+",
-    "mode": "head_corporate_mixed",
-    "total": 2,
+    "label": "Corporate",
+    "mode": "hosted_and_cohost",
+    "total": 0,
+    "minInterview": 0,
+    "minTraining": 0,
     "hostedTotal": 2,
     "hostedInterview": 1,
     "hostedTraining": 1,
-    "minOverseer": 1
+    "cohostTotal": 2,
+    "cohostInterview": 1,
+    "cohostTraining": 1,
+    "minOverseer": 0,
+    "shiftMinutes": 0
+  },
+  "head_corporate": {
+    "label": "Head Corporate",
+    "mode": "hosted_and_cohost",
+    "total": 0,
+    "minInterview": 0,
+    "minTraining": 0,
+    "hostedTotal": 2,
+    "hostedInterview": 1,
+    "hostedTraining": 1,
+    "cohostTotal": 2,
+    "cohostInterview": 1,
+    "cohostTraining": 1,
+    "minOverseer": 0,
+    "shiftMinutes": 0
   },
   "corporate_board": {
     "label": "Corporate Board",
-    "mode": "head_corporate_mixed",
-    "total": 2,
+    "mode": "hosted_and_overseer",
+    "total": 0,
+    "minInterview": 0,
+    "minTraining": 0,
     "hostedTotal": 2,
     "hostedInterview": 1,
     "hostedTraining": 1,
-    "minOverseer": 2
+    "cohostTotal": 0,
+    "minOverseer": 2,
+    "overseerInterview": 1,
+    "overseerTraining": 1,
+    "shiftMinutes": 0
   },
   "presidential": {
-    "label": "Presidentials",
-    "mode": "combined_any",
-    "total": 1,
+    "label": "Presidential",
+    "mode": "hosted_and_overseer",
+    "total": 0,
     "minInterview": 0,
-    "minTraining": 0
+    "minTraining": 0,
+    "hostedTotal": 1,
+    "hostedInterview": 0,
+    "hostedTraining": 0,
+    "cohostTotal": 0,
+    "minOverseer": 1,
+    "overseerInterview": 0,
+    "overseerTraining": 0,
+    "shiftMinutes": 0
   },
   "corporate": {
     "label": "Corporate",
-    "mode": "hosted",
-    "total": 2,
-    "minInterview": 1,
-    "minTraining": 1
+    "mode": "hosted_and_cohost",
+    "total": 0,
+    "minInterview": 0,
+    "minTraining": 0,
+    "hostedTotal": 2,
+    "hostedInterview": 1,
+    "hostedTraining": 1,
+    "cohostTotal": 2,
+    "cohostInterview": 1,
+    "cohostTraining": 1,
+    "minOverseer": 0,
+    "shiftMinutes": 0
   }
 }

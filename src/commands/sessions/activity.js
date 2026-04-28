@@ -40,25 +40,6 @@ function getTeamEmoji(profile) {
   return TEAM_EMOJIS[profile?.key] || '🔹';
 }
 
-function getModeLabel(profile) {
-  switch (profile?.quota?.mode) {
-    case 'regular':
-      return 'Support';
-    case 'cohost':
-      return 'Co-Host';
-    case 'hosted':
-      return 'Host';
-    case 'head_corporate_mixed':
-      return 'Host + Overseer';
-    case 'overseer_only':
-      return 'Overseer';
-    case 'combined_any':
-      return 'Any Counted Session';
-    default:
-      return 'Support';
-  }
-}
-
 function getTeamColor(profile, metQuota) {
   const colors = {
     presidential: metQuota ? 0xFFD700 : 0xC9A227,
@@ -75,224 +56,213 @@ function getTeamColor(profile, metQuota) {
 }
 
 function box(lines) {
-  return `╭────────────────────────╮\n${lines.map((l) => `│ ${l}`).join('\n')}\n╰────────────────────────╯`;
+  return `╭────────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────────╯`;
 }
 
 function buildProgressBar(current, required, size = 5) {
   if (!required || required <= 0) return '░'.repeat(size);
-  const ratio = Math.max(0, Math.min(1, current / required));
+  const ratio = Math.max(0, Math.min(1, Number(current || 0) / Number(required || 0)));
   const filled = Math.round(ratio * size);
   return `${'█'.repeat(filled)}${'░'.repeat(size - filled)}`;
 }
 
-function buildDetailedQuota(profile) {
+function cleanNumber(value) {
+  return Number(value || 0);
+}
+
+function roleCounts(summary, roleKey) {
+  if (roleKey === 'host') {
+    return summary.hosted.rolesBySession?.host || { total: 0, interview: 0, training: 0, shift: 0 };
+  }
+
+  return summary.support.rolesBySession?.[roleKey] || { total: 0, interview: 0, training: 0, shift: 0 };
+}
+
+function countForRoleType(summary, roleKey, sessionType) {
+  return cleanNumber(roleCounts(summary, roleKey)[sessionType]);
+}
+
+function shouldShowRole(profile, roleKey) {
+  return (profile.visibleRoleKeys || []).includes(roleKey);
+}
+
+function buildQuotaLines(profile) {
   const q = profile.quota || {};
-  const lines = [`${profile.label}: ${q.total || 0} Sessions`, ''];
+  const lines = [`${getTeamEmoji(profile)} ${profile.label}`];
 
-  if (profile.key === 'intern') {
-    lines.push(`${TYPE_DOTS.interview} 1 Interview`);
-    lines.push(`${TYPE_DOTS.training} 1 Training`);
-    lines.push('Spectator does not count.');
-    return lines;
-  }
+  if (q.total > 0 && q.mode === 'regular') lines.push(`- ${q.total} Total Sessions`);
+  if (q.hostedTotal > 0) lines.push(`- ${q.hostedTotal} Hosted Sessions`);
+  if (q.cohostTotal > 0) lines.push(`- ${q.cohostTotal} Co-Host Sessions`);
+  if (q.minOverseer > 0) lines.push(`- ${q.minOverseer} Overseer Sessions`);
+  if (q.shiftMinutes > 0) lines.push(`- ${q.shiftMinutes} Shift Minutes`);
 
-  if (profile.key === 'management') {
-    lines.push('3 Support Sessions');
-    lines.push('Balanced mix recommended.');
-    lines.push('Spectator does not count.');
-    return lines;
-  }
-
-  if (profile.key === 'senior_management') {
-    lines.push(`${TYPE_DOTS.interview} 2 Interviews`);
-    lines.push(`${TYPE_DOTS.training} 2 Trainings`);
-    lines.push('Spectator does not count.');
-    return lines;
-  }
-
-  if (profile.key === 'corporate_intern') {
-    lines.push('2 Co-Hosted Sessions');
-    lines.push(`${TYPE_DOTS.interview} 1 Co-Hosted Interview`);
-    lines.push(`${TYPE_DOTS.training} 1 Co-Hosted Training`);
-    lines.push('Other roles are extra only.');
-    return lines;
-  }
-
-  if (profile.key === 'junior_corporate') {
-    lines.push('2 Hosted Sessions');
-    lines.push(`${TYPE_DOTS.interview} 1 Hosted Interview`);
-    lines.push(`${TYPE_DOTS.training} 1 Hosted Training`);
-    lines.push('Co-Host does not count toward quota.');
-    return lines;
-  }
-
-  if (profile.key === 'head_corporate') {
-    lines.push('1 Overseered Session');
-    lines.push('2 Hosted Sessions');
-    lines.push(`${TYPE_DOTS.interview} 1 Hosted Interview`);
-    lines.push(`${TYPE_DOTS.training} 1 Hosted Training`);
-    return lines;
-  }
-
-  if (profile.key === 'corporate_board') {
-    lines.push(`${getTeamEmoji(profile)} Overseer-based quota`);
-    lines.push('Board Of Director + Presidential Intern');
-    lines.push('are tracked here.');
-    return lines;
-  }
-
-  if (profile.key === 'presidential') {
-    lines.push('1 Session Weekly');
-    lines.push('Any counted session can satisfy quota.');
-    return lines;
-  }
+  if (lines.length === 1) lines.push('- No quota set');
 
   return lines;
 }
 
-function buildQuotaProgressLines(source, quota, profileKey) {
-  if (profileKey === 'head_corporate') {
-    return [
-      `Hosted: ${buildProgressBar(source.hostedTotal || 0, quota.hostedTotal || 0)} ${source.hostedTotal || 0}/${quota.hostedTotal || 0}`,
-      `${TYPE_DOTS.interview} Hosted Interviews: ${buildProgressBar(source.hostedInterview || 0, quota.hostedInterview || 0)} ${source.hostedInterview || 0}/${quota.hostedInterview || 0}`,
-      `${TYPE_DOTS.training} Hosted Trainings: ${buildProgressBar(source.hostedTraining || 0, quota.hostedTraining || 0)} ${source.hostedTraining || 0}/${quota.hostedTraining || 0}`,
-      `Overseers: ${buildProgressBar(source.overseerTotal || 0, quota.minOverseer || 0)} ${source.overseerTotal || 0}/${quota.minOverseer || 0}`,
-    ];
-  }
+function sectionRoleLines(summary, profile, section) {
+  const roleOrder = {
+    interview: ['host', 'cohost', 'overseer', 'interviewer'],
+    training: ['host', 'cohost', 'overseer', 'supervisor', 'trainer', 'helper'],
+    shift: ['host', 'cohost', 'overseer', 'attendee'],
+  };
 
-  if (profileKey === 'corporate_board') {
-    const required = quota.minOverseer || quota.total || 0;
-    return [
-      `Overseers: ${buildProgressBar(source.overseerTotal || 0, required)} ${source.overseerTotal || 0}/${required}`,
-    ];
-  }
-
-  const totalRequired = quota.total || 0;
-  const interviewRequired = quota.minInterview || 0;
-  const trainingRequired = quota.minTraining || 0;
-
-  const lines = [
-    `Progress: ${buildProgressBar(source.total || 0, totalRequired)} ${source.total || 0}/${totalRequired}`,
-  ];
-
-  if (interviewRequired > 0) {
-    lines.push(
-      `${TYPE_DOTS.interview} Interviews: ${buildProgressBar(source.interview || 0, interviewRequired)} ${source.interview || 0}/${interviewRequired}`,
-    );
-  }
-
-  if (trainingRequired > 0) {
-    lines.push(
-      `${TYPE_DOTS.training} Trainings: ${buildProgressBar(source.training || 0, trainingRequired)} ${source.training || 0}/${trainingRequired}`,
-    );
-  }
-
-  return lines;
-}
-
-function formatRoleLabel(roleKey) {
-  const map = {
+  const labels = {
     host: 'Host',
     cohost: 'Co-Host',
     overseer: 'Overseer',
     supervisor: 'Supervisor',
     trainer: 'Trainer',
     interviewer: 'Interviewer',
-    spectator: 'Spectator',
+    helper: 'Helper',
     attendee: 'Attendee',
   };
-  return map[roleKey] || roleKey;
+
+  return (roleOrder[section] || [])
+    .filter((roleKey) => shouldShowRole(profile, roleKey))
+    .map((roleKey) => `- ${labels[roleKey]}: ${countForRoleType(summary, roleKey, section)}`);
 }
 
-function emptyCounts() {
-  return { total: 0, interview: 0, training: 0, shift: 0 };
+function addProgressGroup(lines, title, progressLines) {
+  const usable = progressLines.filter(Boolean);
+  if (!usable.length) return;
+  lines.push(`${title}:`);
+  for (const line of usable) lines.push(line);
 }
 
-function getRoleCountsForDisplay(summary, roleKey) {
-  if (roleKey === 'host') {
-    return summary.hosted.rolesBySession?.host || emptyCounts();
+function progressLine(label, current, required) {
+  if (!required || required <= 0) return null;
+  return `${label} ${buildProgressBar(current, required)} ${cleanNumber(current)}/${cleanNumber(required)}`;
+}
+
+function buildRoleQuotaProgressLines(summary, source, profile) {
+  const q = profile.quota || {};
+  const lines = [];
+
+  if (q.mode === 'regular') {
+    if (q.minInterview > 0) {
+      addProgressGroup(lines, 'Interviewer', [
+        progressLine('Interview', countForRoleType(summary, 'interviewer', 'interview'), q.minInterview),
+      ]);
+    }
+
+    if (q.minTraining > 0) {
+      addProgressGroup(lines, 'Trainer', [
+        progressLine('Training', cleanNumber(source.training), q.minTraining),
+      ]);
+    }
+
+    if ((q.total || 0) > (q.minInterview || 0) + (q.minTraining || 0)) {
+      lines.push(progressLine('Total Sessions', source.total, q.total));
+    }
   }
 
-  return summary.support.rolesBySession?.[roleKey] || emptyCounts();
-}
-
-function formatTypeMix(counts) {
-  const parts = [];
-
-  if (counts.interview) parts.push(`${TYPE_DOTS.interview} ${counts.interview}`);
-  if (counts.training) parts.push(`${TYPE_DOTS.training} ${counts.training}`);
-  if (counts.shift) parts.push(`${TYPE_DOTS.shift} ${counts.shift}`);
-
-  return parts.length ? parts.join(' • ') : 'No interview/training/shift split';
-}
-
-function formatTotalMix(counts) {
-  return `${counts.total || 0} total • ${TYPE_DOTS.interview} ${counts.interview || 0} • ${TYPE_DOTS.training} ${counts.training || 0} • ${TYPE_DOTS.shift} ${counts.shift || 0}`;
-}
-
-function buildRoleBreakdown(summary, visibleRoleKeys) {
-  const lines = visibleRoleKeys
-    .map((roleKey) => {
-      const counts = getRoleCountsForDisplay(summary, roleKey);
-      if (!counts.total) return null;
-
-      return `**${formatRoleLabel(roleKey)}:** ${counts.total} total • ${formatTypeMix(counts)}`;
-    })
-    .filter(Boolean);
-
-  return lines.length ? lines.join('\n') : 'No tracked role activity for this week.';
-}
-
-function buildMainSessionLines(summary, source, quotaProfile) {
-  if (
-    quotaProfile.key === 'junior_corporate' ||
-    quotaProfile.key === 'head_corporate' ||
-    quotaProfile.key === 'presidential'
-  ) {
-    return [
-      `${TYPE_DOTS.interview} Hosted Interviews: ${summary.hosted.interview}`,
-      `${TYPE_DOTS.training} Hosted Trainings: ${summary.hosted.training}`,
-      `${TYPE_DOTS.shift} Hosted Shifts: ${summary.hosted.shift || 0}`,
-      `Total Hosted: ${summary.hosted.total}`,
-    ];
+  if ((q.hostedTotal || 0) > 0) {
+    const hostedProgress = [];
+    if ((q.hostedInterview || 0) > 0) {
+      hostedProgress.push(progressLine('Interview', source.hostedInterview, q.hostedInterview));
+    }
+    if ((q.hostedTraining || 0) > 0) {
+      hostedProgress.push(progressLine('Training', source.hostedTraining, q.hostedTraining));
+    }
+    if (!hostedProgress.length) {
+      hostedProgress.push(progressLine('Session', source.hostedTotal, q.hostedTotal));
+    } else if ((q.hostedTotal || 0) > (q.hostedInterview || 0) + (q.hostedTraining || 0)) {
+      hostedProgress.push(progressLine('Total Hosted', source.hostedTotal, q.hostedTotal));
+    }
+    addProgressGroup(lines, 'Host', hostedProgress);
   }
 
-  if (quotaProfile.key === 'corporate_board') {
-    return [
-      `${TYPE_DOTS.interview} Overseered Interviews: ${source.overseerInterview || 0}`,
-      `${TYPE_DOTS.training} Overseered Trainings: ${source.overseerTraining || 0}`,
-      `${TYPE_DOTS.shift} Overseered Shifts: ${source.overseerShift || 0}`,
-      `Total Overseered: ${source.overseerTotal || 0}`,
-    ];
+  if ((q.cohostTotal || 0) > 0) {
+    const cohostProgress = [];
+    if ((q.cohostInterview || 0) > 0) {
+      cohostProgress.push(progressLine('Interview', source.cohostInterview, q.cohostInterview));
+    }
+    if ((q.cohostTraining || 0) > 0) {
+      cohostProgress.push(progressLine('Training', source.cohostTraining, q.cohostTraining));
+    }
+    if (!cohostProgress.length) {
+      cohostProgress.push(progressLine('Session', source.cohostTotal, q.cohostTotal));
+    } else if ((q.cohostTotal || 0) > (q.cohostInterview || 0) + (q.cohostTraining || 0)) {
+      cohostProgress.push(progressLine('Total Co-Host', source.cohostTotal, q.cohostTotal));
+    }
+    addProgressGroup(lines, 'Co-Host', cohostProgress);
   }
 
-  if (quotaProfile.key === 'corporate_intern') {
-    return [
-      `${TYPE_DOTS.interview} Co-Hosted Interviews: ${source.interview || 0}`,
-      `${TYPE_DOTS.training} Co-Hosted Trainings: ${source.training || 0}`,
-      `${TYPE_DOTS.shift} Co-Hosted Shifts: ${source.shift || 0}`,
-      `Total Co-Hosted: ${source.total || 0}`,
-    ];
+  if ((q.minOverseer || 0) > 0) {
+    const overseerProgress = [];
+    if ((q.overseerInterview || 0) > 0) {
+      overseerProgress.push(progressLine('Interview', source.overseerInterview, q.overseerInterview));
+    }
+    if ((q.overseerTraining || 0) > 0) {
+      overseerProgress.push(progressLine('Training', source.overseerTraining, q.overseerTraining));
+    }
+    if (!overseerProgress.length) {
+      overseerProgress.push(progressLine('Session', source.overseerTotal, q.minOverseer));
+    } else if ((q.minOverseer || 0) > (q.overseerInterview || 0) + (q.overseerTraining || 0)) {
+      overseerProgress.push(progressLine('Total Overseer', source.overseerTotal, q.minOverseer));
+    }
+    addProgressGroup(lines, 'Overseer', overseerProgress);
   }
 
-  return [
+  if ((q.shiftMinutes || 0) > 0) {
+    lines.push(progressLine('Shift Minutes:', source.shiftMinutes || 0, q.shiftMinutes));
+  }
+
+  return lines.filter(Boolean);
+}
+
+function buildWeekBox(range, summary, source, profile, met) {
+  const interviewLines = sectionRoleLines(summary, profile, 'interview');
+  const trainingLines = sectionRoleLines(summary, profile, 'training');
+  const shiftLines = sectionRoleLines(summary, profile, 'shift');
+  const progressLines = buildRoleQuotaProgressLines(summary, source, profile);
+
+  return box([
+    `📅 ${formatRangeLabel(range)}`,
+    '',
+    `${TYPE_DOTS.interview} Interviews`,
+    ...(interviewLines.length ? interviewLines : ['- None: 0']),
+    '',
+    `${TYPE_DOTS.training} Trainings`,
+    ...(trainingLines.length ? trainingLines : ['- None: 0']),
+    '',
+    `${TYPE_DOTS.shift} Shift Minutes: ${source.shiftMinutes || 0}`,
+    ...(shiftLines.length ? shiftLines : ['- None: 0']),
+    '',
+    ...(progressLines.length ? progressLines : ['No quota progress lines set.']),
+    '',
+    `Status: ${met ? '✅ Met' : '❌ Below'}`,
+  ]);
+}
+
+function buildOverviewBox(current, source) {
+  return box([
     `${TYPE_DOTS.interview} Interviews: ${source.interview || 0}`,
     `${TYPE_DOTS.training} Trainings: ${source.training || 0}`,
-    `${TYPE_DOTS.shift} Shifts: ${source.shift || 0}`,
-    `Total: ${source.total || 0}`,
-  ];
+    `Total Sessions: ${source.total || 0}`,
+    '',
+    `${TYPE_DOTS.shift} Shift Minutes: ${source.shiftMinutes || 0}`,
+    `Tracked Helped Sessions: ${current.support.total || 0}`,
+  ]);
 }
 
 function buildCoHostSection(current, last) {
-  const currentCounts = current.support.rolesBySession?.cohost || emptyCounts();
-  const lastCounts = last.support.rolesBySession?.cohost || emptyCounts();
+  const currentCounts = current.support.rolesBySession?.cohost || { total: 0, interview: 0, training: 0, shift: 0 };
+  const lastCounts = last.support.rolesBySession?.cohost || { total: 0, interview: 0, training: 0, shift: 0 };
 
-  return [
-    `Current Week: ${formatTotalMix(currentCounts)}`,
-    `Last Week: ${formatTotalMix(lastCounts)}`,
+  return box([
+    `Current Week: ${currentCounts.total || 0} total`,
+    `- ${TYPE_DOTS.interview} Interviews: ${currentCounts.interview || 0}`,
+    `- ${TYPE_DOTS.training} Trainings: ${currentCounts.training || 0}`,
+    `- ${TYPE_DOTS.shift} Shifts: ${currentCounts.shift || 0}`,
     '',
-    'Co-Host is shown for Corporate Intern+.',
-  ].join('\n');
+    `Last Week: ${lastCounts.total || 0} total`,
+    `- ${TYPE_DOTS.interview} Interviews: ${lastCounts.interview || 0}`,
+    `- ${TYPE_DOTS.training} Trainings: ${lastCounts.training || 0}`,
+    `- ${TYPE_DOTS.shift} Shifts: ${lastCounts.shift || 0}`,
+  ]);
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
@@ -308,11 +278,11 @@ async function buildActivityEmbed(interaction, targetMember) {
   const current = summarizeActivity(activity, currentRange);
   const last = summarizeActivity(activity, lastRange);
 
-  const met = hasMetQuota(current, quotaProfile);
-  const metLast = hasMetQuota(last, quotaProfile);
-
   const currentQuotaSource = getQuotaSource(current, quotaProfile);
   const lastQuotaSource = getQuotaSource(last, quotaProfile);
+
+  const met = hasMetQuota(current, quotaProfile);
+  const metLast = hasMetQuota(last, quotaProfile);
 
   const name =
     targetMember.displayName ||
@@ -322,76 +292,34 @@ async function buildActivityEmbed(interaction, targetMember) {
   const fields = [
     {
       name: '🏨 Quota',
-      value: box([
-        `${getTeamEmoji(quotaProfile)}  ${quotaProfile.label}`,
-        '',
-        `Mode: ${getModeLabel(quotaProfile)}`,
-        '',
-        ...buildDetailedQuota(quotaProfile),
-      ]),
+      value: box(buildQuotaLines(quotaProfile)),
     },
     {
       name: '📊 Current Week',
-      value: box([
-        `📅 ${formatRangeLabel(currentRange)}`,
-        '',
-        ...buildMainSessionLines(current, currentQuotaSource, quotaProfile),
-        '',
-        ...buildQuotaProgressLines(currentQuotaSource, quotaProfile.quota, quotaProfile.key),
-        '',
-        `Status: ${met ? '✅ Met' : '❌ Below'}`,
-      ]),
-      inline: true,
+      value: buildWeekBox(currentRange, current, currentQuotaSource, quotaProfile, met),
     },
     {
       name: '📁 Last Week',
-      value: box([
-        `📅 ${formatRangeLabel(lastRange)}`,
-        '',
-        ...buildMainSessionLines(last, lastQuotaSource, quotaProfile),
-        '',
-        ...buildQuotaProgressLines(lastQuotaSource, quotaProfile.quota, quotaProfile.key),
-        '',
-        `Status: ${metLast ? '✅ Met' : '❌ Below'}`,
-      ]),
-      inline: true,
+      value: buildWeekBox(lastRange, last, lastQuotaSource, quotaProfile, metLast),
     },
     {
-      name: '🏨 Helped Sessions',
-      value: box([
-        `${TYPE_DOTS.interview} Interviews: ${current.support.interview}`,
-        `${TYPE_DOTS.training} Trainings: ${current.support.training}`,
-        `${TYPE_DOTS.shift} Shifts: ${current.support.shift || 0}`,
-        `Total: ${current.support.total}`,
-      ]),
+      name: '🏨 Overview',
+      value: buildOverviewBox(current, currentQuotaSource),
     },
   ];
 
   if (CORPORATE_INTERN_PLUS_KEYS.has(quotaProfile.key)) {
-    fields.push({
+    fields.splice(3, 0, {
       name: '🤝 Co-Host Sessions',
       value: buildCoHostSection(current, last),
     });
   }
 
-  fields.push(
-    {
-      name: '👥 Current Week Role Breakdown',
-      value: buildRoleBreakdown(current, quotaProfile.visibleRoleKeys || []),
-      inline: true,
-    },
-    {
-      name: '📂 Last Week Role Breakdown',
-      value: buildRoleBreakdown(last, quotaProfile.visibleRoleKeys || []),
-      inline: true,
-    },
-  );
-
   const embed = new EmbedBuilder()
     .setColor(getTeamColor(quotaProfile, met))
-    .setTitle(`${getTeamEmoji(quotaProfile)} ${name} • Activity`)
+    .setTitle(`${getTeamEmoji(quotaProfile)}  ${name} • Activity ${getTeamEmoji(quotaProfile)}`)
     .setDescription(
-      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (${TIME_ZONE})\n${TYPE_DOTS.interview} Interview • ${TYPE_DOTS.training} Training • ${TYPE_DOTS.shift} Shift`,
+      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (EST)\n\n${TYPE_DOTS.interview} Interview • ${TYPE_DOTS.training} Training • ${TYPE_DOTS.shift} Shift`,
     )
     .addFields(fields)
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))
