@@ -236,6 +236,49 @@ function formatDateOnly(dateString) {
   });
 }
 
+const LOA_REASONS = new Set([
+  'Personal',
+  'School/Work',
+  'Sick',
+  'Mental Health',
+  'Vacation',
+  'Other',
+]);
+
+function formatLoaReason(reason, otherReason = '') {
+  const selected = String(reason || '').trim();
+  const other = String(otherReason || '').trim();
+
+  if (!LOA_REASONS.has(selected)) {
+    return { ok: false, message: '❌ Please choose a valid **Reason** option.' };
+  }
+
+  if (selected === 'Other') {
+    if (!other) {
+      return { ok: false, message: '❌ Since you chose **Other**, please fill in **other_reason**.' };
+    }
+    return { ok: true, value: `Other: ${other}` };
+  }
+
+  return { ok: true, value: selected };
+}
+
+function parseStaffJourneyCardName(cardName) {
+  const raw = String(cardName || '').trim();
+  const match = raw.match(/^(.+?)\s+-\s+(.+)$/);
+  if (!match) return null;
+
+  const usernamePart = stripLoaPrefix(match[1]).trim();
+  const datePart = String(match[2] || '').trim();
+
+  // Staff Journey cards should look like: USERNAME - DATE.
+  // This blocks milestone cards like "USERNAME - Milestone 1" from being selected.
+  const dateLike = /^(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})$/.test(datePart);
+  if (!usernamePart || !dateLike) return null;
+
+  return { usernamePart, datePart };
+}
+
 function validateAddLoaOptions(options = {}) {
   const start = parseLoaDate(options.startDate, 'Start Date');
   if (!start.ok) return start;
@@ -256,11 +299,15 @@ function validateAddLoaOptions(options = {}) {
     return { ok: false, message: '❌ Please include the **Reviewer Username** for this LOA.' };
   }
 
+  const reason = formatLoaReason(options.reason, options.otherReason);
+  if (!reason.ok) return reason;
+
   return {
     ok: true,
     startDate: start.value,
     endDate: end.value,
     reviewerUsername,
+    reason: reason.value,
   };
 }
 
@@ -317,12 +364,10 @@ async function findBestActiveStaffCard(username) {
   if (!cleanUsername) return { ok: true, card: null };
 
   const matches = (Array.isArray(res.data) ? res.data : []).filter((card) => {
-    const cardName = String(card.name || '');
-    const prefix = cardName.includes(' - ') ? cardName.split(' - ')[0] : cardName;
-    const normalizedPrefix = normalizeText(prefix);
-    const normalizedCardName = normalizeText(cardName);
+    const parsed = parseStaffJourneyCardName(card.name);
+    if (!parsed) return false;
 
-    return normalizedPrefix === cleanUsername || normalizedCardName.startsWith(`${cleanUsername} `);
+    return normalizeText(parsed.usernamePart) === cleanUsername;
   });
 
   if (!matches.length) return { ok: true, card: null };
@@ -380,7 +425,7 @@ async function addLoaLabelToStaffCard(username, commentText) {
       card: null,
       warning: cardResult.skipped
         ? `Trello skipped: ${cardResult.reason}`
-        : 'No matching Staff Journey card was found.',
+        : 'No matching Staff Journey card with the format **USERNAME - DATE** was found.',
     };
   }
 
@@ -419,7 +464,7 @@ async function removeLoaLabelFromStaffCard(username, storedCardId, commentText) 
       return {
         ok: false,
         card: null,
-        warning: found.skipped ? `Trello skipped: ${found.reason}` : 'No matching Staff Journey card was found.',
+        warning: found.skipped ? `Trello skipped: ${found.reason}` : 'No matching Staff Journey card with the format **USERNAME - DATE** was found.',
       };
     }
     card = found.card;
@@ -473,6 +518,7 @@ function buildLoaLogEmbed(details, warnings = []) {
       { name: 'User', value: `${details.target.user.tag}\n<@${details.target.id}>`, inline: true },
       { name: completed ? 'Removed By' : 'Added By', value: `${details.actionBy.tag}\n<@${details.actionBy.id}>`, inline: true },
       { name: 'Reviewer Username', value: String(details.reviewerUsername || 'Not provided'), inline: true },
+      { name: 'Reason', value: String(details.reason || 'Not provided').slice(0, 1024), inline: true },
       { name: 'LOA Type', value: String(details.loaType || 'Unknown'), inline: true },
       { name: 'Team', value: String(details.staffClassLabel || 'Unknown'), inline: true },
       { name: 'Status', value: completed ? 'Removed' : 'Active', inline: true },
@@ -604,16 +650,10 @@ async function addLoa(interaction, target, options = {}) {
     warnings.push('I added the LOA role, but I could not update their nickname.');
   }
 
-  const trello = await addLoaLabelToStaffCard(cleanDisplayName, [
-    '**LOA Added**',
-    `**User:** ${cleanDisplayName}`,
-    `**Discord:** ${target.user.tag} (${target.id})`,
-    `**Reviewer Username:** ${validated.reviewerUsername}`,
-    `**Start Date:** ${formatDateOnly(validated.startDate)}`,
-    `**Planned End Date:** ${formatDateOnly(validated.endDate)}`,
-    `**Added By:** ${interaction.user.tag} (${interaction.user.id})`,
-    `**Logged At:** ${new Date(startedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`,
-  ].join('\n'));
+  const trello = await addLoaLabelToStaffCard(
+    cleanDisplayName,
+    `LOA - ${formatDateOnly(validated.startDate)} - ${formatDateOnly(validated.endDate)} - Active`,
+  );
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
 
@@ -622,6 +662,7 @@ async function addLoa(interaction, target, options = {}) {
     officialStartDate: validated.startDate,
     officialEndDate: validated.endDate,
     reviewerUsername: validated.reviewerUsername,
+    reason: validated.reason,
     loaType: staffClass.loaType,
     loaRoleId: staffClass.loaRoleId,
     staffClassKey: staffClass.key,
@@ -644,6 +685,7 @@ async function addLoa(interaction, target, options = {}) {
     officialStartDate: validated.startDate,
     officialEndDate: validated.endDate,
     reviewerUsername: validated.reviewerUsername,
+    reason: validated.reason,
     loaType: staffClass.loaType,
     staffClassLabel: staffClass.label,
     trelloCardName: trello.card?.name || record.staffCardName || null,
@@ -667,6 +709,7 @@ async function addLoa(interaction, target, options = {}) {
       `Start Date: **${formatDateOnly(validated.startDate)}**`,
       `End Date: **${formatDateOnly(validated.endDate)}**`,
       `Reviewer Username: **${validated.reviewerUsername}**`,
+      `Reason: **${validated.reason}**`,
       `Role: <@&${staffClass.loaRoleId}>`,
       `Team: **${staffClass.label}**`,
       trello.ok ? `Trello: added **LOA** label to **${trello.card.name}**.` : null,
@@ -735,18 +778,11 @@ async function removeLoa(interaction, target, options = {}) {
   const oldEndDate = existing?.officialEndDate || null;
   const endDateChanged = oldEndDate && oldEndDate !== validated.endDate;
 
-  const trello = await removeLoaLabelFromStaffCard(trelloName, existing?.staffCardId, [
-    '**LOA Removed**',
-    `**User:** ${trelloName}`,
-    `**Discord:** ${target.user.tag} (${target.id})`,
-    existing?.reviewerUsername ? `**Reviewer Username:** ${existing.reviewerUsername}` : null,
-    officialStartDate !== 'Unknown' ? `**Start Date:** ${formatDateOnly(officialStartDate)}` : '**Start Date:** Unknown',
-    `**Final End Date:** ${formatDateOnly(validated.endDate)}`,
-    endDateChanged ? `**Previous End Date:** ${formatDateOnly(oldEndDate)}` : null,
-    `**Removed By:** ${interaction.user.tag} (${interaction.user.id})`,
-    `**Role Duration:** ${duration}`,
-    `**Removed At:** ${endedAt.toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`,
-  ].filter(Boolean).join('\n'));
+  const trello = await removeLoaLabelFromStaffCard(
+    trelloName,
+    existing?.staffCardId,
+    `LOA - ${formatDateOnly(officialStartDate)} - ${formatDateOnly(validated.endDate)} - Removed`,
+  );
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
 
@@ -761,6 +797,7 @@ async function removeLoa(interaction, target, options = {}) {
     officialStartDate,
     officialEndDate: validated.endDate,
     reviewerUsername: existing?.reviewerUsername || 'Not provided',
+    reason: existing?.reason || 'Not provided',
     loaType: existing?.loaType || 'Unknown',
     staffClassLabel: existing?.staffClassLabel || classifyStaffMember(target)?.label || 'Unknown',
     trelloCardName: trello.card?.name || existing?.staffCardName || null,

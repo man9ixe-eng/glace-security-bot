@@ -31,6 +31,26 @@ module.exports = {
         .setName('reviewer_username')
         .setDescription('Reviewer username for this LOA')
         .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('reason')
+        .setDescription('Reason for the LOA')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Personal', value: 'Personal' },
+          { name: 'School/Work', value: 'School/Work' },
+          { name: 'Sick', value: 'Sick' },
+          { name: 'Mental Health', value: 'Mental Health' },
+          { name: 'Vacation', value: 'Vacation' },
+          { name: 'Other', value: 'Other' },
+        ),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('other_reason')
+        .setDescription('Required if reason is Other')
+        .setRequired(false),
     ),
 
   async execute(interaction) {
@@ -40,6 +60,8 @@ module.exports = {
     const startDate = interaction.options.getString('start_date', true);
     const endDate = interaction.options.getString('end_date', true);
     const reviewerUsername = interaction.options.getString('reviewer_username', true);
+    const reason = interaction.options.getString('reason', true);
+    const otherReason = interaction.options.getString('other_reason') || '';
 
     if (!target) {
       await interaction.editReply('❌ I could not find that member in this server.');
@@ -50,6 +72,8 @@ module.exports = {
       startDate,
       endDate,
       reviewerUsername,
+      reason,
+      otherReason,
     });
 
     await interaction.editReply(result.message || (result.ok ? '✅ LOA added.' : '❌ Could not add LOA.'));
