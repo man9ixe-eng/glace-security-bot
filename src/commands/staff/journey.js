@@ -10,6 +10,8 @@ const PROMOTIONS_LIST_ID = process.env.PROMOTIONS_LIST_ID;
 const RESIGNITIONS_LIST_ID = process.env.RESIGNITIONS_LIST_ID;
 const LABEL_HAPPY_MONTHS = process.env.LABEL_HAPPY_MONTHS;
 
+let staffJourneyRunInProgress = false;
+
 const ACTIVE_RANK_LIST_IDS = [
   process.env.LEADERSHIP_INTERN_LIST_ID,
   process.env.SUPERVISOR_LIST_ID,
@@ -277,18 +279,87 @@ async function getAllBoardCards() {
   return res.data || [];
 }
 
-async function clearMonthlyMilestonesList() {
+async function getMonthlyMilestoneCards(filter = "open") {
   const res = await trelloGet(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}/cards`, {
-    fields: "id,closed",
+    filter,
+    fields: "id,name,closed,due,idList",
   });
 
-  for (const card of res.data || []) {
-    if (!card.closed) {
-      await trelloPut(`https://api.trello.com/1/cards/${card.id}`, {
-        closed: true,
-      });
+  return res.data || [];
+}
+
+async function closeCard(cardId) {
+  return trelloPut(`https://api.trello.com/1/cards/${cardId}`, {
+    closed: true,
+  });
+}
+
+async function clearMonthlyMilestonesList() {
+  let closedCount = 0;
+
+  // Trello can sometimes return slightly stale list data, so this does a few
+  // safe passes until the milestone list has no open cards left.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const cards = await getMonthlyMilestoneCards("open");
+    const openCards = (cards || []).filter((card) => !card.closed);
+
+    if (openCards.length === 0) return closedCount;
+
+    for (const card of openCards) {
+      await closeCard(card.id);
+      closedCount += 1;
     }
   }
+
+  return closedCount;
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function closeExistingMilestoneCardsByName(cardName) {
+  const target = normalizeName(cardName);
+  const cards = await getMonthlyMilestoneCards("open");
+  let closedCount = 0;
+
+  for (const card of cards || []) {
+    if (card.closed) continue;
+    if (normalizeName(card.name) !== target) continue;
+
+    await closeCard(card.id);
+    closedCount += 1;
+  }
+
+  return closedCount;
+}
+
+function rankListPriority(idList) {
+  const index = ACTIVE_RANK_LIST_IDS.indexOf(idList);
+  return index === -1 ? -1 : index;
+}
+
+function pickBestEligibleCard(current, next) {
+  if (!current) return next;
+
+  const currentPriority = rankListPriority(current.sourceCard.idList);
+  const nextPriority = rankListPriority(next.sourceCard.idList);
+
+  // If a duplicate active card exists for the same username, keep the card in
+  // the highest rank list. This prevents one user from getting two milestone cards.
+  if (nextPriority !== currentPriority) {
+    return nextPriority > currentPriority ? next : current;
+  }
+
+  // If both are in the same rank priority, keep the one with more months.
+  if (next.months !== current.months) {
+    return next.months > current.months ? next : current;
+  }
+
+  return current;
 }
 
 // =========================
@@ -308,10 +379,21 @@ module.exports = {
       });
     }
 
+    if (staffJourneyRunInProgress) {
+      return interaction.reply({
+        content: "❌ Staff Journey is already refreshing. Please run it again after the current refresh finishes.",
+        ephemeral: true,
+      });
+    }
+
+    staffJourneyRunInProgress = true;
+
     try {
-      // Always clear the previous milestone cards first so rerunning the command
-      // refreshes the list instead of stacking old cards.
-      await clearMonthlyMilestonesList();
+      await interaction.deferReply();
+
+      // Always clear the milestone list first. This makes the command safe to rerun:
+      // it refreshes today's milestone cards instead of stacking duplicates.
+      const clearedCards = await clearMonthlyMilestonesList();
 
       await trelloPut(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}`, {
         name: getTodayListName(),
@@ -322,14 +404,14 @@ module.exports = {
       const dueIso = getTodayDueESTIso();
       const nextMonthDueIso = getNextMonthDueESTIso();
 
-      const seen = new Set();
-      const eligible = [];
+      const eligibleByUsername = new Map();
 
       for (const card of allCards) {
         if (card.closed) continue;
-        if (!ACTIVE_RANK_LIST_IDS.includes(card.idList)) continue;
+        if (card.idList === MONTHLY_MILESTONES_LIST_ID) continue;
         if (card.idList === PROMOTIONS_LIST_ID) continue;
         if (card.idList === RESIGNITIONS_LIST_ID) continue;
+        if (!ACTIVE_RANK_LIST_IDS.includes(card.idList)) continue;
 
         const firstPromotionDate = getFirstPromotionDateFromDesc(card.desc || "");
         if (!firstPromotionDate) continue;
@@ -341,26 +423,29 @@ module.exports = {
 
         const username = getUsernameFromCardName(card.name);
         const currentRank = getCurrentRankFromDesc(card.desc || "");
+        const usernameKey = username.toLowerCase();
 
-        const dedupeKey = `${username.toLowerCase()}|${currentRank.toLowerCase()}|${totalMonths}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
-
-        eligible.push({
+        const entry = {
           sourceCard: card,
           username,
           currentRank,
           months: totalMonths,
-        });
+        };
+
+        eligibleByUsername.set(
+          usernameKey,
+          pickBestEligibleCard(eligibleByUsername.get(usernameKey), entry)
+        );
       }
 
-      eligible.sort((a, b) => {
+      const eligible = Array.from(eligibleByUsername.values()).sort((a, b) => {
         if (b.months !== a.months) return b.months - a.months;
         return a.username.localeCompare(b.username);
       });
 
       const posted = [];
       const failed = [];
+      let duplicateCardsClosed = 0;
 
       for (const entry of eligible) {
         try {
@@ -369,6 +454,10 @@ module.exports = {
             entry.months,
             entry.currentRank
           );
+
+          // Extra safety: if a matching milestone card somehow exists from a retry,
+          // close it before making the fresh card.
+          duplicateCardsClosed += await closeExistingMilestoneCardsByName(milestoneName);
 
           const newCard = await trelloPost("https://api.trello.com/1/cards", {
             idList: MONTHLY_MILESTONES_LIST_ID,
@@ -403,10 +492,16 @@ module.exports = {
 
       if (posted.length === 0) {
         let msg = `${header}\n=========================\n\nNo monthly milestones were posted today.`;
+
+        if (clearedCards > 0 || duplicateCardsClosed > 0) {
+          msg += `\n\nCleared old milestone cards: ${clearedCards + duplicateCardsClosed}`;
+        }
+
         if (failed.length > 0) {
           msg += `\n\nFailed:\n${failed.join("\n")}`;
         }
-        return interaction.reply({ content: msg });
+
+        return interaction.editReply({ content: msg });
       }
 
       const body = posted
@@ -420,14 +515,25 @@ module.exports = {
 
       let content = `${header}\n=========================\n\n${body}`;
 
+      if (clearedCards > 0 || duplicateCardsClosed > 0) {
+        content += `\n\nRefreshed old milestone cards: ${clearedCards + duplicateCardsClosed}`;
+      }
+
       if (failed.length > 0) {
         content += `\n\nFailed:\n${failed.join("\n")}`;
       }
 
-      await interaction.reply({ content });
+      await interaction.editReply({ content });
     } catch (err) {
       console.error("[STAFF JOURNEY ERROR]", err.response?.data || err.message || err);
-      await interaction.reply("❌ Trello error while generating monthly milestones");
+
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply("❌ Trello error while generating monthly milestones");
+      } else {
+        await interaction.reply("❌ Trello error while generating monthly milestones");
+      }
+    } finally {
+      staffJourneyRunInProgress = false;
     }
   },
 };
