@@ -13,6 +13,7 @@ const { runSessionAnnouncementTick } = require("./utils/sessionAnnouncements");
 const { handleQueueButtonInteraction } = require("./utils/sessionQueueManager");
 const { handleEditActivityReply } = require("./utils/editActivityManager");
 const { runWeeklyMaintenance } = require("./utils/activityTracker");
+const { handleJuniorActivityLogMessage } = require("./utils/juniorActivityTracker");
 
 // ✅ Only keep enforceTicketSpeak (we route ticket buttons inside InteractionCreate)
 const ticketSystem = require("./utils/ticketSystem");
@@ -183,6 +184,13 @@ setInterval(() => {
 // MESSAGE CREATE
 if (ENABLE_MESSAGE_CONTENT) {
   client.on("messageCreate", async (message) => {
+    // Roblox/TC logs may come from a webhook or bot user, so record them before ignoring bots.
+    try {
+      await handleJuniorActivityLogMessage(message);
+    } catch (err) {
+      console.error("[JUNIOR ACTIVITY] Live log handling error:", err);
+    }
+
     if (message.author?.bot) return;
 
     try {
