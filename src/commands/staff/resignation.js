@@ -1,14 +1,14 @@
-// src/commands/staff/resignation.js
-// /resignation — Staff Journey resignation automation + Discord former/resigned role.
-
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const axios = require('axios');
-const rolesConfig = require('../../config/roles');
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const axios = require("axios");
+const rolesConfig = require("../../config/roles");
 
 const TRELLO_KEY = process.env.TRELLO_KEY;
 const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
 const BOARD_ID = process.env.STAFF_JOURNEY_BOARD_ID;
-const RESIGNATIONS_LIST_ID = process.env.RESIGNITIONS_LIST_ID;
+const RESIGNATIONS_LIST_ID_ENV =
+  process.env.RESIGNATION_LIST_ID ||
+  process.env.RESIGNATIONS_LIST_ID ||
+  process.env.RESIGNITIONS_LIST_ID;
 const LABEL_RECENTLY_RESIGNED = process.env.LABEL_RECENTLY_RESIGNED;
 
 const ALL_RANK_LABELS = [
@@ -21,6 +21,7 @@ const ALL_RANK_LABELS = [
   process.env.LABEL_JUNIOR_CORPORATE,
   process.env.LABEL_SENIOR_CORPORATE,
   process.env.LABEL_HEAD_CORPORATE,
+  process.env.LABEL_BOARD_OF_DIRECTOR,
   process.env.LABEL_BOARD_OF_DIRECTORS,
   process.env.LABEL_PRESIDENTIAL_INTERN,
   process.env.LABEL_CHIEF_EXECUTIVE_OFFICER,
@@ -38,73 +39,74 @@ const ALL_TEAM_LABELS = [
 ].filter(Boolean);
 
 const STAFF_ROLE_KEYS = [
-  'JUNIOR_STAFF_ROLE_IDS',
-  'INTERN_ROLE_IDS',
-  'MANAGEMENT_ROLE_IDS',
-  'SENIOR_MANAGEMENT_ROLE_IDS',
-  'CORPORATE_ROLE_IDS',
-  'CORPORATE_BOARD_ROLE_IDS',
-  'PRESIDENTIAL_ROLE_IDS',
+  "JUNIOR_STAFF_ROLE_IDS",
+  "INTERN_ROLE_IDS",
+  "MANAGEMENT_ROLE_IDS",
+  "SENIOR_MANAGEMENT_ROLE_IDS",
+  "CORPORATE_ROLE_IDS",
+  "CORPORATE_BOARD_ROLE_IDS",
+  "PRESIDENTIAL_ROLE_IDS",
 ];
 
 const STAFF_ROLE_MATCHERS = [
-  ['junior', 'staff'],
-  ['intern'],
-  ['management'],
-  ['senior', 'management'],
-  ['corporate'],
-  ['corporate', 'board'],
-  ['board', 'director'],
-  ['presidential'],
-  ['ticket', 'intern'],
-  ['ticket', 'trial'],
-  ['ticket', 'mod'],
-  ['ticket', 'moderator'],
-  ['ticket', 'admin'],
-  ['ticket', 'reviewer'],
-  ['ticket', 'chief'],
+  ["junior", "staff"],
+  ["intern"],
+  ["management"],
+  ["senior", "management"],
+  ["corporate"],
+  ["corporate", "board"],
+  ["board", "director"],
+  ["presidential"],
 ];
 
 const TICKET_REMOVE_ENV_NAMES = [
-  'TICKET_ROLE_INTERN_ID',
-  'TICKET_ROLE_TRIAL_ID',
-  'TICKET_ROLE_MOD_ID',
-  'TICKET_ROLE_ADMIN_ID',
-  'TICKET_ROLE_REVIEWER_ID',
-  'TICKET_ROLE_CHIEF_ID',
+  "TICKET_ROLE_INTERN_ID",
+  "TICKET_ROLE_TRIAL_ID",
+  "TICKET_ROLE_MOD_ID",
+  "TICKET_ROLE_ADMIN_ID",
+  "TICKET_ROLE_REVIEWER_ID",
+  "TICKET_ROLE_CHIEF_ID",
+];
+
+const TICKET_REMOVE_MATCHERS = [
+  ["ticket", "intern"],
+  ["ticket", "trial"],
+  ["ticket", "mod"],
+  ["ticket", "moderator"],
+  ["ticket", "admin"],
+  ["ticket", "reviewer"],
+  ["ticket", "chief"],
 ];
 
 const SENIOR_PLUS_RANKS = new Set([
-  'executive manager',
-  'corporate intern',
-  'junior corporate',
-  'senior corporate',
-  'head corporate',
-  'board of director',
-  'board of directors',
-  'presidential intern',
-  'chief executive officer',
-  'vice president',
-  'president',
+  "executive manager",
+  "corporate intern",
+  "junior corporate",
+  "senior corporate",
+  "head corporate",
+  "board of director",
+  "board of directors",
+  "presidential intern",
+  "chief executive officer",
+  "vice president",
+  "president",
 ]);
 
 // =========================
 // DATE HELPERS
 // =========================
 function getTodayMmDdYyyy() {
-  return new Date().toLocaleDateString('en-US', {
-    timeZone: 'America/New_York',
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
+  return new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
   });
 }
 
 function parseMmDdYyyy(dateStr) {
-  if (!dateStr || typeof dateStr !== 'string') return null;
-  const parts = dateStr.split('/');
-  if (parts.length !== 3) return null;
-  const [mm, dd, yyyy] = parts.map(Number);
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(String(dateStr || ""))) return null;
+  const [mm, dd, yyyy] = dateStr.split("/").map(Number);
   if (!mm || !dd || !yyyy) return null;
   return { mm, dd, yyyy };
 }
@@ -118,10 +120,10 @@ function localNoonFromMmDdYyyy(dateStr) {
 function formatPrettyDate(dateStr) {
   const d = localNoonFromMmDdYyyy(dateStr);
   if (!d) return null;
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -140,13 +142,32 @@ function formatDueNextMonth(dateStr) {
   return d.toISOString();
 }
 
+// =========================
+// TEXT HELPERS
+// =========================
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/<a?:\w+:\d+>/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanUsername(value) {
+  return String(value || "")
+    .replace(/^\s*\[\s*LOA\s*\]\s*/i, "")
+    .replace(/^\s*LOA\s*[-|:]\s*/i, "")
+    .trim();
+}
+
 function normalizeLines(desc) {
-  if (!desc || typeof desc !== 'string') return [];
-  return desc.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (!desc || typeof desc !== "string") return [];
+  return desc.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
 function parseJourneyLine(line) {
-  const match = String(line || '').match(/^- \*\*(.+?) - (.+?)(?: - (.+?))?\*\*$/);
+  const match = String(line || "").match(/^- \*\*(.+?) - (.+?)(?: - (.+?))?\*\*$/);
   if (!match) return null;
   return {
     startDate: match[1],
@@ -169,17 +190,17 @@ function getCurrentRank(desc) {
     const parsed = parseJourneyLine(lines[i]);
     if (parsed?.rank) return parsed.rank;
   }
-  return 'Unknown Rank';
+  return "Unknown Rank";
 }
 
 function timeSinceFirstPromotion(desc, resignationDateStr) {
   const firstParsed = getFirstJourneyLine(desc);
-  if (!firstParsed?.startDate) return 'Unknown duration';
+  if (!firstParsed?.startDate) return "Unknown duration";
 
   const start = new Date(firstParsed.startDate);
   const end = localNoonFromMmDdYyyy(resignationDateStr);
 
-  if (Number.isNaN(start.getTime()) || !end) return 'Unknown duration';
+  if (Number.isNaN(start.getTime()) || !end) return "Unknown duration";
 
   let months =
     (end.getFullYear() - start.getFullYear()) * 12 +
@@ -187,42 +208,42 @@ function timeSinceFirstPromotion(desc, resignationDateStr) {
 
   if (end.getDate() < start.getDate()) months -= 1;
 
-  if (months >= 1) return months === 1 ? '1 month' : `${months} months`;
+  if (months >= 1) return months === 1 ? "1 month" : `${months} months`;
 
   let days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
   if (days < 1) days = 1;
-  return days === 1 ? '1 day' : `${days} days`;
+  return days === 1 ? "1 day" : `${days} days`;
 }
 
 function appendResignationToDescription(desc, prettyDate, finalRank, sinceFirst) {
   const lines = normalizeLines(desc);
-  lines.push('');
-  lines.push('━━━━━━━━━━━━━━━━━━━━');
+
+  const alreadyHasResignation = lines.some((line) => normalizeName(line).startsWith("resigned"));
+  if (alreadyHasResignation) return lines.join("\n");
+
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
   lines.push(`**Resigned:** ${prettyDate}`);
   lines.push(`**Final Rank:** ${finalRank}`);
   lines.push(`**Total Time:** ${sinceFirst}`);
-  return lines.join('\n');
+  return lines.join("\n");
+}
+
+function extractCardUsername(cardName) {
+  const raw = String(cardName || "").trim();
+
+  const enrolledFormat = raw.match(/^(.+?)\s+-\s+\d{2}\/\d{2}\/\d{4}\s*$/);
+  if (enrolledFormat) return enrolledFormat[1].trim();
+
+  const resignedFormat = raw.match(/^(.+?)\s+-\s+.+?\s+-\s+\d{2}\/\d{2}\/\d{4}\s*$/);
+  if (resignedFormat) return resignedFormat[1].trim();
+
+  return raw.split(" - ")[0].trim();
 }
 
 // =========================
 // DISCORD HELPERS
 // =========================
-function normalizeName(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/<a?:\w+:\d+>/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function cleanUsername(value) {
-  return String(value || '')
-    .replace(/^\s*\[\s*LOA\s*\]\s*/i, '')
-    .replace(/^\s*LOA\s*[-|:]\s*/i, '')
-    .trim();
-}
-
 function configuredIdsForKey(key) {
   const value = rolesConfig[key];
   return Array.isArray(value) ? value.filter(Boolean).map(String) : [];
@@ -232,10 +253,11 @@ function envIds(names = []) {
   return names.map((name) => process.env[name]).filter(Boolean).map(String);
 }
 
-function roleMatches(role, matchers) {
+function roleMatches(role, matchers, { requireTeam = false } = {}) {
   const name = normalizeName(role?.name);
   if (!name) return false;
-  if (name.includes('former') || name.includes('retired') || name.includes('alumni') || name.includes('resigned')) return false;
+  if (name.includes("former") || name.includes("retired") || name.includes("alumni") || name.includes("resigned")) return false;
+  if (requireTeam && !name.includes("team")) return false;
   return matchers.some((keywords) => keywords.every((keyword) => name.includes(keyword)));
 }
 
@@ -248,17 +270,22 @@ function uniqueRoles(roles) {
   });
 }
 
-function findRoleByIdOrName(guild, envName, nameMatchers) {
-  const id = process.env[envName];
-  if (id) {
+function findRoleByIdOrName(guild, envNames, nameMatchers) {
+  const names = Array.isArray(envNames) ? envNames : [envNames];
+
+  for (const envName of names) {
+    const id = process.env[envName];
+    if (!id) continue;
     const byId = guild.roles.cache.get(id);
     if (byId) return byId;
   }
 
-  return guild.roles.cache.find((role) => {
-    const name = normalizeName(role.name);
-    return nameMatchers.some((keywords) => keywords.every((keyword) => name.includes(keyword)));
-  }) || null;
+  return (
+    guild.roles.cache.find((role) => {
+      const name = normalizeName(role.name);
+      return nameMatchers.some((keywords) => keywords.every((keyword) => name.includes(keyword)));
+    }) || null
+  );
 }
 
 async function findGuildMemberByStaffUsername(guild, username) {
@@ -276,43 +303,50 @@ async function findGuildMemberByStaffUsername(guild, username) {
   const fetched = await guild.members.fetch({ query: username, limit: 10 }).catch(() => null);
   if (!fetched) return null;
 
-  return fetched.find((member) => {
-    const display = normalizeName(cleanUsername(member.displayName));
-    const user = normalizeName(member.user?.username);
-    const global = normalizeName(member.user?.globalName);
-    return display === target || user === target || global === target;
-  }) || null;
+  return (
+    fetched.find((member) => {
+      const display = normalizeName(cleanUsername(member.displayName));
+      const user = normalizeName(member.user?.username);
+      const global = normalizeName(member.user?.globalName);
+      return display === target || user === target || global === target;
+    }) || null
+  );
 }
 
 async function updateDiscordResignationRoles(interaction, member, seniorPlus) {
-  if (!member) return '⚠️ Discord member not found, so I only updated Trello.';
+  if (!member) return "⚠️ Discord member not found, so I only updated Trello.";
 
   const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
   if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    return '⚠️ I updated Trello, but I need **Manage Roles** to update Discord roles.';
+    return "⚠️ I updated Trello, but I need **Manage Roles** to update Discord roles.";
   }
 
   const finalRole = seniorPlus
-    ? findRoleByIdOrName(interaction.guild, 'FORMER_EMPLOYEE_ROLE_ID', [['former', 'employee']])
-    : findRoleByIdOrName(interaction.guild, 'RESIGNED_ROLE_ID', [['resigned']]);
+    ? findRoleByIdOrName(interaction.guild, ["FORMER_EMPLOYEE_ROLE_ID"], [["former", "employee"]])
+    : findRoleByIdOrName(interaction.guild, ["RESIGNED_ROLE_ID"], [["resigned"]]);
 
   if (!finalRole) {
     return seniorPlus
-      ? '⚠️ I updated Trello, but I could not find the **Former Employee** role.'
-      : '⚠️ I updated Trello, but I could not find the **Resigned** role.';
+      ? "⚠️ I updated Trello, but I could not find the **Former Employee** role."
+      : "⚠️ I updated Trello, but I could not find the **Resigned** role.";
   }
 
   const staffRoleIds = STAFF_ROLE_KEYS.flatMap(configuredIdsForKey);
   const ticketRoleIds = envIds(TICKET_REMOVE_ENV_NAMES);
 
-  const rolesToRemove = uniqueRoles(
-    [...member.roles.cache.values()].filter((role) =>
-      staffRoleIds.includes(role.id) || ticketRoleIds.includes(role.id) || roleMatches(role, STAFF_ROLE_MATCHERS),
-    ),
-  ).filter((role) => role.id !== finalRole.id);
+  const staffRolesToRemove = member.roles.cache.filter((role) =>
+    staffRoleIds.includes(role.id) || roleMatches(role, STAFF_ROLE_MATCHERS, { requireTeam: true })
+  );
+
+  const ticketRolesToRemove = member.roles.cache.filter((role) =>
+    ticketRoleIds.includes(role.id) || roleMatches(role, TICKET_REMOVE_MATCHERS)
+  );
+
+  const rolesToRemove = uniqueRoles([...staffRolesToRemove.values(), ...ticketRolesToRemove.values()])
+    .filter((role) => role.id !== finalRole.id);
 
   const manageableProblem = [...rolesToRemove, finalRole].find(
-    (role) => role.managed || role.position >= botMember.roles.highest.position,
+    (role) => role.managed || role.position >= botMember.roles.highest.position
   );
 
   if (manageableProblem) {
@@ -332,38 +366,70 @@ async function updateDiscordResignationRoles(interaction, member, seniorPlus) {
 // TRELLO HELPERS
 // =========================
 async function trelloGet(url, params = {}) {
-  return axios.get(url, { params: { key: TRELLO_KEY, token: TRELLO_TOKEN, ...params } });
+  return axios.get(url, {
+    params: {
+      key: TRELLO_KEY,
+      token: TRELLO_TOKEN,
+      ...params,
+    },
+  });
 }
 
 async function trelloPut(url, params = {}) {
-  return axios.put(url, null, { params: { key: TRELLO_KEY, token: TRELLO_TOKEN, ...params } });
+  return axios.put(url, null, {
+    params: {
+      key: TRELLO_KEY,
+      token: TRELLO_TOKEN,
+      ...params,
+    },
+  });
 }
 
 async function trelloPost(url, params = {}) {
-  return axios.post(url, null, { params: { key: TRELLO_KEY, token: TRELLO_TOKEN, ...params } });
+  return axios.post(url, null, {
+    params: {
+      key: TRELLO_KEY,
+      token: TRELLO_TOKEN,
+      ...params,
+    },
+  });
 }
 
 async function trelloDelete(url, params = {}) {
-  return axios.delete(url, { params: { key: TRELLO_KEY, token: TRELLO_TOKEN, ...params } });
+  return axios.delete(url, {
+    params: {
+      key: TRELLO_KEY,
+      token: TRELLO_TOKEN,
+      ...params,
+    },
+  });
 }
 
-function extractCardUsername(cardName) {
-  const match = String(cardName || '').match(/^(.+?)\s+-\s+\d{2}\/\d{2}\/\d{4}\s*$/);
-  if (match) return match[1].trim();
-  return String(cardName || '').split(' - ')[0].trim();
-}
+async function resolveResignationListId() {
+  if (RESIGNATIONS_LIST_ID_ENV) return RESIGNATIONS_LIST_ID_ENV;
 
-async function findStaffCardByUsername(username) {
-  const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/cards`, {
-    fields: 'id,name,desc,idLabels,idList,closed,pos,due,url',
+  const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/lists`, {
+    fields: "id,name,closed",
   });
 
-  const lower = String(username || '').trim().toLowerCase();
+  const lists = (res.data || []).filter((list) => !list.closed);
+  const found = lists.find((list) => ["resignation", "resignations"].includes(normalizeName(list.name)));
+
+  return found?.id || null;
+}
+
+async function findStaffCardByUsername(username, resignationListId) {
+  const res = await trelloGet(`https://api.trello.com/1/boards/${BOARD_ID}/cards`, {
+    fields: "id,name,desc,idLabels,idList,closed,pos,due,url",
+  });
+
+  const lower = normalizeName(username);
   const openCards = (res.data || []).filter((card) => !card.closed);
 
+  // Prefer active staff card first, but allow already-resigned card as a fallback.
   return (
-    openCards.find((card) => extractCardUsername(card.name).toLowerCase() === lower) ||
-    openCards.find((card) => String(card.name || '').toLowerCase().startsWith(`${lower} - `)) ||
+    openCards.find((card) => normalizeName(extractCardUsername(card.name)) === lower && card.idList !== resignationListId) ||
+    openCards.find((card) => normalizeName(extractCardUsername(card.name)) === lower) ||
     null
   );
 }
@@ -373,7 +439,7 @@ async function removeOldLabels(card) {
     (id) =>
       ALL_RANK_LABELS.includes(id) ||
       ALL_TEAM_LABELS.includes(id) ||
-      id === process.env.LABEL_RECENTLY_PROMOTED,
+      id === process.env.LABEL_RECENTLY_PROMOTED
   );
 
   for (const labelId of labelsToRemove) {
@@ -386,47 +452,56 @@ async function addLabelIfPresent(cardId, labelId) {
   await trelloPost(`https://api.trello.com/1/cards/${cardId}/idLabels`, { value: labelId });
 }
 
+async function addCommentOnce(cardId, text) {
+  const res = await trelloGet(`https://api.trello.com/1/cards/${cardId}/actions`, {
+    filter: "commentCard",
+    limit: 1000,
+    fields: "data,type",
+  });
+
+  const exists = (res.data || []).some((action) => action?.data?.text?.trim() === text.trim());
+  if (exists) return false;
+
+  await trelloPost(`https://api.trello.com/1/cards/${cardId}/actions/comments`, { text });
+  return true;
+}
+
 // =========================
 // COMMAND
 // =========================
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('resignation')
-    .setDescription('Mark a staff member as resigned in Staff Journey.')
+    .setName("resignation")
+    .setDescription("Mark a staff member as resigned in Staff Journey")
     .setDMPermission(false)
     .addStringOption((option) =>
       option
-        .setName('username')
-        .setDescription('Staff username on the Staff Journey card')
-        .setRequired(true),
+        .setName("username")
+        .setDescription("Staff Journey username")
+        .setRequired(true)
     )
     .addUserOption((option) =>
       option
-        .setName('member')
-        .setDescription('Discord member, if their server nickname does not match')
-        .setRequired(false),
+        .setName("member")
+        .setDescription("Discord member to update, if needed")
+        .setRequired(false)
     )
     .addStringOption((option) =>
       option
-        .setName('date')
-        .setDescription('MM/DD/YYYY, defaults to today')
-        .setRequired(false),
+        .setName("date")
+        .setDescription("MM/DD/YYYY, defaults to today")
+        .setRequired(false)
     ),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const username = cleanUsername(interaction.options.getString('username', true));
-    const date = interaction.options.getString('date') || getTodayMmDdYyyy();
-    const providedMember = interaction.options.getMember('member');
+    const username = cleanUsername(interaction.options.getString("username", true));
+    const providedMember = interaction.options.getMember("member");
+    const date = interaction.options.getString("date") || getTodayMmDdYyyy();
 
     if (!TRELLO_KEY || !TRELLO_TOKEN || !BOARD_ID) {
-      await interaction.editReply('❌ Missing TRELLO_KEY, TRELLO_TOKEN, or STAFF_JOURNEY_BOARD_ID env.');
-      return;
-    }
-
-    if (!RESIGNATIONS_LIST_ID || !LABEL_RECENTLY_RESIGNED) {
-      await interaction.editReply('❌ Missing RESIGNITIONS_LIST_ID or LABEL_RECENTLY_RESIGNED env.');
+      await interaction.editReply("❌ Missing TRELLO_KEY, TRELLO_TOKEN, or STAFF_JOURNEY_BOARD_ID env.");
       return;
     }
 
@@ -434,61 +509,57 @@ module.exports = {
     const dueDate = formatDueNextMonth(date);
 
     if (!prettyDate || !dueDate) {
-      await interaction.editReply('❌ Invalid date. Use MM/DD/YYYY.');
+      await interaction.editReply("❌ Invalid date. Use MM/DD/YYYY.");
       return;
     }
 
     try {
-      const card = await findStaffCardByUsername(username);
-      if (!card) {
-        await interaction.editReply('❌ Oops, it seems you have not used the /enroll command.');
+      const resignationListId = await resolveResignationListId();
+      if (!resignationListId) {
+        await interaction.editReply("❌ I could not find the **RESIGNATION** Trello list. Add RESIGNATION_LIST_ID, RESIGNATIONS_LIST_ID, or RESIGNITIONS_LIST_ID in Render.");
         return;
       }
 
-      const finalRank = getCurrentRank(card.desc || '');
-      const seniorPlus = SENIOR_PLUS_RANKS.has(normalizeName(finalRank));
-      const sinceFirst = timeSinceFirstPromotion(card.desc || '', date);
-      const member = providedMember || await findGuildMemberByStaffUsername(interaction.guild, username);
+      const card = await findStaffCardByUsername(username, resignationListId);
+      if (!card) {
+        await interaction.editReply("❌ Oops, it seems you have not used the /enroll command.");
+        return;
+      }
 
+      const finalRank = getCurrentRank(card.desc || "");
+      const seniorPlus = SENIOR_PLUS_RANKS.has(normalizeName(finalRank));
+      const sinceFirst = timeSinceFirstPromotion(card.desc || "", date);
+      const member = providedMember || await findGuildMemberByStaffUsername(interaction.guild, username);
       const discordNote = await updateDiscordResignationRoles(interaction, member, seniorPlus);
+
+      const updatedDesc = appendResignationToDescription(card.desc || "", prettyDate, finalRank, sinceFirst);
+      const resignationCardName = `${username} - ${finalRank} - ${date}`;
+      const commentText = `Resigned on ${prettyDate} - ${finalRank} - ${sinceFirst}`;
 
       await removeOldLabels(card);
       await addLabelIfPresent(card.id, LABEL_RECENTLY_RESIGNED);
+      await addCommentOnce(card.id, commentText);
 
-      await trelloPost(`https://api.trello.com/1/cards/${card.id}/actions/comments`, {
-        text: `Resigned on ${prettyDate} - ${finalRank} - ${sinceFirst}`,
+      await trelloPut(`https://api.trello.com/1/cards/${card.id}`, {
+        idList: resignationListId,
+        name: resignationCardName,
+        due: dueDate,
+        desc: updatedDesc,
+        pos: "bottom",
       });
-
-      if (seniorPlus) {
-        const updatedDesc = appendResignationToDescription(card.desc || '', prettyDate, finalRank, sinceFirst);
-
-        await trelloPut(`https://api.trello.com/1/cards/${card.id}`, {
-          idList: RESIGNATIONS_LIST_ID,
-          due: dueDate,
-          desc: updatedDesc,
-          pos: 'bottom',
-        });
-      } else {
-        // Lower ranks do not need to stay on the resigned archive list.
-        // Their card is removed from active Staff Journey by archiving it.
-        await trelloPut(`https://api.trello.com/1/cards/${card.id}`, {
-          closed: true,
-        });
-      }
 
       await interaction.editReply(
         [
-          seniorPlus
-            ? `✅ Marked **${username}** as resigned and moved their card to the resignations list.`
-            : `✅ Marked **${username}** as resigned and archived their Staff Journey card.`,
+          `✅ Marked **${username}** as resigned.`,
+          `Moved card to **RESIGNATION** as: **${resignationCardName}**`,
           `Final rank: **${finalRank}**`,
           `Time in journey: **${sinceFirst}**`,
           discordNote,
-        ].join('\n'),
+        ].join("\n")
       );
     } catch (err) {
-      console.error('[RESIGNATION ERROR]', err.response?.data || err.message || err);
-      await interaction.editReply('❌ Resignation Trello/Discord error. Check Render logs for details.');
+      console.error("[RESIGNATION ERROR]", err.response?.data || err.message || err);
+      await interaction.editReply("❌ Resignation Trello/Discord error. Check Render logs for details.");
     }
   },
 };
