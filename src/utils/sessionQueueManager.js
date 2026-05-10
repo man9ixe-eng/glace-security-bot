@@ -8,7 +8,11 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 const { trelloRequest } = require('./trelloClient');
-const { replaceSessionActivity } = require('./activityTracker');
+const {
+  replaceSessionActivity,
+  getAllActivity,
+  getWeekRange,
+} = require('./activityTracker');
 const { upsertSession, getSession } = require('./editActivityStore');
 
 // In-memory registry of active queues, keyed by Trello card shortId.
@@ -424,26 +428,67 @@ function getRoleLimit(queue, roleKey) {
   return limit;
 }
 
-function sortRoleEntries(entries, priorityStore, guildId) {
+function getQueueRoleCountKeys(queue, roleKey) {
+  const key = String(roleKey || '').toLowerCase();
+  const sessionType = String(queue?.sessionType || '').toLowerCase();
+
+  if (key === 'interviewer') {
+    if (sessionType === 'training') return ['interviewer', 'trainer'];
+    if (sessionType === 'massshift') return ['interviewer', 'attendee'];
+    return ['interviewer'];
+  }
+
+  return [key].filter(Boolean);
+}
+
+function makeCurrentWeekRoleCounter(queue, roleKey, guildId) {
+  const weekRange = getWeekRange(0);
+  const roleKeys = new Set(getQueueRoleCountKeys(queue, roleKey));
+  const counts = new Map();
+
+  try {
+    const data = getAllActivity();
+    const supportEntries = Array.isArray(data?.supportSessions) ? data.supportSessions : [];
+
+    for (const entry of supportEntries) {
+      if (!entry?.userId) continue;
+      if (entry.cancelled) continue;
+      if (guildId && entry.guildId && String(entry.guildId) !== String(guildId)) continue;
+      if (entry.timestamp < weekRange.startMs || entry.timestamp > weekRange.endMs) continue;
+      if (!roleKeys.has(String(entry.roleKey || '').toLowerCase())) continue;
+
+      const userId = String(entry.userId);
+      counts.set(userId, (counts.get(userId) || 0) + 1);
+    }
+  } catch (error) {
+    console.warn('[SESSIONQUEUE] Could not read current-week activity counts:', error?.message || error);
+  }
+
+  return (userId) => counts.get(String(userId || '')) || 0;
+}
+
+function sortRoleEntries(entries, priorityStore, guildId, roleKey, queue) {
+  const getCurrentWeekRoleCount = makeCurrentWeekRoleCounter(queue, roleKey, guildId);
+
   return [...(entries || [])].sort((a, b) => {
-    const aLast =
-      priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
-        ? priorityStore.getLastAttendedAt(guildId, a.userId)
-        : 0;
-    const bLast =
-      priorityStore && typeof priorityStore.getLastAttendedAt === 'function'
-        ? priorityStore.getLastAttendedAt(guildId, b.userId)
-        : 0;
+    const aCount = getCurrentWeekRoleCount(a.userId);
+    const bCount = getCurrentWeekRoleCount(b.userId);
 
-    if (aLast !== bLast) return aLast - bLast;
+    // Lower current-week count for the role claimed = higher priority.
+    if (aCount !== bCount) return aCount - bCount;
 
-    if (a.claimedAt && b.claimedAt) return a.claimedAt - b.claimedAt;
-    return 0;
+    // Tie-breaker: whoever queued first wins.
+    const aClaimed = Number(a.claimedAt || 0);
+    const bClaimed = Number(b.claimedAt || 0);
+    if (aClaimed !== bClaimed) return aClaimed - bClaimed;
+
+    // Final stable fallback so sorting is predictable.
+    return String(a.userId || '').localeCompare(String(b.userId || ''));
   });
 }
 
-function splitSelected(entries, limit, priorityStore, guildId) {
-  const sorted = sortRoleEntries(entries, priorityStore, guildId);
+function splitSelected(entries, limit, priorityStore, guildId, roleKey, queue) {
+  const sorted = sortRoleEntries(entries, priorityStore, guildId, roleKey, queue);
   const safeLimit = Number.isFinite(limit) ? limit : sorted.length;
   return {
     sorted,
@@ -495,24 +540,32 @@ function buildStructuredLineup(queue, priorityStore) {
     getRoleLimit(queue, 'interviewer'),
     priorityStore,
     guildId,
+    'interviewer',
+    queue,
   );
   const cohost = splitSelected(
     queue.roles.cohost || [],
     getRoleLimit(queue, 'cohost'),
     priorityStore,
     guildId,
+    'cohost',
+    queue,
   );
   const overseer = splitSelected(
     queue.roles.overseer || [],
     getRoleLimit(queue, 'overseer'),
     priorityStore,
     guildId,
+    'overseer',
+    queue,
   );
   const supervisor = splitSelected(
     queue.roles.supervisor || [],
     getRoleLimit(queue, 'supervisor'),
     priorityStore,
     guildId,
+    'supervisor',
+    queue,
   );
 
   return {
@@ -1035,24 +1088,32 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
     getRoleLimit(queue, 'cohost'),
     priorityStore,
     guildId,
+    'cohost',
+    queue,
   );
   const overseer = splitSelected(
     queue.roles.overseer,
     getRoleLimit(queue, 'overseer'),
     priorityStore,
     guildId,
+    'overseer',
+    queue,
   );
   const main = splitSelected(
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
     priorityStore,
     guildId,
+    'interviewer',
+    queue,
   );
   const supervisor = splitSelected(
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
     priorityStore,
     guildId,
+    'supervisor',
+    queue,
   );
 
   const headerTop = '╔══════════════════════════════════════╗';
@@ -1203,24 +1264,32 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     getRoleLimit(queue, 'cohost'),
     client.priorityStore,
     guildId,
+    'cohost',
+    queue,
   );
   const overseer = splitSelected(
     queue.roles.overseer,
     getRoleLimit(queue, 'overseer'),
     client.priorityStore,
     guildId,
+    'overseer',
+    queue,
   );
   const main = splitSelected(
     queue.roles.interviewer,
     getRoleLimit(queue, 'interviewer'),
     client.priorityStore,
     guildId,
+    'interviewer',
+    queue,
   );
   const supervisor = splitSelected(
     queue.roles.supervisor,
     getRoleLimit(queue, 'supervisor'),
     client.priorityStore,
     guildId,
+    'supervisor',
+    queue,
   );
 
   async function usernamesFromEntries(entries) {
