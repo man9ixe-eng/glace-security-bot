@@ -75,7 +75,240 @@ function emptySections() {
   };
 }
 
-async function resolveLineupForShortId(client, shortId) {
+function detectSessionTypeFromCard(card) {
+  const text = `${card?.name || ''}\n${card?.desc || ''}`.toLowerCase();
+
+  if (text.includes('interview')) return 'interview';
+  if (text.includes('training')) return 'training';
+  if (text.includes('mass shift') || text.includes('massshift') || text.includes('mass-shift')) {
+    return 'massshift';
+  }
+
+  return null;
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean).map(String))];
+}
+
+function messageTextForSearch(message) {
+  const parts = [message?.content || ''];
+
+  for (const embed of message?.embeds || []) {
+    const data = embed?.toJSON?.() || embed || {};
+    if (data.title) parts.push(data.title);
+    if (data.description) parts.push(data.description);
+    if (data.url) parts.push(data.url);
+    if (data.footer?.text) parts.push(data.footer.text);
+    for (const field of data.fields || []) {
+      parts.push(field.name || '', field.value || '');
+    }
+  }
+
+  return parts.join('\n');
+}
+
+function messageMentionsCard(message, shortId, card) {
+  const text = messageTextForSearch(message).toLowerCase();
+  const targets = unique([
+    shortId,
+    card?.shortLink,
+    card?.shortUrl,
+    card?.url,
+    card?.idShort ? String(card.idShort) : null,
+  ])
+    .map((value) => String(value).toLowerCase())
+    .filter(Boolean);
+
+  return targets.some((target) => text.includes(target));
+}
+
+function getCandidateQueueChannelIds(preferredChannelId) {
+  return unique([
+    preferredChannelId,
+    process.env.QUEUE_INTERVIEW_CHANNEL_ID,
+    process.env.SESSION_QUEUECHANNEL_INTERVIEW_ID,
+    process.env.QUEUE_TRAINING_CHANNEL_ID,
+    process.env.SESSION_QUEUECHANNEL_TRAINING_ID,
+    process.env.QUEUE_MASSSHIFT_CHANNEL_ID,
+    process.env.SESSION_QUEUECHANNEL_MASSSHIFT_ID,
+    process.env.QUEUE_MASS_SHIFT_CHANNEL_ID,
+    process.env.SESSION_QUEUE_CHANNEL_ID,
+    process.env.SESSION_QUEUECHANNEL_ID,
+    process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID,
+  ]);
+}
+
+async function fetchTextChannel(client, channelId) {
+  if (!channelId) return null;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased?.()) return null;
+  return channel;
+}
+
+async function findQueueMessageForCard(client, shortId, card, preferredChannelId) {
+  const channelIds = getCandidateQueueChannelIds(preferredChannelId);
+
+  for (const channelId of channelIds) {
+    const channel = await fetchTextChannel(client, channelId);
+    if (!channel) continue;
+
+    const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+    if (!messages?.size) continue;
+
+    const matches = [...messages.values()]
+      .filter((message) => messageMentionsCard(message, shortId, card))
+      .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+
+    if (matches[0]) return { channel, message: matches[0] };
+  }
+
+  return null;
+}
+
+function looksLikeAttendeesPost(message) {
+  const content = String(message?.content || '').toLowerCase();
+  return (
+    content.includes('selected attendees') ||
+    content.includes('you should now join') ||
+    content.includes('trainers 🔴') ||
+    content.includes('interviewers 🟡') ||
+    content.includes('attendees 🟣')
+  );
+}
+
+async function findAttendeesPostAfterQueue(channel, queueMessage) {
+  if (!channel || !queueMessage?.id) return null;
+
+  const afterMessages = await channel.messages.fetch({ after: queueMessage.id, limit: 50 }).catch(() => null);
+  const afterMatches = [...(afterMessages?.values?.() || [])]
+    .filter(looksLikeAttendeesPost)
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  if (afterMatches[0]) return afterMatches[0];
+
+  const recentMessages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  const recentMatches = [...(recentMessages?.values?.() || [])]
+    .filter((message) => message.createdTimestamp >= queueMessage.createdTimestamp)
+    .filter(looksLikeAttendeesPost)
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  return recentMatches[0] || null;
+}
+
+function pushUnique(section, userId) {
+  if (!userId) return;
+  if (!section.includes(userId)) section.push(userId);
+}
+
+function parseAttendeesPostContent(content, sessionType) {
+  const sections = emptySections();
+  let hostId = null;
+  let hostName = null;
+  let currentKey = null;
+
+  const lines = String(content || '').split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const lowered = line.toLowerCase();
+    if (!line) continue;
+
+    if (/backup/i.test(line)) {
+      currentKey = null;
+      continue;
+    }
+
+    if (lowered.includes('co-host:') || lowered.includes('cohost:')) {
+      const id = extractDiscordUserId(line);
+      if (id) pushUnique(sections.cohost, id);
+      currentKey = null;
+      continue;
+    }
+
+    if (lowered.includes('overseer:')) {
+      const id = extractDiscordUserId(line);
+      if (id) pushUnique(sections.overseer, id);
+      currentKey = null;
+      continue;
+    }
+
+    if (lowered.includes('host:')) {
+      hostId = extractDiscordUserId(line);
+      hostName = hostId ? null : line.replace(/^.*host:\s*/i, '').trim();
+      currentKey = null;
+      continue;
+    }
+
+    if (lowered.includes('supervisors')) {
+      currentKey = 'supervisor';
+      continue;
+    }
+
+    if (lowered.includes('trainers') || lowered.includes('interviewers') || lowered.includes('attendees')) {
+      currentKey = 'interviewer';
+      continue;
+    }
+
+    if (lowered.includes('none selected') || lowered === 'none') continue;
+    if (!currentKey) continue;
+
+    const id = extractDiscordUserId(line);
+    if (id) pushUnique(sections[currentKey], id);
+  }
+
+  const hasAny = Object.values(sections).some((ids) => ids.length);
+  if (!hasAny && !hostId && !hostName) return null;
+
+  return {
+    shortId: null,
+    sessionType,
+    hostId,
+    hostName,
+    sections,
+  };
+}
+
+async function recoverSessionFromAttendeesPost({ client, shortId, card, guildId, preferredChannelId }) {
+  const sessionType = detectSessionTypeFromCard(card);
+  if (!sessionType) return null;
+
+  const foundQueue = await findQueueMessageForCard(client, shortId, card, preferredChannelId);
+  if (!foundQueue?.channel || !foundQueue?.message) return null;
+
+  const attendeesMessage = await findAttendeesPostAfterQueue(foundQueue.channel, foundQueue.message);
+  if (!attendeesMessage?.content) return null;
+
+  const lineup = parseAttendeesPostContent(attendeesMessage.content, sessionType);
+  if (!lineup) return null;
+
+  lineup.shortId = shortId;
+
+  const sessionRecord = upsertSession({
+    shortId,
+    sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+    guildId: guildId || null,
+    cardName: card?.name || null,
+    cardUrl: card?.shortUrl || card?.url || null,
+    queueChannelId: foundQueue.channel.id,
+    queueMessageId: foundQueue.message.id,
+    attendeesMessageId: attendeesMessage.id,
+    recoveredAt: Date.now(),
+    lineup,
+  });
+
+  return {
+    source: 'recovered-attendees',
+    lineup: sessionRecord.lineup,
+    sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+  };
+}
+
+async function resolveLineupForShortId(client, shortId, options = {}) {
   const liveQueue = getLiveQueue(shortId);
   if (liveQueue) {
     return {
@@ -90,12 +323,24 @@ async function resolveLineupForShortId(client, shortId) {
   const saved = getSession(shortId);
   if (saved?.lineup) {
     return {
-      source: saved.logMessageId ? 'log' : 'queue',
+      source: saved.logMessageId ? 'log' : saved.recoveredAt ? 'recovered-attendees' : 'queue',
       lineup: saved.lineup,
       sessionType: saved.sessionType || saved.lineup.sessionType,
       hostId: saved.hostId || saved.lineup.hostId || null,
       hostName: saved.hostName || saved.lineup.hostName || null,
     };
+  }
+
+  if (options.card) {
+    const recovered = await recoverSessionFromAttendeesPost({
+      client,
+      shortId,
+      card: options.card,
+      guildId: options.guildId || null,
+      preferredChannelId: options.channelId || null,
+    });
+
+    if (recovered?.lineup) return recovered;
   }
 
   return null;
@@ -504,11 +749,15 @@ async function startEditActivity(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const card = await fetchCardByShortId(shortId).catch(() => null);
-  const resolved = await resolveLineupForShortId(interaction.client, shortId);
+  const resolved = await resolveLineupForShortId(interaction.client, shortId, {
+    card,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+  });
 
   if (!resolved?.lineup) {
     await interaction.editReply(
-      'I could not find an active attendee post or saved log for that Trello card yet.',
+      'I could not find saved edit data for that Trello card, and I could not recover the attendees post from this channel. Try running `/editactivity` in the same channel where the queue/attendees post was made. If this is a very old log from before edit tracking was saved, I cannot safely match it to the card yet.',
     );
     return;
   }
@@ -526,7 +775,7 @@ async function startEditActivity(interaction) {
     .setTitle('Edit Activity | Current Lineup')
     .setDescription([
       `**Session:** ${card?.name || shortId}`,
-      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : 'Queue / Attendees Post'}`,
+      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : resolved.source === 'recovered-attendees' ? 'Recovered Attendees Post' : 'Queue / Attendees Post'}`,
       `**Host:** ${lineup.hostId ? `<@${lineup.hostId}>` : lineup.hostName || 'Unknown'}`,
       '',
       'Reply to this message, or send your corrected lineup as your next message in this channel.',
@@ -577,7 +826,12 @@ async function handleEditActivityReply(message) {
     return true;
   }
 
-  const resolved = await resolveLineupForShortId(message.client, pending.shortId);
+  const card = await fetchCardByShortId(pending.shortId).catch(() => null);
+  const resolved = await resolveLineupForShortId(message.client, pending.shortId, {
+    card,
+    guildId: message.guildId,
+    channelId: message.channelId,
+  });
   const sessionType = resolved?.sessionType || resolved?.lineup?.sessionType || getSession(pending.shortId)?.sessionType;
 
   if (!sessionType || !resolved?.lineup) {
