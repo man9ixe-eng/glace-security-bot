@@ -139,6 +139,30 @@ function getTodayDueESTIso() {
   return `${ymd}T23:59:00${offset}`;
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function buildNYDueIso(year, monthOneBased, day) {
+  const probe = new Date(Date.UTC(year, monthOneBased - 1, day, 12, 0, 0));
+  const offset = getNYOffsetString(probe);
+  return `${year}-${pad2(monthOneBased)}-${pad2(day)}T23:59:00${offset}`;
+}
+
+function getNextMonthDueESTIso() {
+  const today = getNYParts();
+  let nextYear = today.year;
+  let nextMonth = today.month + 1;
+
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+
+  const nextDay = Math.min(today.day, getLastDayOfMonth(nextYear, nextMonth));
+  return buildNYDueIso(nextYear, nextMonth, nextDay);
+}
+
 function getLastDayOfMonth(year, monthOneBased) {
   return new Date(year, monthOneBased, 0).getDate();
 }
@@ -267,20 +291,6 @@ async function clearMonthlyMilestonesList() {
   }
 }
 
-async function hasAlreadyPostedToday() {
-  const res = await trelloGet(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}/cards`, {
-    fields: "id,due,closed",
-  });
-
-  const duePrefix = getTodayDueESTIso().slice(0, 10);
-
-  return (res.data || []).some((card) => {
-    if (card.closed) return false;
-    if (!card.due) return false;
-    return card.due.slice(0, 10) === duePrefix;
-  });
-}
-
 // =========================
 // COMMAND
 // =========================
@@ -299,14 +309,8 @@ module.exports = {
     }
 
     try {
-      const alreadyPosted = await hasAlreadyPostedToday();
-      if (alreadyPosted) {
-        return interaction.reply({
-          content: "❌ Monthly milestones have already been posted for today.",
-          ephemeral: true,
-        });
-      }
-
+      // Always clear the previous milestone cards first so rerunning the command
+      // refreshes the list instead of stacking old cards.
       await clearMonthlyMilestonesList();
 
       await trelloPut(`https://api.trello.com/1/lists/${MONTHLY_MILESTONES_LIST_ID}`, {
@@ -316,6 +320,7 @@ module.exports = {
       const allCards = await getAllBoardCards();
       const todayParts = getNYParts();
       const dueIso = getTodayDueESTIso();
+      const nextMonthDueIso = getNextMonthDueESTIso();
 
       const seen = new Set();
       const eligible = [];
@@ -375,6 +380,11 @@ module.exports = {
 
           await trelloPost(`https://api.trello.com/1/cards/${newCard.data.id}/idLabels`, {
             value: LABEL_HAPPY_MONTHS,
+          });
+
+          // Move the main Staff Journey card due date forward so next month is smooth.
+          await trelloPut(`https://api.trello.com/1/cards/${entry.sourceCard.id}`, {
+            due: nextMonthDueIso,
           });
 
           posted.push(entry);
