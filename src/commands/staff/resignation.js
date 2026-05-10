@@ -92,6 +92,50 @@ const SENIOR_PLUS_RANKS = new Set([
   "president",
 ]);
 
+
+function isUnknownInteractionError(err) {
+  return err?.code === 10062 || String(err?.message || "").toLowerCase().includes("unknown interaction");
+}
+
+async function ensureDeferred(interaction) {
+  if (interaction.deferred || interaction.replied) return true;
+
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    return true;
+  } catch (err) {
+    if (isUnknownInteractionError(err)) {
+      console.warn(`[${String(interaction.commandName || "STAFF").toUpperCase()}] Interaction expired before the bot could defer. Continuing safely without an interaction reply.`);
+      return false;
+    }
+
+    throw err;
+  }
+}
+
+async function safeEditReply(interaction, content) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(content);
+      return;
+    }
+
+    if (typeof content === "string") {
+      await interaction.reply({ content, ephemeral: true });
+      return;
+    }
+
+    await interaction.reply({ ...content, ephemeral: true });
+  } catch (err) {
+    if (isUnknownInteractionError(err)) {
+      console.warn(`[${String(interaction.commandName || "STAFF").toUpperCase()}] Could not send the Discord reply because the interaction expired.`);
+      return;
+    }
+
+    console.error(`[${String(interaction.commandName || "STAFF").toUpperCase()}] Could not send interaction reply:`, err.response?.data || err.message || err);
+  }
+}
+
 // =========================
 // DATE HELPERS
 // =========================
@@ -494,14 +538,14 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await ensureDeferred(interaction);
 
     const username = cleanUsername(interaction.options.getString("username", true));
     const providedMember = interaction.options.getMember("member");
     const date = interaction.options.getString("date") || getTodayMmDdYyyy();
 
     if (!TRELLO_KEY || !TRELLO_TOKEN || !BOARD_ID) {
-      await interaction.editReply("❌ Missing TRELLO_KEY, TRELLO_TOKEN, or STAFF_JOURNEY_BOARD_ID env.");
+      await safeEditReply(interaction, "❌ Missing TRELLO_KEY, TRELLO_TOKEN, or STAFF_JOURNEY_BOARD_ID env.");
       return;
     }
 
@@ -509,20 +553,20 @@ module.exports = {
     const dueDate = formatDueNextMonth(date);
 
     if (!prettyDate || !dueDate) {
-      await interaction.editReply("❌ Invalid date. Use MM/DD/YYYY.");
+      await safeEditReply(interaction, "❌ Invalid date. Use MM/DD/YYYY.");
       return;
     }
 
     try {
       const resignationListId = await resolveResignationListId();
       if (!resignationListId) {
-        await interaction.editReply("❌ I could not find the **RESIGNATION** Trello list. Add RESIGNATION_LIST_ID, RESIGNATIONS_LIST_ID, or RESIGNITIONS_LIST_ID in Render.");
+        await safeEditReply(interaction, "❌ I could not find the **RESIGNATION** Trello list. Add RESIGNATION_LIST_ID, RESIGNATIONS_LIST_ID, or RESIGNITIONS_LIST_ID in Render.");
         return;
       }
 
       const card = await findStaffCardByUsername(username, resignationListId);
       if (!card) {
-        await interaction.editReply("❌ Oops, it seems you have not used the /enroll command.");
+        await safeEditReply(interaction, "❌ Oops, it seems you have not used the /enroll command.");
         return;
       }
 
@@ -548,7 +592,7 @@ module.exports = {
         pos: "bottom",
       });
 
-      await interaction.editReply(
+      await safeEditReply(interaction, 
         [
           `✅ Marked **${username}** as resigned.`,
           `Moved card to **RESIGNATION** as: **${resignationCardName}**`,
@@ -559,7 +603,7 @@ module.exports = {
       );
     } catch (err) {
       console.error("[RESIGNATION ERROR]", err.response?.data || err.message || err);
-      await interaction.editReply("❌ Resignation Trello/Discord error. Check Render logs for details.");
+      await safeEditReply(interaction, "❌ Resignation Trello/Discord error. Check Render logs for details.");
     }
   },
 };

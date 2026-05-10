@@ -2,9 +2,9 @@
   "hostedSessions": [],
   "supportSessions": [],
   "meta": {
-    "currentWeekKey": "2026-04-13",
-    "lastMaintenanceAt": 1776258336511,
-    "previousWeekKey": null,
+    "currentWeekKey": "2026-05-04",
+    "lastMaintenanceAt": 1778387370453,
+    "previousWeekKey": "2026-04-13",
     "lastBackfillAt": 0
   }
 }

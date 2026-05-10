@@ -530,7 +530,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await ensureDeferred(interaction);
 
     const username = interaction.options.getString("username", true).trim();
     const newRank = interaction.options.getString("rank", true);
@@ -540,17 +540,17 @@ module.exports = {
     const rankConfig = RANK_CONFIG[newRank];
 
     if (!TRELLO_KEY || !TRELLO_TOKEN || !BOARD_ID) {
-      await interaction.editReply("❌ Missing TRELLO_KEY, TRELLO_TOKEN, or STAFF_JOURNEY_BOARD_ID env.");
+      await safeEditReply(interaction, "❌ Missing TRELLO_KEY, TRELLO_TOKEN, or STAFF_JOURNEY_BOARD_ID env.");
       return;
     }
 
     if (!member || !rankConfig) {
-      await interaction.editReply("❌ I could not find that Discord member or rank.");
+      await safeEditReply(interaction, "❌ I could not find that Discord member or rank.");
       return;
     }
 
     if (!rankConfig.listId || !rankConfig.rankLabel || !rankConfig.teamLabel) {
-      await interaction.editReply(`❌ Missing env vars for **${newRank}**.`);
+      await safeEditReply(interaction, `❌ Missing env vars for **${newRank}**.`);
       return;
     }
 
@@ -558,7 +558,7 @@ module.exports = {
     const dueDate = formatDueNextMonth(date);
 
     if (!prettyDate || !dueDate) {
-      await interaction.editReply("❌ Invalid date. Use MM/DD/YYYY.");
+      await safeEditReply(interaction, "❌ Invalid date. Use MM/DD/YYYY.");
       return;
     }
 
@@ -566,13 +566,13 @@ module.exports = {
       const card = await findStaffCardByUsername(username);
 
       if (!card) {
-        await interaction.editReply("❌ Oops, it seems you have not used the /enroll command.");
+        await safeEditReply(interaction, "❌ Oops, it seems you have not used the /enroll command.");
         return;
       }
 
       const roleResult = await updateDiscordTeamAndTicketRoles(interaction, member, rankConfig);
       if (!roleResult.ok) {
-        await interaction.editReply(roleResult.message);
+        await safeEditReply(interaction, roleResult.message);
         return;
       }
 
@@ -601,7 +601,7 @@ module.exports = {
         value: rankConfig.teamLabel,
       });
 
-      await interaction.editReply(
+      await safeEditReply(interaction, 
         [
           `✅ Updated **${username}** to **${newRank}**.`,
           `Discord member: ${member}`,
@@ -612,7 +612,7 @@ module.exports = {
       );
     } catch (err) {
       console.error("[DEMOTION ERROR]", err.response?.data || err.message || err);
-      await interaction.editReply("❌ Demotion Trello/Discord error. Check Render logs for details.");
+      await safeEditReply(interaction, "❌ Demotion Trello/Discord error. Check Render logs for details.");
     }
   },
 };
