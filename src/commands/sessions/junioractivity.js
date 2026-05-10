@@ -14,6 +14,7 @@ const {
   getRecordsForPlayer,
   getKnownPlayerProfile,
   summarizeJuniorRecords,
+  CURRENT_JUNIOR_STAFF_MESSAGE,
   getWeeklyConsistency,
   getPromotionDecision,
   formatMinutes,
@@ -156,8 +157,23 @@ module.exports = {
       return;
     }
 
-    const profile = getKnownPlayerProfile(player);
     const records = getRecordsForPlayer(player, range);
+
+    // Do not show an empty Junior Staff panel.
+    // If the player has no Junior Staff training logs in the selected range,
+    // return the simple friendly message instead.
+    if (!records.length) {
+      await interaction.editReply(CURRENT_JUNIOR_STAFF_MESSAGE);
+      return;
+    }
+
+    const profile = getKnownPlayerProfile(player);
+
+    if (!profile) {
+      await interaction.editReply(CURRENT_JUNIOR_STAFF_MESSAGE);
+      return;
+    }
+
     const summary = summarizeJuniorRecords(records);
     const consistency = getWeeklyConsistency(player, 4, getWeekRange);
     const decision = getPromotionDecision(consistency);

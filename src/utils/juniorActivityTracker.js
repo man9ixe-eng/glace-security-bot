@@ -38,6 +38,19 @@ const JUNIOR_ROLE_LABELS = [
   'Security | Helper',
 ];
 
+const CURRENT_JUNIOR_STAFF_MESSAGE =
+  'Sorry, this player does not have anything logged! Please check if they are Junior Staff. D:';
+
+function isJuniorStaffRole(role) {
+  const normalized = normalizeRole(role);
+  return JUNIOR_ROLE_LABELS.includes(normalized);
+}
+
+function isJuniorStaffRecord(record) {
+  if (!record) return false;
+  return isJuniorStaffRole(record.role);
+}
+
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(META_PATH)) {
@@ -279,6 +292,10 @@ function parseRobloxActivityLogMessage(message) {
   const minutesInTC = parseMinutes(minutesField || text);
   const role = normalizeRole(roleRaw || text);
 
+  // Junior Staff tracking must stay locked to Tier 0 only.
+  // Anything Leadership Intern+ / Management+ should be ignored entirely.
+  if (!isJuniorStaffRole(role)) return null;
+
   const lower = text.toLowerCase();
   const looksTrainingRelated =
     lower.includes('training') ||
@@ -312,6 +329,7 @@ function parseRobloxActivityLogMessage(message) {
 
 function upsertRecord(record) {
   if (!record || (!record.robloxId && !record.robloxUsername)) return false;
+  if (!isJuniorStaffRecord(record)) return false;
 
   const monthKey = monthKeyFromTimestamp(record.timestamp);
   const records = readMonth(monthKey);
@@ -452,6 +470,8 @@ function getRecordsForPlayer(playerQuery, range = null) {
   for (const monthKey of monthKeys) {
     const records = readMonth(monthKey);
     for (const record of records) {
+      if (!isJuniorStaffRecord(record)) continue;
+
       const ts = Number(record.timestamp || 0);
       if (ts < startMs || ts > endMs) continue;
 
@@ -481,6 +501,8 @@ function getKnownPlayerProfile(playerQuery) {
     if (!Array.isArray(records)) continue;
 
     for (const record of [...records].reverse()) {
+      if (!isJuniorStaffRecord(record)) continue;
+
       const idMatch = numericQuery && String(record.robloxId || '') === numericQuery;
       const usernameMatch = normalizedQuery && normalizeLookup(record.robloxUsername) === normalizedQuery;
       const looseUsernameMatch =
@@ -496,11 +518,7 @@ function getKnownPlayerProfile(playerQuery) {
     }
   }
 
-  return {
-    robloxUsername: numericQuery === query ? 'Unknown' : query,
-    robloxId: numericQuery === query ? numericQuery : null,
-    role: 'Unknown Junior Staff Role',
-  };
+  return null;
 }
 
 function summarizeJuniorRecords(records) {
@@ -618,6 +636,9 @@ module.exports = {
   TIME_ZONE,
   JUNIOR_ACTIVITY_LOG_CHANNEL_ID,
   JUNIOR_ROLE_LABELS,
+  CURRENT_JUNIOR_STAFF_MESSAGE,
+  isJuniorStaffRole,
+  isJuniorStaffRecord,
   parseRobloxActivityLogMessage,
   backfillJuniorActivityFromLogChannel,
   handleJuniorActivityLogMessage,
