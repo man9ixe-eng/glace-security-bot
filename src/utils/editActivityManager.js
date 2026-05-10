@@ -33,6 +33,20 @@ function getLiveQueue(shortId) {
   }
 }
 
+
+const RECOVERY_CHANNEL_NAME_HINTS = [
+  'session',
+  'queue',
+  'attendee',
+  'attendees',
+  'training',
+  'interview',
+  'mass',
+  'log',
+];
+
+const RECOVERY_CHANNEL_LIMIT = Number(process.env.EDITACTIVITY_RECOVERY_CHANNEL_LIMIT || 35);
+
 function getEditableSections(sessionType) {
   if (sessionType === 'training') {
     return [
@@ -123,7 +137,7 @@ function messageMentionsCard(message, shortId, card) {
   return targets.some((target) => text.includes(target));
 }
 
-function getCandidateQueueChannelIds(preferredChannelId) {
+function getConfiguredRecoveryChannelIds(preferredChannelId) {
   return unique([
     preferredChannelId,
     process.env.QUEUE_INTERVIEW_CHANNEL_ID,
@@ -135,7 +149,9 @@ function getCandidateQueueChannelIds(preferredChannelId) {
     process.env.QUEUE_MASS_SHIFT_CHANNEL_ID,
     process.env.SESSION_QUEUE_CHANNEL_ID,
     process.env.SESSION_QUEUECHANNEL_ID,
+    process.env.SESSION_LOG_CHANNEL_ID,
     process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID,
+    process.env.ACTIVITY_LOG_CHANNEL_ID,
   ]);
 }
 
@@ -146,18 +162,57 @@ async function fetchTextChannel(client, channelId) {
   return channel;
 }
 
-async function findQueueMessageForCard(client, shortId, card, preferredChannelId) {
-  const channelIds = getCandidateQueueChannelIds(preferredChannelId);
+function channelLooksRelevant(channel) {
+  const name = String(channel?.name || '').toLowerCase();
+  if (!name) return false;
+  return RECOVERY_CHANNEL_NAME_HINTS.some((hint) => name.includes(hint));
+}
 
-  for (const channelId of channelIds) {
+async function getCandidateRecoveryChannels(client, guildId, preferredChannelId) {
+  const channels = [];
+  const seen = new Set();
+
+  async function addChannel(channel) {
+    if (!channel?.id || seen.has(channel.id) || !channel.isTextBased?.()) return;
+    seen.add(channel.id);
+    channels.push(channel);
+  }
+
+  for (const channelId of getConfiguredRecoveryChannelIds(preferredChannelId)) {
     const channel = await fetchTextChannel(client, channelId);
-    if (!channel) continue;
+    if (channel) await addChannel(channel);
+  }
 
+  const guild = guildId ? await client.guilds.fetch(guildId).catch(() => null) : null;
+  const guildChannels = guild ? await guild.channels.fetch().catch(() => null) : null;
+
+  if (guildChannels?.size) {
+    const relevant = [...guildChannels.values()]
+      .filter((channel) => channel?.isTextBased?.())
+      .filter(channelLooksRelevant)
+      .sort((a, b) => {
+        if (a.id === preferredChannelId) return -1;
+        if (b.id === preferredChannelId) return 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      })
+      .slice(0, Number.isFinite(RECOVERY_CHANNEL_LIMIT) && RECOVERY_CHANNEL_LIMIT > 0 ? RECOVERY_CHANNEL_LIMIT : 35);
+
+    for (const channel of relevant) await addChannel(channel);
+  }
+
+  return channels;
+}
+
+async function findQueueMessageForCard(client, shortId, card, preferredChannelId, guildId) {
+  const channels = await getCandidateRecoveryChannels(client, guildId, preferredChannelId);
+
+  for (const channel of channels) {
     const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
     if (!messages?.size) continue;
 
     const matches = [...messages.values()]
       .filter((message) => messageMentionsCard(message, shortId, card))
+      .filter((message) => messageTextForSearch(message).toLowerCase().includes('trello'))
       .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 
     if (matches[0]) return { channel, message: matches[0] };
@@ -269,11 +324,132 @@ function parseAttendeesPostContent(content, sessionType) {
   };
 }
 
+function fieldNameMatches(name, patterns) {
+  const normalized = String(name || '').toLowerCase();
+  return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+function extractAllDiscordUserIds(text) {
+  return unique(String(text || '').match(/(?:<@!?)?(\d{17,20})>?/g) || [])
+    .map((raw) => {
+      const match = String(raw).match(/\d{17,20}/);
+      return match?.[0] || null;
+    })
+    .filter(Boolean);
+}
+
+function parseSessionLogMessage(message, sessionType) {
+  const sections = emptySections();
+  let hostId = null;
+  let hostName = null;
+
+  const embed = message?.embeds?.[0];
+  const data = embed?.toJSON?.() || embed || null;
+  if (!data) return null;
+
+  for (const field of data.fields || []) {
+    const name = String(field.name || '');
+    const value = String(field.value || '');
+    const ids = extractAllDiscordUserIds(value);
+
+    if (fieldNameMatches(name, ['host']) && !fieldNameMatches(name, ['co-host', 'cohost'])) {
+      hostId = ids[0] || null;
+      hostName = hostId ? null : value.trim();
+      continue;
+    }
+
+    if (fieldNameMatches(name, ['co-host', 'cohost'])) {
+      ids.forEach((id) => pushUnique(sections.cohost, id));
+      continue;
+    }
+
+    if (fieldNameMatches(name, ['overseer'])) {
+      ids.forEach((id) => pushUnique(sections.overseer, id));
+      continue;
+    }
+
+    if (fieldNameMatches(name, ['supervisor'])) {
+      ids.forEach((id) => pushUnique(sections.supervisor, id));
+      continue;
+    }
+
+    if (fieldNameMatches(name, ['trainer', 'interviewer', 'attendee'])) {
+      ids.forEach((id) => pushUnique(sections.interviewer, id));
+      continue;
+    }
+  }
+
+  const hasAny = Object.values(sections).some((ids) => ids.length);
+  if (!hasAny && !hostId && !hostName) return null;
+
+  return {
+    shortId: null,
+    sessionType,
+    hostId,
+    hostName,
+    sections,
+  };
+}
+
+async function findSessionLogForCard(client, shortId, card, preferredChannelId, guildId) {
+  const channels = await getCandidateRecoveryChannels(client, guildId, preferredChannelId);
+
+  for (const channel of channels) {
+    const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+    if (!messages?.size) continue;
+
+    const matches = [...messages.values()]
+      .filter((message) => message.embeds?.length)
+      .filter((message) => messageMentionsCard(message, shortId, card))
+      .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+
+    if (matches[0]) return { channel, message: matches[0] };
+  }
+
+  return null;
+}
+
+async function recoverSessionFromLogMessage({ client, shortId, card, guildId, preferredChannelId }) {
+  const sessionType = detectSessionTypeFromCard(card);
+  if (!sessionType) return null;
+
+  const foundLog = await findSessionLogForCard(client, shortId, card, preferredChannelId, guildId);
+  if (!foundLog?.channel || !foundLog?.message) return null;
+
+  const lineup = parseSessionLogMessage(foundLog.message, sessionType);
+  if (!lineup) return null;
+
+  lineup.shortId = shortId;
+
+  const sessionRecord = upsertSession({
+    shortId,
+    sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+    guildId: guildId || null,
+    cardName: card?.name || null,
+    cardUrl: card?.shortUrl || card?.url || null,
+    logChannelId: foundLog.channel.id,
+    logMessageId: foundLog.message.id,
+    loggedAt: foundLog.message.createdTimestamp || Date.now(),
+    recoveredAt: Date.now(),
+    lineup,
+  });
+
+  return {
+    source: 'recovered-log',
+    lineup: sessionRecord.lineup,
+    sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+  };
+}
+
 async function recoverSessionFromAttendeesPost({ client, shortId, card, guildId, preferredChannelId }) {
   const sessionType = detectSessionTypeFromCard(card);
   if (!sessionType) return null;
 
-  const foundQueue = await findQueueMessageForCard(client, shortId, card, preferredChannelId);
+  const foundQueue = await findQueueMessageForCard(client, shortId, card, preferredChannelId, guildId);
   if (!foundQueue?.channel || !foundQueue?.message) return null;
 
   const attendeesMessage = await findAttendeesPostAfterQueue(foundQueue.channel, foundQueue.message);
@@ -341,6 +517,16 @@ async function resolveLineupForShortId(client, shortId, options = {}) {
     });
 
     if (recovered?.lineup) return recovered;
+
+    const recoveredLog = await recoverSessionFromLogMessage({
+      client,
+      shortId,
+      card: options.card,
+      guildId: options.guildId || null,
+      preferredChannelId: options.channelId || null,
+    });
+
+    if (recoveredLog?.lineup) return recoveredLog;
   }
 
   return null;
@@ -757,7 +943,7 @@ async function startEditActivity(interaction) {
 
   if (!resolved?.lineup) {
     await interaction.editReply(
-      'I could not find saved edit data for that Trello card, and I could not recover the attendees post from this channel. Try running `/editactivity` in the same channel where the queue/attendees post was made. If this is a very old log from before edit tracking was saved, I cannot safely match it to the card yet.',
+      'I could not find saved edit data for that Trello card, and I could not recover the attendees post or session log from recent queue/log channels. Make sure the attendees post or session log includes the Trello card link. If this is an older log from before edit tracking/card links were saved, I cannot safely match it to the card yet.',
     );
     return;
   }
@@ -775,7 +961,7 @@ async function startEditActivity(interaction) {
     .setTitle('Edit Activity | Current Lineup')
     .setDescription([
       `**Session:** ${card?.name || shortId}`,
-      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : resolved.source === 'recovered-attendees' ? 'Recovered Attendees Post' : 'Queue / Attendees Post'}`,
+      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : resolved.source === 'recovered-log' ? 'Recovered Session Log' : resolved.source === 'recovered-attendees' ? 'Recovered Attendees Post' : 'Queue / Attendees Post'}`,
       `**Host:** ${lineup.hostId ? `<@${lineup.hostId}>` : lineup.hostName || 'Unknown'}`,
       '',
       'Reply to this message, or send your corrected lineup as your next message in this channel.',

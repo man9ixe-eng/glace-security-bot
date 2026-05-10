@@ -49,6 +49,7 @@ module.exports = {
       const result = await logAttendeesForCard(interaction.client, cardInput, {
         recordAttendance: true,
         cancelled: false,
+        cardUrl: cardInput,
       });
 
       if (!result?.ok) {

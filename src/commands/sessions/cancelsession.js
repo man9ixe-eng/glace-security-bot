@@ -57,6 +57,7 @@ module.exports = {
         const result = await logAttendeesForCard(interaction.client, cardInput, {
           recordAttendance: false,
           cancelled: true,
+          cardUrl: cardInput,
         });
 
         logLine = result?.ok

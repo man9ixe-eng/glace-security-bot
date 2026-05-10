@@ -36,6 +36,87 @@ const SESSION_LOG_CHANNEL_ID = process.env.SESSION_LOG_CHANNEL_ID || null;
 const SESSION_ATTENDEES_LOG_CHANNEL_ID =
   process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID || null;
 
+const SESSION_LOG_CHANNEL_NAME_FALLBACKS = [
+  'session-logs',
+  'session-log',
+  'session logs',
+  'session log',
+];
+
+function normalizeChannelLookupName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/^#/, '')
+    .replace(/[\s_]+/g, '-')
+    .trim();
+}
+
+async function findTextChannelByName(client, guildId, names = []) {
+  const guild = guildId ? await client.guilds.fetch(guildId).catch(() => null) : null;
+  if (!guild) return null;
+
+  const channels = await guild.channels.fetch().catch(() => null);
+  if (!channels?.size) return null;
+
+  const wanted = new Set(names.map(normalizeChannelLookupName));
+  return (
+    [...channels.values()].find((channel) => {
+      if (!channel?.isTextBased?.()) return false;
+      return wanted.has(normalizeChannelLookupName(channel.name));
+    }) || null
+  );
+}
+
+async function resolveSessionLogChannel(client, guildId, fallbackChannelId = null) {
+  const configuredIds = [
+    SESSION_LOG_CHANNEL_ID,
+    SESSION_ATTENDEES_LOG_CHANNEL_ID,
+    process.env.SESSION_LOGS_CHANNEL_ID,
+    process.env.SESSIONLOGS_CHANNEL_ID,
+  ].filter(Boolean);
+
+  for (const channelId of configuredIds) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (channel?.isTextBased?.()) return channel;
+  }
+
+  const namedChannel = await findTextChannelByName(
+    client,
+    guildId,
+    SESSION_LOG_CHANNEL_NAME_FALLBACKS,
+  );
+  if (namedChannel) return namedChannel;
+
+  if (fallbackChannelId) {
+    const fallback = await client.channels.fetch(fallbackChannelId).catch(() => null);
+    if (fallback?.isTextBased?.()) return fallback;
+  }
+
+  return null;
+}
+
+function resolveTrelloCardUrl(shortId, queue, cardOptionOrShortId, options = {}) {
+  const choices = [
+    options.cardUrl,
+    queue?.cardUrl,
+    cardOptionOrShortId,
+    shortId ? `https://trello.com/c/${shortId}` : null,
+  ];
+
+  for (const choice of choices) {
+    const value = String(choice || '').trim();
+    if (!value) continue;
+
+    const urlMatch = value.match(/https?:\/\/[^\s>]+trello\.com\/c\/[a-zA-Z0-9][^\s>]*/i);
+    if (urlMatch) return urlMatch[0];
+
+    const shortMatch = value.match(/^([a-zA-Z0-9]{6,10})$/);
+    if (shortMatch) return `https://trello.com/c/${shortMatch[1]}`;
+  }
+
+  return shortId ? `https://trello.com/c/${shortId}` : 'Unknown';
+}
+
 const RANK_LADDER = [
   'Leadership Intern',
   'Supervisor',
@@ -410,6 +491,38 @@ function removeUserFromQueue(queue, userId) {
     }
   }
   return removed;
+}
+
+function findUserQueueRole(queue, userId) {
+  if (!queue?.roles || !userId) return null;
+  for (const [roleKey, entries] of Object.entries(queue.roles)) {
+    const found = entries.find((entry) => entry.userId === userId);
+    if (found) return { roleKey, entry: found };
+  }
+  return null;
+}
+
+function roleLabelForQueue(queue, roleKey) {
+  if (roleKey === 'interviewer') {
+    if (queue?.sessionType === 'training') return 'Trainer';
+    if (queue?.sessionType === 'massshift') return 'Attendee';
+    return 'Interviewer';
+  }
+
+  if (roleKey === 'cohost') return 'Co-Host';
+  if (roleKey === 'overseer') return 'Overseer';
+  if (roleKey === 'supervisor') return 'Supervisor';
+
+  return String(roleKey || 'Role').charAt(0).toUpperCase() + String(roleKey || 'Role').slice(1);
+}
+
+function buildPrivateLeaveRow(shortId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`queue_leave_${shortId}`)
+      .setLabel('Leave Queue')
+      .setStyle(ButtonStyle.Danger),
+  );
 }
 
 function getRoleLimit(queue, roleKey) {
@@ -1011,8 +1124,8 @@ async function openQueueForCard(interaction, cardOption) {
     '',
     '❓ HOW TO LEAVE THE QUEUE/INFORM LATE ARRIVAL ❓',
     '----------------------------------------------------------------',
-    '- Click the "Leave Queue" button, which will show up once you join the queue.',
-    '- You can only leave the queue BEFORE the session list is posted, at that point, you would have to go to #session-lounge and PING your host with a message stating you need to un-queue.',
+    '- After you join, the bot will privately show you a **Leave Queue** button.',
+    '- You can only leave the queue BEFORE the session list is posted. After that, message your host if you need to un-queue.',
     '- If you do not let the host know anything before **5 minutes** after an attendees post was made, you will be given a **Written Warning, and your spot could be given up.**',
     '----------------------------------------------------------------',
     '╭─────── 💠 LINKS 💠 ───────────╮',
@@ -1029,10 +1142,6 @@ async function openQueueForCard(interaction, cardOption) {
       .setCustomId(`queue_joinmenu_${shortId}`)
       .setLabel('Join Queue')
       .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`queue_leave_${shortId}`)
-      .setLabel('Leave Queue')
-      .setStyle(ButtonStyle.Danger),
   );
 
   const controlRow = new ActionRowBuilder().addComponents(
@@ -1246,18 +1355,18 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     return { ok: false, reason: 'missing_queue' };
   }
 
-  const logChannelId =
-    SESSION_LOG_CHANNEL_ID ||
-    SESSION_ATTENDEES_LOG_CHANNEL_ID ||
-    queue.channelId;
-
-  const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+  const logChannel = await resolveSessionLogChannel(
+    client,
+    queue.guildId || null,
+    queue.channelId || null,
+  );
   if (!logChannel) {
-    console.warn('[LOG] Could not fetch log channel for attendees');
+    console.warn('[LOG] Could not fetch #session-logs or fallback log channel for attendees');
     return { ok: false, reason: 'missing_log_channel' };
   }
 
   const guildId = queue.guildId || 'global';
+  const cardUrl = resolveTrelloCardUrl(shortId, queue, cardOptionOrShortId, options);
 
   const cohost = splitSelected(
     queue.roles.cohost,
@@ -1331,6 +1440,10 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
         : resolvedHostName,
     },
     {
+      name: 'Trello Card Link',
+      value: cardUrl,
+    },
+    {
       name: 'Co-Host',
       value: cohostNames.length ? cohostNames.join('\n') : 'None',
       inline: true,
@@ -1370,7 +1483,12 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     .setTitle(logStyle.title)
     .setColor(logStyle.color)
     .setFields(fields)
+    .setFooter({ text: `Trello Card: ${shortId}` })
     .setTimestamp();
+
+  if (/^https?:\/\//i.test(cardUrl)) {
+    embed.setURL(cardUrl);
+  }
 
   const logMessage = await logChannel.send({ embeds: [embed] });
 
@@ -1394,7 +1512,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     hostName: queue.hostName || null,
     guildId: queue.guildId || null,
     cardName: queue.cardName || null,
-    cardUrl: queue.cardUrl || null,
+    cardUrl,
     queueChannelId: queue.channelId || null,
     queueMessageId: queue.messageId || null,
     attendeesMessageId: queue.attendeesMessageId || null,
@@ -1454,7 +1572,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     );
   }
 
-  return { ok: true, shortId, logMessageId: logMessage.id };
+  return { ok: true, shortId, logChannelId: logChannel.id, logMessageId: logMessage.id, cardUrl };
 }
 
 async function cleanupQueueForCard(client, cardOptionOrShortId) {
@@ -1560,6 +1678,16 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
+      const alreadyQueued = findUserQueueRole(queue, interaction.user.id);
+      if (alreadyQueued) {
+        await interaction.reply({
+          content: `You are already in the **${roleLabelForQueue(queue, alreadyQueued.roleKey)}** queue.`,
+          components: [buildPrivateLeaveRow(shortId)],
+          ephemeral: true,
+        });
+        return true;
+      }
+
       const allowedRoles = getAllowedQueueRoles(queue, interaction.member);
       if (!allowedRoles.length) {
         await interaction.reply({
@@ -1617,20 +1745,11 @@ async function handleQueueButtonInteraction(interaction) {
         return true;
       }
 
-      const roleLabel =
-        roleKey === 'interviewer'
-          ? queue.sessionType === 'training'
-            ? 'Trainer'
-            : queue.sessionType === 'massshift'
-            ? 'Attendee'
-            : 'Interviewer'
-          : roleKey === 'cohost'
-          ? 'Co-Host'
-          : roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
+      const roleLabel = roleLabelForQueue(queue, roleKey);
 
       await interaction.update({
         content: `You have been added to the **${roleLabel}** queue.`,
-        components: [],
+        components: [buildPrivateLeaveRow(shortId)],
       });
       return true;
     }
@@ -1648,13 +1767,18 @@ async function handleQueueButtonInteraction(interaction) {
       }
 
       const removed = removeUserFromQueue(queue, interaction.user.id);
-      await interaction.reply({
-        content: removed
-          ? 'You have been removed from the queue.'
-          : 'You are not currently in this queue.',
-        ephemeral: true,
-      });
-      setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
+      const content = removed
+        ? 'You have been removed from the queue.'
+        : 'You are not currently in this queue.';
+
+      if (interaction.message?.interaction || interaction.message?.flags) {
+        await interaction.update({ content, components: [] }).catch(async () => {
+          await interaction.reply({ content, ephemeral: true }).catch(() => {});
+        });
+      } else {
+        await interaction.reply({ content, ephemeral: true });
+        setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
+      }
       return true;
     }
 
