@@ -81,7 +81,7 @@ module.exports = {
       await logModerationAction(interaction, {
         action: 'Channel Unlock',
         reason,
-        details: `Channel: ${targetChannel}`,
+        details: 'Channel unlocked.',
       });
     } catch (err) {
       console.error('[UNLOCK] Failed to unlock channel:', err);

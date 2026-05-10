@@ -171,7 +171,7 @@ module.exports = {
       await logModerationAction(interaction, {
         action: 'Clear Messages',
         reason,
-        details: `Deleted ${totalDeleted} messages in #${interaction.channel.name}`,
+        details: `Deleted ${totalDeleted} message(s).`,
       });
 
     } catch (err) {

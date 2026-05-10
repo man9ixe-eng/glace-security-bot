@@ -92,7 +92,7 @@ module.exports = {
       await logModerationAction(interaction, {
         action: 'Slowmode Change',
         reason,
-        details: `${human} in ${targetChannel}.`,
+        details: human.replace(/\*\*/g, ''),
       });
     } catch (err) {
       console.error('[SLOWMODE] Failed to change slowmode:', err);

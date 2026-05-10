@@ -57,9 +57,9 @@ module.exports = {
     });
 
     await logModerationAction(interaction, {
-    action: 'Clear All Warnings',
-    targetUser,
-    reason,
+      action: 'Clear All Warnings',
+      targetUser,
+      reason: `Cleared all ${existing.length} warning(s).`,
     });
 
   },

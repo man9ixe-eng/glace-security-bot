@@ -80,7 +80,7 @@ module.exports = {
       await logModerationAction(interaction, {
         action: 'Channel Lock',
         reason,
-        details: `Channel: ${targetChannel}`,
+        details: 'Channel locked.',
       });
     } catch (err) {
       console.error('[LOCK] Failed to lock channel:', err);
