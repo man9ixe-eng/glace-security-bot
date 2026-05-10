@@ -11,6 +11,8 @@ const LOA_PREFIX = '🔕';
 const MR_LOA_ROLE_ID = process.env.MR_LOA_ROLE_ID || '1495157788190576741';
 const HR_LOA_ROLE_ID = process.env.HR_LOA_ROLE_ID || '1434829767911411874';
 const LOA_LOG_CHANNEL_ID = process.env.LOA_LOG_CHANNEL_ID || '1498580557200621578';
+const LOA_PENDING_EMOJI = process.env.LOA_PENDING_EMOJI || '🟡';
+const LOA_ENDED_EMOJI = process.env.LOA_ENDED_EMOJI || '🟢';
 
 const TRELLO_KEY = process.env.TRELLO_KEY;
 const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
@@ -189,6 +191,33 @@ function formatDuration(ms) {
   return parts.join(', ');
 }
 
+
+function diffCalendarDays(startDateString, endDateString) {
+  const start = parseLoaDate(startDateString, 'Start Date');
+  const end = parseLoaDate(endDateString, 'End Date');
+  if (!start.ok || !end.ok) return null;
+
+  const msPerDay = 86_400_000;
+  const diff = Math.floor((end.date.getTime() - start.date.getTime()) / msPerDay);
+  if (!Number.isFinite(diff) || diff < 0) return null;
+  return Math.max(1, diff || 1);
+}
+
+function formatCalendarDuration(startDateString, endDateString) {
+  const days = diffCalendarDays(startDateString, endDateString);
+  if (!days) return 'Unknown';
+
+  const weeks = Math.floor(days / 7);
+  const remainingDays = days % 7;
+  const parts = [];
+
+  if (weeks) parts.push(`${weeks} week${weeks === 1 ? '' : 's'}`);
+  if (remainingDays) parts.push(`${remainingDays} day${remainingDays === 1 ? '' : 's'}`);
+
+  if (!parts.length) return `${days} day${days === 1 ? '' : 's'}`;
+  return `${parts.join(', ')} (${days} day${days === 1 ? '' : 's'})`;
+}
+
 function pad2(value) {
   return String(value).padStart(2, '0');
 }
@@ -347,6 +376,28 @@ function validateRemoveLoaOptions(options = {}, existing = null) {
   }
 
   return { ok: true, endDate: end.value };
+}
+
+function validateExtendLoaOptions(options = {}, existing = null) {
+  const end = parseLoaDate(options.newEndDate, 'New Planned End Date');
+  if (!end.ok) return end;
+  if (String(options.newEndDate || '').trim() !== end.value) {
+    return { ok: false, message: '❌ **New Planned End Date** must be in this exact format: **MM/DD/YYYY**.' };
+  }
+
+  if (existing?.officialStartDate) {
+    const start = parseLoaDate(existing.officialStartDate, 'Start Date');
+    if (start.ok && end.date.getTime() < start.date.getTime()) {
+      return { ok: false, message: '❌ **New Planned End Date** cannot be before the LOA start date.' };
+    }
+  }
+
+  const reason = String(options.reason || '').trim();
+  if (!reason) {
+    return { ok: false, message: '❌ Please include an extension reason.' };
+  }
+
+  return { ok: true, newEndDate: end.value, reason };
 }
 
 async function trelloRequest(method, path, params = {}) {
@@ -533,43 +584,192 @@ async function ensureBotCanManageRoles(guild) {
   return { ok: true, botMember, mrRole, hrRole };
 }
 
+function safeFieldValue(value, fallback = 'Not provided') {
+  const text = String(value || '').trim();
+  return text ? text.slice(0, 1024) : fallback;
+}
+
+function getEmbedField(embed, nameOptions = []) {
+  const wanted = new Set(nameOptions.map((name) => normalizeText(name)));
+  const field = (embed?.fields || []).find((f) => wanted.has(normalizeText(f.name)));
+  return field ? String(field.value || '').trim() : null;
+}
+
+function parseLoaLogMessage(message) {
+  const embed = message?.embeds?.[0];
+  if (!embed) return null;
+
+  const title = String(embed.title || '');
+  const footer = String(embed.footer?.text || '');
+  const looksLikeLoa = normalizeText(title).includes('loa log') || normalizeText(footer).includes('loa system');
+  if (!looksLikeLoa) return null;
+
+  const userValue = getEmbedField(embed, ['User']) || '';
+  const mentionMatch = userValue.match(/<@!?(\d+)>/);
+  const idMatch = userValue.match(/\b\d{15,25}\b/);
+  const userId = mentionMatch?.[1] || idMatch?.[0] || null;
+
+  const statusValue = getEmbedField(embed, ['Status']) || '';
+  const normalizedStatus = normalizeText(`${title} ${statusValue}`);
+  const isEnded = normalizedStatus.includes('removed')
+    || normalizedStatus.includes('ended')
+    || normalizedStatus.includes('completed')
+    || normalizedStatus.includes('complete');
+
+  return {
+    userId,
+    isEnded,
+    status: isEnded ? 'Removed' : 'Pending',
+    officialStartDate: getEmbedField(embed, ['Start Date']) || null,
+    officialEndDate: getEmbedField(embed, ['Planned End Date', 'Final End Date', 'End Date']) || null,
+    reviewerUsername: getEmbedField(embed, ['Reviewer Username']) || null,
+    reason: getEmbedField(embed, ['Reason']) || null,
+    loaType: getEmbedField(embed, ['LOA Type']) || null,
+    staffClassLabel: getEmbedField(embed, ['Team']) || null,
+    extensionsText: getEmbedField(embed, ['Extension History', 'Extensions']) || null,
+  };
+}
+
+async function findActiveLoaLogMessage(client, userId) {
+  try {
+    const channel = await client.channels.fetch(LOA_LOG_CHANNEL_ID).catch(() => null);
+    if (!channel?.isTextBased?.()) return null;
+
+    let before;
+    for (let page = 0; page < 5; page += 1) {
+      const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+      if (!messages?.size) break;
+
+      const sorted = [...messages.values()].sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+      const found = sorted.find((message) => {
+        const parsed = parseLoaLogMessage(message);
+        return parsed?.userId === String(userId) && !parsed.isEnded;
+      });
+
+      if (found) return { message: found, channel, parsed: parseLoaLogMessage(found) };
+      before = sorted[sorted.length - 1]?.id;
+      if (!before || messages.size < 100) break;
+    }
+  } catch (err) {
+    console.error('[LOA] Failed to find active LOA log message:', err);
+  }
+
+  return null;
+}
+
+async function buildRecordFromActiveLog(client, guildId, target) {
+  const activeLog = await findActiveLoaLogMessage(client, target.id);
+  if (!activeLog) return null;
+
+  return {
+    guildId: String(guildId),
+    userId: String(target.id),
+    logChannelId: activeLog.channel.id,
+    logMessageId: activeLog.message.id,
+    officialStartDate: activeLog.parsed.officialStartDate,
+    officialEndDate: activeLog.parsed.officialEndDate,
+    reviewerUsername: activeLog.parsed.reviewerUsername,
+    reason: activeLog.parsed.reason,
+    loaType: activeLog.parsed.loaType,
+    staffClassLabel: activeLog.parsed.staffClassLabel,
+    extensionsText: activeLog.parsed.extensionsText,
+    originalDisplayName: stripLoaPrefix(target.displayName),
+    originalNickname: cleanSavedNickname(target.nickname),
+    recoveredFromLog: true,
+  };
+}
+
+function normalizeExtensions(extensions) {
+  if (!extensions) return [];
+  if (Array.isArray(extensions)) {
+    return extensions
+      .map((entry) => ({
+        oldEndDate: entry.oldEndDate || null,
+        newEndDate: entry.newEndDate || null,
+        reason: String(entry.reason || '').trim(),
+        extendedByTag: entry.extendedByTag || null,
+        extendedAt: entry.extendedAt || null,
+      }))
+      .filter((entry) => entry.newEndDate || entry.reason);
+  }
+
+  return String(extensions)
+    .split('\n')
+    .map((line) => line.replace(/^[-•]\s*/, '').trim())
+    .filter(Boolean)
+    .map((line) => ({ reason: line }));
+}
+
+function formatExtensionHistory(extensions = []) {
+  const entries = normalizeExtensions(extensions);
+  if (!entries.length) return null;
+
+  return entries
+    .slice(-5)
+    .map((entry, index) => {
+      const oldPart = entry.oldEndDate ? `${formatDateOnly(entry.oldEndDate)} → ` : '';
+      const newPart = entry.newEndDate ? formatDateOnly(entry.newEndDate) : 'Updated';
+      const reasonPart = entry.reason ? ` — ${entry.reason}` : '';
+      return `${index + 1}. ${oldPart}${newPart}${reasonPart}`;
+    })
+    .join('\n')
+    .slice(0, 1024);
+}
+
+async function applyLoaReaction(message, status) {
+  if (!message?.react) return;
+
+  const completed = status === 'Removed';
+  const addEmoji = completed ? LOA_ENDED_EMOJI : LOA_PENDING_EMOJI;
+  const removeEmoji = completed ? LOA_PENDING_EMOJI : LOA_ENDED_EMOJI;
+
+  try {
+    const existingRemove = message.reactions.cache.find((reaction) => reaction.emoji.name === removeEmoji);
+    if (existingRemove) {
+      await existingRemove.users.remove(message.client.user.id).catch(() => null);
+    }
+  } catch (err) {
+    console.error('[LOA] Failed to remove old LOA reaction:', err);
+  }
+
+  try {
+    const alreadyReacted = message.reactions.cache.find((reaction) => reaction.emoji.name === addEmoji);
+    if (!alreadyReacted) {
+      await message.react(addEmoji);
+    }
+  } catch (err) {
+    console.error('[LOA] Failed to add LOA reaction:', err);
+  }
+}
+
 function buildLoaLogEmbed(details, warnings = []) {
   const completed = details.status === 'Removed';
+  const statusEmoji = completed ? LOA_ENDED_EMOJI : LOA_PENDING_EMOJI;
+  const statusText = completed ? 'Ended' : 'Pending';
+  const duration = formatCalendarDuration(details.officialStartDate, details.officialEndDate);
+
   const embed = new EmbedBuilder()
     .setColor(completed ? 0x22c55e : 0xf59e0b)
-    .setTitle(completed ? '🔕 LOA Log • Removed' : '🔕 LOA Log • Active')
-    .setDescription(`${details.target} ${completed ? 'has been removed from LOA.' : 'has been placed on LOA.'}`)
+    .setTitle(completed ? `${LOA_ENDED_EMOJI} LOA Log • Ended` : `${LOA_PENDING_EMOJI} LOA Log • Pending`)
+    .setDescription(`${details.target} ${completed ? 'has ended their LOA.' : 'has an active LOA request.'}`)
     .addFields(
       { name: 'User', value: `${details.target.user.tag}\n<@${details.target.id}>`, inline: true },
       { name: completed ? 'Removed By' : 'Added By', value: `${details.actionBy.tag}\n<@${details.actionBy.id}>`, inline: true },
-      { name: 'Reviewer Username', value: String(details.reviewerUsername || 'Not provided'), inline: true },
-      { name: 'Reason', value: String(details.reason || 'Not provided').slice(0, 1024), inline: true },
-      { name: 'LOA Type', value: String(details.loaType || 'Unknown'), inline: true },
-      { name: 'Team', value: String(details.staffClassLabel || 'Unknown'), inline: true },
-      { name: 'Status', value: completed ? 'Removed' : 'Active', inline: true },
+      { name: 'Reviewer Username', value: safeFieldValue(details.reviewerUsername), inline: true },
+      { name: 'Reason', value: safeFieldValue(details.reason), inline: true },
+      { name: 'LOA Type', value: safeFieldValue(details.loaType, 'Unknown'), inline: true },
+      { name: 'Team', value: safeFieldValue(details.staffClassLabel, 'Unknown'), inline: true },
+      { name: 'Status', value: `${statusEmoji} ${statusText}`, inline: true },
       { name: 'Start Date', value: formatDateOnly(details.officialStartDate), inline: true },
       { name: completed ? 'Final End Date' : 'Planned End Date', value: formatDateOnly(details.officialEndDate), inline: true },
-      {
-        name: 'Role Duration',
-        value: completed ? String(details.duration || 'Unknown') : 'Still on LOA',
-        inline: true,
-      },
+      { name: 'LOA Duration', value: duration, inline: true },
     )
     .setFooter({ text: 'Glace Hotels | LOA System' })
     .setTimestamp(details.timestamp || new Date());
 
-  if (details.startedAt) {
-    const startedAtDate = details.startedAt instanceof Date ? details.startedAt : new Date(details.startedAt);
-    if (!Number.isNaN(startedAtDate.getTime())) {
-      embed.addFields({ name: 'LOA Role Added', value: `<t:${Math.floor(startedAtDate.getTime() / 1000)}:F>`, inline: false });
-    }
-  }
-
-  if (completed && details.endedAt) {
-    const endedAtDate = details.endedAt instanceof Date ? details.endedAt : new Date(details.endedAt);
-    if (!Number.isNaN(endedAtDate.getTime())) {
-      embed.addFields({ name: 'LOA Role Removed', value: `<t:${Math.floor(endedAtDate.getTime() / 1000)}:F>`, inline: false });
-    }
+  const extensionsText = formatExtensionHistory(details.extensions || details.extensionsText);
+  if (extensionsText) {
+    embed.addFields({ name: 'Extension History', value: extensionsText, inline: false });
   }
 
   if (details.trelloCardName) {
@@ -595,6 +795,7 @@ async function sendLoaLog(client, details, warnings = []) {
     }
 
     const message = await channel.send({ embeds: [buildLoaLogEmbed(details, warnings)] });
+    await applyLoaReaction(message, details.status);
     return { ok: true, messageId: message.id, channelId: channel.id };
   } catch (err) {
     console.error('[LOA] Failed to send LOA log:', err);
@@ -609,11 +810,19 @@ async function editOrSendLoaLog(client, record, details, warnings = []) {
       const message = await channel.messages.fetch(record.logMessageId).catch(() => null);
       if (message) {
         await message.edit({ embeds: [buildLoaLogEmbed(details, warnings)] });
+        await applyLoaReaction(message, details.status);
         return { ok: true, edited: true, messageId: message.id, channelId: channel.id };
       }
     }
   } catch (err) {
     console.error('[LOA] Failed to edit existing LOA log:', err);
+  }
+
+  const activeLog = await findActiveLoaLogMessage(client, details.target.id);
+  if (activeLog?.message) {
+    await activeLog.message.edit({ embeds: [buildLoaLogEmbed(details, warnings)] });
+    await applyLoaReaction(activeLog.message, details.status);
+    return { ok: true, edited: true, messageId: activeLog.message.id, channelId: activeLog.channel.id };
   }
 
   const sent = await sendLoaLog(client, details, warnings);
@@ -641,8 +850,11 @@ async function addLoa(interaction, target, options = {}) {
   const otherLoaRoleId = staffClass.loaRoleId === MR_LOA_ROLE_ID ? HR_LOA_ROLE_ID : MR_LOA_ROLE_ID;
   const otherLoaRole = interaction.guild.roles.cache.get(otherLoaRoleId);
 
-  const existing = getLoaRecord(interaction.guild.id, target.id);
-  const startedAt = existing?.startedAt || new Date().toISOString();
+  const stored = getLoaRecord(interaction.guild.id, target.id);
+  const recovered = stored ? null : await buildRecordFromActiveLog(interaction.client, interaction.guild.id, target);
+  const existing = stored || recovered;
+  const isUpdatingExistingLoa = Boolean(existing?.logMessageId);
+
   const cleanDisplayName = stripLoaPrefix(target.displayName);
   const originalNickname = existing
     ? cleanSavedNickname(existing.originalNickname)
@@ -677,13 +889,13 @@ async function addLoa(interaction, target, options = {}) {
 
   const trello = await addLoaLabelToStaffCard(
     cleanDisplayName,
-    `LOA - ${formatDateOnly(validated.startDate)} - ${formatDateOnly(validated.endDate)} - Active`,
+    `LOA - ${formatDateOnly(validated.startDate)} - ${formatDateOnly(validated.endDate)} - Pending`,
   );
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
 
-  const record = setLoaRecord(interaction.guild.id, target.id, {
-    startedAt,
+  const baseRecord = {
+    ...(existing || {}),
     officialStartDate: validated.startDate,
     officialEndDate: validated.endDate,
     reviewerUsername: validated.reviewerUsername,
@@ -697,15 +909,16 @@ async function addLoa(interaction, target, options = {}) {
     staffCardId: trello.card?.id || existing?.staffCardId || null,
     staffCardName: trello.card?.name || existing?.staffCardName || null,
     staffCardUrl: trello.card?.shortUrl || trello.card?.url || existing?.staffCardUrl || null,
-    addedById: interaction.user.id,
-    addedByTag: interaction.user.tag,
-  });
+    addedById: existing?.addedById || interaction.user.id,
+    addedByTag: existing?.addedByTag || interaction.user.tag,
+  };
 
-  const logResult = await sendLoaLog(interaction.client, {
+  const record = setLoaRecord(interaction.guild.id, target.id, baseRecord);
+
+  const logResult = await editOrSendLoaLog(interaction.client, record, {
     target,
     actionBy: interaction.user,
-    status: 'Active',
-    startedAt,
+    status: 'Pending',
     timestamp: new Date(),
     officialStartDate: validated.startDate,
     officialEndDate: validated.endDate,
@@ -713,6 +926,7 @@ async function addLoa(interaction, target, options = {}) {
     reason: validated.reason,
     loaType: staffClass.loaType,
     staffClassLabel: staffClass.label,
+    extensions: record.extensions || [],
     trelloCardName: trello.card?.name || record.staffCardName || null,
     trelloCardUrl: trello.card?.shortUrl || trello.card?.url || record.staffCardUrl || null,
   }, warnings);
@@ -730,15 +944,16 @@ async function addLoa(interaction, target, options = {}) {
   return {
     ok: true,
     message: [
-      `✅ Added LOA for ${target}.`,
+      `${isUpdatingExistingLoa ? '✅ Updated the active LOA for' : '✅ Added LOA for'} ${target}.`,
       `Start Date: **${formatDateOnly(validated.startDate)}**`,
-      `End Date: **${formatDateOnly(validated.endDate)}**`,
+      `Planned End Date: **${formatDateOnly(validated.endDate)}**`,
+      `Duration: **${formatCalendarDuration(validated.startDate, validated.endDate)}**`,
       `Reviewer Username: **${validated.reviewerUsername}**`,
       `Reason: **${validated.reason}**`,
       `Role: <@&${staffClass.loaRoleId}>`,
       `Team: **${staffClass.label}**`,
       trello.ok ? `Trello: added **LOA** label to **${trello.card.name}**.` : null,
-      logResult.ok ? `Logged in <#${LOA_LOG_CHANNEL_ID}>.` : null,
+      logResult.ok ? `${logResult.edited ? 'Updated' : 'Sent'} the LOA log in <#${LOA_LOG_CHANNEL_ID}>.` : null,
       warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
     ].filter(Boolean).join('\n'),
   };
@@ -751,16 +966,19 @@ async function removeLoa(interaction, target, options = {}) {
     return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
   }
 
-  const existing = getLoaRecord(interaction.guild.id, target.id);
+  const stored = getLoaRecord(interaction.guild.id, target.id);
+  const recovered = stored ? null : await buildRecordFromActiveLog(interaction.client, interaction.guild.id, target);
+  const existing = stored || recovered;
+
+  if (!existing?.logMessageId) {
+    return { ok: false, message: '❌ I could not find an active LOA log for this member. Please check if they currently have an active LOA post.' };
+  }
+
   const validated = validateRemoveLoaOptions(options, existing);
   if (!validated.ok) return { ok: false, message: validated.message };
 
   const roleCheck = await ensureBotCanManageRoles(interaction.guild);
   if (!roleCheck.ok) return { ok: false, message: roleCheck.message };
-
-  const startedAt = existing?.startedAt ? new Date(existing.startedAt) : null;
-  const endedAt = new Date();
-  const duration = startedAt ? formatDuration(endedAt.getTime() - startedAt.getTime()) : 'Unknown';
 
   try {
     const rolesToRemove = [MR_LOA_ROLE_ID, HR_LOA_ROLE_ID]
@@ -802,11 +1020,12 @@ async function removeLoa(interaction, target, options = {}) {
   const officialStartDate = existing?.officialStartDate || 'Unknown';
   const oldEndDate = existing?.officialEndDate || null;
   const endDateChanged = oldEndDate && oldEndDate !== validated.endDate;
+  const duration = formatCalendarDuration(officialStartDate, validated.endDate);
 
   const trello = await removeLoaLabelFromStaffCard(
     trelloName,
     existing?.staffCardId,
-    `LOA - ${formatDateOnly(officialStartDate)} - ${formatDateOnly(validated.endDate)} - Removed`,
+    `LOA - ${formatDateOnly(officialStartDate)} - ${formatDateOnly(validated.endDate)} - Ended`,
   );
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
@@ -815,9 +1034,7 @@ async function removeLoa(interaction, target, options = {}) {
     target,
     actionBy: interaction.user,
     status: 'Removed',
-    startedAt,
-    endedAt,
-    timestamp: endedAt,
+    timestamp: new Date(),
     duration,
     officialStartDate,
     officialEndDate: validated.endDate,
@@ -825,6 +1042,7 @@ async function removeLoa(interaction, target, options = {}) {
     reason: existing?.reason || 'Not provided',
     loaType: existing?.loaType || 'Unknown',
     staffClassLabel: existing?.staffClassLabel || classifyStaffMember(target)?.label || 'Unknown',
+    extensions: existing?.extensions || existing?.extensionsText || [],
     trelloCardName: trello.card?.name || existing?.staffCardName || null,
     trelloCardUrl: trello.card?.shortUrl || trello.card?.url || existing?.staffCardUrl || null,
   }, warnings);
@@ -837,9 +1055,10 @@ async function removeLoa(interaction, target, options = {}) {
     ok: true,
     message: [
       `✅ Removed LOA for ${target}.`,
+      `Start Date: **${formatDateOnly(officialStartDate)}**`,
       `Final End Date: **${formatDateOnly(validated.endDate)}**`,
       endDateChanged ? `Updated the log end date from **${formatDateOnly(oldEndDate)}** to **${formatDateOnly(validated.endDate)}**.` : null,
-      `LOA Role Duration: **${duration}**`,
+      `LOA Duration: **${duration}**`,
       trello.ok ? `Trello: removed **LOA** label from **${trello.card.name}**.` : null,
       logResult.ok
         ? `${logResult.edited ? 'Updated' : 'Sent'} the LOA log in <#${LOA_LOG_CHANNEL_ID}>.`
@@ -849,13 +1068,102 @@ async function removeLoa(interaction, target, options = {}) {
   };
 }
 
+async function extendLoa(interaction, target, options = {}) {
+  const warnings = [];
+
+  if (!canManageLoa(interaction.member)) {
+    return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
+  }
+
+  const stored = getLoaRecord(interaction.guild.id, target.id);
+  const recovered = stored ? null : await buildRecordFromActiveLog(interaction.client, interaction.guild.id, target);
+  const existing = stored || recovered;
+
+  if (!existing?.logMessageId) {
+    return { ok: false, message: '❌ I could not find an active LOA log for this member. Please check if they currently have an active LOA post.' };
+  }
+
+  const validated = validateExtendLoaOptions(options, existing);
+  if (!validated.ok) return { ok: false, message: validated.message };
+
+  const oldEndDate = existing.officialEndDate || null;
+  const extensions = normalizeExtensions(existing.extensions || existing.extensionsText);
+  extensions.push({
+    oldEndDate,
+    newEndDate: validated.newEndDate,
+    reason: validated.reason,
+    extendedById: interaction.user.id,
+    extendedByTag: interaction.user.tag,
+    extendedAt: new Date().toISOString(),
+  });
+
+  const staffClass = classifyStaffMember(target);
+  const updatedRecord = setLoaRecord(interaction.guild.id, target.id, {
+    ...existing,
+    officialEndDate: validated.newEndDate,
+    extensions,
+    lastExtendedById: interaction.user.id,
+    lastExtendedByTag: interaction.user.tag,
+  });
+
+  const trelloName = stripLoaPrefix(existing?.originalDisplayName || target.displayName);
+  const trello = await addLoaLabelToStaffCard(
+    trelloName,
+    `LOA Extended - ${formatDateOnly(oldEndDate || 'Unknown')} → ${formatDateOnly(validated.newEndDate)} - ${validated.reason}`,
+  );
+
+  if (!trello.ok && trello.warning) warnings.push(trello.warning);
+
+  const logResult = await editOrSendLoaLog(interaction.client, updatedRecord, {
+    target,
+    actionBy: interaction.user,
+    status: 'Pending',
+    timestamp: new Date(),
+    officialStartDate: updatedRecord.officialStartDate,
+    officialEndDate: validated.newEndDate,
+    reviewerUsername: updatedRecord.reviewerUsername || 'Not provided',
+    reason: updatedRecord.reason || 'Not provided',
+    loaType: updatedRecord.loaType || staffClass?.loaType || 'Unknown',
+    staffClassLabel: updatedRecord.staffClassLabel || staffClass?.label || 'Unknown',
+    extensions,
+    trelloCardName: trello.card?.name || updatedRecord.staffCardName || null,
+    trelloCardUrl: trello.card?.shortUrl || trello.card?.url || updatedRecord.staffCardUrl || null,
+  }, warnings);
+
+  if (logResult.ok) {
+    setLoaRecord(interaction.guild.id, target.id, {
+      ...updatedRecord,
+      logChannelId: logResult.channelId,
+      logMessageId: logResult.messageId,
+    });
+  } else if (logResult.warning) {
+    warnings.push(logResult.warning);
+  }
+
+  return {
+    ok: true,
+    message: [
+      `✅ Extended LOA for ${target}.`,
+      oldEndDate ? `Old Planned End Date: **${formatDateOnly(oldEndDate)}**` : null,
+      `New Planned End Date: **${formatDateOnly(validated.newEndDate)}**`,
+      `Updated Duration: **${formatCalendarDuration(updatedRecord.officialStartDate, validated.newEndDate)}**`,
+      `Reason: **${validated.reason}**`,
+      logResult.ok ? `Updated the LOA log in <#${LOA_LOG_CHANNEL_ID}>.` : null,
+      warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
+    ].filter(Boolean).join('\n'),
+  };
+}
+
 module.exports = {
   addLoa,
   removeLoa,
+  extendLoa,
   classifyStaffMember,
   canManageLoa,
   stripLoaPrefix,
   MR_LOA_ROLE_ID,
   HR_LOA_ROLE_ID,
   LOA_LOG_CHANNEL_ID,
+  LOA_PENDING_EMOJI,
+  LOA_ENDED_EMOJI,
 };
