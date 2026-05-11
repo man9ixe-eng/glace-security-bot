@@ -12,6 +12,12 @@ module.exports = {
         .setDescription('Trello card link or short ID')
         .setRequired(true),
     )
+    .addStringOption((option) =>
+      option
+        .setName('log_message')
+        .setDescription('Optional: session log or attendees message link for older logs without card links')
+        .setRequired(false),
+    )
     .addUserOption((option) =>
       option
         .setName('current_user')

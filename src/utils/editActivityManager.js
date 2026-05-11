@@ -137,6 +137,52 @@ function messageMentionsCard(message, shortId, card) {
   return targets.some((target) => text.includes(target));
 }
 
+
+function parseDiscordMessageLink(value) {
+  const match = String(value || '').trim().match(/discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/i);
+  if (!match) return null;
+  return {
+    guildId: match[1],
+    channelId: match[2],
+    messageId: match[3],
+  };
+}
+
+async function fetchMessageFromLink(client, value, expectedGuildId = null) {
+  const parsed = parseDiscordMessageLink(value);
+  if (!parsed) {
+    return { ok: false, error: 'That log_message does not look like a Discord message link.' };
+  }
+
+  if (expectedGuildId && parsed.guildId !== expectedGuildId) {
+    return { ok: false, error: 'That log_message is from a different server.' };
+  }
+
+  const channel = await client.channels.fetch(parsed.channelId).catch(() => null);
+  if (!channel?.isTextBased?.()) {
+    return { ok: false, error: 'I could not access the channel from that message link.' };
+  }
+
+  const message = await channel.messages.fetch(parsed.messageId).catch(() => null);
+  if (!message) {
+    return { ok: false, error: 'I could not find that message. Make sure the bot can see that channel and message.' };
+  }
+
+  return { ok: true, channel, message, parsed };
+}
+
+function detectSessionTypeFromText(value) {
+  const text = String(value || '').toLowerCase();
+  if (text.includes('training') || text.includes('trainer')) return 'training';
+  if (text.includes('interview') || text.includes('interviewer')) return 'interview';
+  if (text.includes('mass shift') || text.includes('massshift') || text.includes('mass-shift')) return 'massshift';
+  return null;
+}
+
+function detectSessionTypeFromMessage(message, card) {
+  return detectSessionTypeFromCard(card) || detectSessionTypeFromText(messageTextForSearch(message));
+}
+
 function getConfiguredRecoveryChannelIds(preferredChannelId) {
   return unique([
     preferredChannelId,
@@ -391,6 +437,123 @@ function parseSessionLogMessage(message, sessionType) {
   };
 }
 
+
+function parseBracketLineupMessage(content, sessionType) {
+  const sections = emptySections();
+  let currentKey = null;
+  let sawSection = false;
+
+  const nameToKey = new Map();
+  for (const section of getEditableSections(sessionType)) {
+    nameToKey.set(normalizeSectionName(section.label), section.key);
+    for (const alias of section.aliases || []) nameToKey.set(normalizeSectionName(alias), section.key);
+  }
+
+  const normalized = normalizeLineupReplyInput(content, sessionType);
+  for (const rawLine of normalized.split(/\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const sectionMatch = line.match(/^\[(.+)]$/);
+    if (sectionMatch) {
+      currentKey = nameToKey.get(normalizeSectionName(sectionMatch[1])) || null;
+      if (currentKey) sawSection = true;
+      continue;
+    }
+
+    if (!currentKey) continue;
+    if (/^none(?:\s+selected)?\.?$/i.test(line)) continue;
+
+    const ids = extractAllDiscordUserIds(line);
+    for (const id of ids) pushUnique(sections[currentKey], id);
+  }
+
+  const hasAny = Object.values(sections).some((ids) => ids.length);
+  if (!sawSection || !hasAny) return null;
+
+  return {
+    shortId: null,
+    sessionType,
+    hostId: null,
+    hostName: null,
+    sections,
+  };
+}
+
+function messageLooksLikeSessionLog(message) {
+  const text = messageTextForSearch(message).toLowerCase();
+  return (
+    text.includes('session') ||
+    text.includes('trainer') ||
+    text.includes('interviewer') ||
+    text.includes('co-host') ||
+    text.includes('overseer') ||
+    text.includes('[trainer]') ||
+    text.includes('[interviewer]')
+  );
+}
+
+async function recoverSessionFromExactMessage({ client, shortId, card, guildId, messageLink }) {
+  if (!messageLink) return null;
+
+  const fetched = await fetchMessageFromLink(client, messageLink, guildId || null);
+  if (!fetched.ok) return { error: fetched.error };
+
+  const { channel, message } = fetched;
+  const sessionType = detectSessionTypeFromMessage(message, card);
+  if (!sessionType) {
+    return {
+      error: 'I found that message, but I could not tell if it was a training, interview, or mass shift log.',
+    };
+  }
+
+  if (!messageLooksLikeSessionLog(message)) {
+    return {
+      error: 'I found that message, but it does not look like a session log or attendees post.',
+    };
+  }
+
+  let lineup = null;
+  if (message.embeds?.length) lineup = parseSessionLogMessage(message, sessionType);
+  if (!lineup && message.content) lineup = parseAttendeesPostContent(message.content, sessionType);
+  if (!lineup && message.content) lineup = parseBracketLineupMessage(message.content, sessionType);
+
+  if (!lineup) {
+    return {
+      error: 'I found that message, but I could not read any user IDs/mentions from it.',
+    };
+  }
+
+  lineup.shortId = shortId;
+
+  const isEmbedLog = Boolean(message.embeds?.length);
+  const sessionRecord = upsertSession({
+    shortId,
+    sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+    guildId: guildId || fetched.parsed?.guildId || null,
+    cardName: card?.name || null,
+    cardUrl: card?.shortUrl || card?.url || null,
+    logChannelId: isEmbedLog ? channel.id : null,
+    logMessageId: isEmbedLog ? message.id : null,
+    queueChannelId: !isEmbedLog ? channel.id : null,
+    attendeesMessageId: !isEmbedLog ? message.id : null,
+    loggedAt: message.createdTimestamp || Date.now(),
+    recoveredAt: Date.now(),
+    recoveredFromMessageLink: true,
+    lineup,
+  });
+
+  return {
+    source: isEmbedLog ? 'recovered-log-link' : 'recovered-attendees-link',
+    lineup: sessionRecord.lineup,
+    sessionType,
+    hostId: lineup.hostId || null,
+    hostName: lineup.hostName || null,
+  };
+}
+
 async function findSessionLogForCard(client, shortId, card, preferredChannelId, guildId) {
   const channels = await getCandidateRecoveryChannels(client, guildId, preferredChannelId);
 
@@ -494,6 +657,18 @@ async function resolveLineupForShortId(client, shortId, options = {}) {
       hostId: liveQueue.hostId || null,
       hostName: liveQueue.hostName || null,
     };
+  }
+
+  if (options.messageLink) {
+    const exact = await recoverSessionFromExactMessage({
+      client,
+      shortId,
+      card: options.card || null,
+      guildId: options.guildId || null,
+      messageLink: options.messageLink,
+    });
+
+    if (exact?.lineup || exact?.error) return exact;
   }
 
   const saved = getSession(shortId);
@@ -1101,6 +1276,7 @@ async function startEditActivity(interaction) {
   const cardInput = interaction.options.getString('card', true);
   const currentUser = interaction.options.getUser('current_user');
   const correctUser = interaction.options.getUser('correct_user');
+  const logMessageLink = interaction.options.getString('log_message');
   const shortId = extractShortId(cardInput);
   if (!shortId) {
     await interaction.reply({
@@ -1125,11 +1301,24 @@ async function startEditActivity(interaction) {
     card,
     guildId: interaction.guildId,
     channelId: interaction.channelId,
+    messageLink: logMessageLink || null,
   });
+
+  if (resolved?.error) {
+    await interaction.editReply(`I could not use that log message yet: ${resolved.error}`);
+    return;
+  }
 
   if (!resolved?.lineup) {
     await interaction.editReply(
-      'I could not find saved edit data for that Trello card, and I could not recover the attendees post or session log from recent queue/log channels. Make sure the attendees post or session log includes the Trello card link. If this is an older log from before edit tracking/card links were saved, I cannot safely match it to the card yet.',
+      [
+        'I could not find saved edit data for that Trello card, and I could not recover the attendees post or session log from recent queue/log channels.',
+        '',
+        'For older logs made before Trello card links were saved, run it like this:',
+        '`/editactivity card:<trello card> log_message:<message link from #session-logs>`',
+        '',
+        'After that, I can open the editor and save the link between that card and log.',
+      ].join('\n'),
     );
     return;
   }
@@ -1185,7 +1374,7 @@ async function startEditActivity(interaction) {
     .setTitle('Edit Activity | Current Lineup')
     .setDescription([
       `**Session:** ${card?.name || shortId}`,
-      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : resolved.source === 'recovered-log' ? 'Recovered Session Log' : resolved.source === 'recovered-attendees' ? 'Recovered Attendees Post' : 'Queue / Attendees Post'}`,
+      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : resolved.source === 'recovered-log' ? 'Recovered Session Log' : resolved.source === 'recovered-log-link' ? 'Recovered Session Log Link' : resolved.source === 'recovered-attendees-link' ? 'Recovered Attendees Link' : resolved.source === 'recovered-attendees' ? 'Recovered Attendees Post' : 'Queue / Attendees Post'}`,
       `**Host:** ${lineup.hostId ? `<@${lineup.hostId}>` : lineup.hostName || 'Unknown'}`,
       '',
       'Reply to this message, or send your corrected lineup as your next message in this channel.',
