@@ -604,9 +604,36 @@ async function resolveMemberIdFromLine(guild, line) {
 
 function looksLikeLineupReply(text, sessionType) {
   const normalized = String(text || '').toLowerCase();
-  return getEditableSections(sessionType).some((section) =>
-    section.aliases.some((alias) => normalized.includes(`[${alias}]`)),
-  );
+  return getEditableSections(sessionType).some((section) => {
+    const names = [section.label, ...(section.aliases || [])];
+    return names.some((name) => normalized.includes(`[${String(name).toLowerCase()}]`));
+  });
+}
+
+function normalizeLineupReplyInput(text, sessionType) {
+  let normalized = String(text || '')
+    .replace(/```(?:\w+)?/g, '')
+    .replace(/```/g, '')
+    .replace(/\r/g, '')
+    .trim();
+
+  // Make one-line edits work too, for example:
+  // [Trainer] 123 [Supervisor] None [Co-Host] None [Overseer] None
+  const sectionNames = [];
+  for (const section of getEditableSections(sessionType)) {
+    sectionNames.push(section.label, ...(section.aliases || []));
+  }
+
+  for (const name of sectionNames.filter(Boolean)) {
+    const escaped = escapeRegex(String(name));
+    normalized = normalized.replace(new RegExp(`\\[\\s*${escaped}\\s*\\]`, 'gi'), `\n[${name}]\n`);
+  }
+
+  return normalized
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
 }
 
 async function parseLineupReply(text, sessionType, guild) {
@@ -624,7 +651,7 @@ async function parseLineupReply(text, sessionType, guild) {
   let currentSectionKey = null;
   let sawKnownSection = false;
   const unresolved = [];
-  const lines = String(text || '').split(/\r?\n/);
+  const lines = normalizeLineupReplyInput(text, sessionType).split(/\n/);
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -660,7 +687,7 @@ async function parseLineupReply(text, sessionType, guild) {
       ok: false,
       error:
         `I could not find this user from your edited message: **${unresolved[0]}**\n` +
-        'Please use their @mention or paste their Discord user ID if Discord does not suggest them.',
+        'Please paste their Discord user ID if Discord does not suggest them in the message box.',
     };
   }
 
@@ -670,21 +697,49 @@ async function parseLineupReply(text, sessionType, guild) {
 function getReplacementPlan(oldSections, newSections, sessionType) {
   const replacementsByOldId = new Map();
   const changedSpots = [];
+  const sectionRewrites = [];
+  const nextSections = emptySections();
 
   for (const section of getEditableSections(sessionType)) {
     const oldIds = Array.isArray(oldSections?.[section.key]) ? oldSections[section.key].map(String) : [];
     const newIds = Array.isArray(newSections?.[section.key]) ? newSections[section.key].map(String) : [];
 
-    if (oldIds.length !== newIds.length) {
-      return {
-        ok: false,
-        error:
-          `The **${section.label}** section has a different amount of people than the original editor message.\n` +
-          'For now, only replace the wrong user mention/username and keep the same number of lines.',
-      };
+    if (oldIds.length === newIds.length) {
+      nextSections[section.key] = [...oldIds];
+
+      for (let i = 0; i < oldIds.length; i += 1) {
+        const oldId = oldIds[i];
+        const newId = newIds[i];
+        if (oldId === newId) continue;
+
+        const existingNewId = replacementsByOldId.get(oldId);
+        if (existingNewId && existingNewId !== newId) {
+          return {
+            ok: false,
+            error:
+              `I found the same old user being changed into two different people.\n` +
+              'Please run one clean edit at a time so I do not update the wrong person.',
+          };
+        }
+
+        replacementsByOldId.set(oldId, newId);
+        nextSections[section.key][i] = newId;
+        changedSpots.push(`${section.label} #${i + 1}`);
+      }
+
+      continue;
     }
 
-    for (let i = 0; i < oldIds.length; i += 1) {
+    // If the amount of lines changed, do not hard-fail anymore.
+    // This can happen when Discord will not let staff mention someone, or when
+    // a recovered old log did not save every user ID cleanly. In that case, we
+    // rewrite only this section's user list instead of rebuilding the whole log.
+    nextSections[section.key] = [...newIds];
+    sectionRewrites.push(section.key);
+    changedSpots.push(`${section.label} section`);
+
+    const pairCount = Math.min(oldIds.length, newIds.length);
+    for (let i = 0; i < pairCount; i += 1) {
       const oldId = oldIds[i];
       const newId = newIds[i];
       if (oldId === newId) continue;
@@ -700,11 +755,10 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
       }
 
       replacementsByOldId.set(oldId, newId);
-      changedSpots.push(`${section.label} #${i + 1}`);
     }
   }
 
-  if (!replacementsByOldId.size) {
+  if (!replacementsByOldId.size && !sectionRewrites.length) {
     return {
       ok: false,
       error: 'I did not see any changed users in that lineup.',
@@ -715,7 +769,88 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
     ok: true,
     replacements: [...replacementsByOldId.entries()].map(([oldId, newId]) => ({ oldId, newId })),
     changedSpots,
+    nextSections,
+    sectionRewrites,
   };
+}
+
+function getSectionKeyForLogField(fieldName, sessionType) {
+  const name = String(fieldName || '').toLowerCase();
+
+  for (const section of getEditableSections(sessionType)) {
+    const aliases = [section.label, ...(section.aliases || [])]
+      .filter(Boolean)
+      .map((alias) => String(alias).toLowerCase());
+
+    if (aliases.some((alias) => name.includes(alias))) return section.key;
+
+    if (section.key === 'interviewer' && sessionType === 'training' && name.includes('trainer')) return section.key;
+    if (section.key === 'interviewer' && sessionType === 'interview' && name.includes('interviewer')) return section.key;
+    if (section.key === 'interviewer' && sessionType === 'massshift' && name.includes('attendee')) return section.key;
+  }
+
+  return null;
+}
+
+function formatLogSectionValue(ids) {
+  const cleanIds = Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+  if (!cleanIds.length) return 'None';
+  return cleanIds.map((id, index) => `${index + 1}. <@${id}> (${id})`).join('\n');
+}
+
+function formatPlainSectionList(ids) {
+  const cleanIds = Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+  if (!cleanIds.length) return 'None';
+  return cleanIds.map((id, index) => `${index + 1}. <@${id}>`).join('\n');
+}
+
+function rewriteSimpleBracketSections(content, lineup, rewriteKeys = []) {
+  if (!content || !lineup?.sessionType || !rewriteKeys?.length) return content;
+
+  let output = String(content);
+  const sections = getEditableSections(lineup.sessionType);
+  const rewriteSet = new Set(rewriteKeys.map(String));
+
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
+    if (!rewriteSet.has(section.key)) continue;
+
+    const currentNames = [section.label, ...(section.aliases || [])].filter(Boolean).map(escapeRegex);
+    const futureNames = sections
+      .filter((other) => other.key !== section.key)
+      .flatMap((other) => [other.label, ...(other.aliases || [])])
+      .filter(Boolean)
+      .map(escapeRegex);
+
+    const headerPattern = `\\[\\s*(?:${currentNames.join('|')})\\s*\\]`;
+    const nextHeaderPattern = futureNames.length ? `(?=\\n\\s*\\[\\s*(?:${futureNames.join('|')})\\s*\\])` : '$';
+    const sectionRegex = new RegExp(`${headerPattern}[\\s\\S]*?${nextHeaderPattern}`, 'i');
+    const replacement = `[${section.label}]\n${formatPlainSectionList(lineup.sections?.[section.key] || [])}\n`;
+
+    if (sectionRegex.test(output)) {
+      output = output.replace(sectionRegex, replacement);
+    }
+  }
+
+  return output.trim();
+}
+
+function buildDirectReplacementSections(oldSections, oldUserId, newUserId) {
+  const next = emptySections();
+  let found = false;
+
+  for (const key of Object.keys(next)) {
+    const ids = Array.isArray(oldSections?.[key]) ? oldSections[key].map(String) : [];
+    next[key] = ids.map((id) => {
+      if (id === String(oldUserId)) {
+        found = true;
+        return String(newUserId);
+      }
+      return id;
+    });
+  }
+
+  return { found, sections: next };
 }
 
 function replaceIdsInSections(oldSections, replacements) {
@@ -775,18 +910,26 @@ function replaceUserText(value, replacementDetails) {
   return output;
 }
 
-async function editStoredMessages(client, sessionRecord, replacementDetails) {
+async function editStoredMessages(client, sessionRecord, replacementDetails, lineup = null, sectionRewrites = []) {
   const edits = {
     attendees: false,
     log: false,
   };
+  const rewriteKeys = new Set((sectionRewrites || []).map(String));
 
   if (sessionRecord?.attendeesMessageId && sessionRecord?.queueChannelId) {
     const channel = await client.channels.fetch(sessionRecord.queueChannelId).catch(() => null);
     const message = await channel?.messages.fetch(sessionRecord.attendeesMessageId).catch(() => null);
 
     if (message?.content) {
-      const newContent = replaceUserText(message.content, replacementDetails);
+      let newContent = message.content;
+      if (replacementDetails.length) {
+        newContent = replaceUserText(newContent, replacementDetails);
+      }
+      if (lineup && rewriteKeys.size) {
+        newContent = rewriteSimpleBracketSections(newContent, lineup, [...rewriteKeys]);
+      }
+
       if (newContent !== message.content) {
         await message.edit({ content: newContent }).catch((err) => {
           console.error('[EDITACTIVITY] Failed to edit attendees message:', err);
@@ -801,34 +944,61 @@ async function editStoredMessages(client, sessionRecord, replacementDetails) {
     const message = await channel?.messages.fetch(sessionRecord.logMessageId).catch(() => null);
 
     if (message?.embeds?.length) {
+      let changed = false;
       const editedEmbeds = message.embeds.map((existingEmbed) => {
         const json = existingEmbed.toJSON();
 
-        if (json.title) json.title = replaceUserText(json.title, replacementDetails);
-        if (json.description) json.description = replaceUserText(json.description, replacementDetails);
+        if (json.title) {
+          const nextTitle = replaceUserText(json.title, replacementDetails);
+          if (nextTitle !== json.title) changed = true;
+          json.title = nextTitle;
+        }
+        if (json.description) {
+          const nextDescription = replaceUserText(json.description, replacementDetails);
+          if (nextDescription !== json.description) changed = true;
+          json.description = nextDescription;
+        }
 
         if (Array.isArray(json.fields)) {
-          json.fields = json.fields.map((field) => ({
-            ...field,
-            name: replaceUserText(field.name, replacementDetails),
-            value: replaceUserText(field.value, replacementDetails),
-          }));
+          json.fields = json.fields.map((field) => {
+            const sectionKey = lineup?.sessionType ? getSectionKeyForLogField(field.name, lineup.sessionType) : null;
+            const nextField = { ...field };
+
+            const nextName = replaceUserText(nextField.name, replacementDetails);
+            if (nextName !== nextField.name) changed = true;
+            nextField.name = nextName;
+
+            if (sectionKey && rewriteKeys.has(sectionKey)) {
+              nextField.value = formatLogSectionValue(lineup.sections?.[sectionKey] || []);
+              changed = true;
+            } else {
+              const nextValue = replaceUserText(nextField.value, replacementDetails);
+              if (nextValue !== nextField.value) changed = true;
+              nextField.value = nextValue;
+            }
+
+            return nextField;
+          });
         }
 
         if (json.footer?.text) {
+          const nextFooterText = replaceUserText(json.footer.text, replacementDetails);
+          if (nextFooterText !== json.footer.text) changed = true;
           json.footer = {
             ...json.footer,
-            text: replaceUserText(json.footer.text, replacementDetails),
+            text: nextFooterText,
           };
         }
 
         return EmbedBuilder.from(json);
       });
 
-      await message.edit({ embeds: editedEmbeds }).catch((err) => {
-        console.error('[EDITACTIVITY] Failed to edit log message:', err);
-      });
-      edits.log = true;
+      if (changed) {
+        await message.edit({ embeds: editedEmbeds }).catch((err) => {
+          console.error('[EDITACTIVITY] Failed to edit log message:', err);
+        });
+        edits.log = true;
+      }
     }
   }
 
@@ -852,7 +1022,7 @@ async function applyReplyBasedEdit({ client, shortId, oldLineup, newSections, ed
   const plan = getReplacementPlan(oldLineup.sections || {}, newSections, sessionType);
   if (!plan.ok) return plan;
 
-  const sections = replaceIdsInSections(oldLineup.sections || {}, plan.replacements);
+  const sections = plan.nextSections || replaceIdsInSections(oldLineup.sections || {}, plan.replacements);
   const existingRecord = getSession(shortId) || {};
 
   const lineup = {
@@ -884,7 +1054,13 @@ async function applyReplyBasedEdit({ client, shortId, oldLineup, newSections, ed
     });
   }
 
-  const messageEdits = await editStoredMessages(client, sessionRecord, replacementDetails);
+  const messageEdits = await editStoredMessages(
+    client,
+    sessionRecord,
+    replacementDetails,
+    lineup,
+    plan.sectionRewrites || [],
+  );
 
   if (sessionRecord.logMessageId) {
     const supportEntries = [];
@@ -923,10 +1099,20 @@ async function startEditActivity(interaction) {
   }
 
   const cardInput = interaction.options.getString('card', true);
+  const currentUser = interaction.options.getUser('current_user');
+  const correctUser = interaction.options.getUser('correct_user');
   const shortId = extractShortId(cardInput);
   if (!shortId) {
     await interaction.reply({
       content: 'I could not parse that Trello card link or short ID.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if ((currentUser && !correctUser) || (!currentUser && correctUser)) {
+    await interaction.reply({
+      content: 'Please choose both **current_user** and **correct_user**, or leave both blank to use the message editor.',
       ephemeral: true,
     });
     return;
@@ -955,6 +1141,44 @@ async function startEditActivity(interaction) {
     hostName: resolved.lineup.hostName || resolved.hostName || null,
   };
 
+  if (currentUser && correctUser) {
+    const direct = buildDirectReplacementSections(
+      lineup.sections || {},
+      currentUser.id,
+      correctUser.id,
+    );
+
+    if (!direct.found) {
+      await interaction.editReply(
+        `I found the Trello card, but I could not find <@${currentUser.id}> in the saved lineup/log for this card. Open the message editor without the user options if the recovered log is missing IDs.`,
+      );
+      return;
+    }
+
+    const applied = await applyReplyBasedEdit({
+      client: interaction.client,
+      shortId,
+      oldLineup: lineup,
+      newSections: direct.sections,
+      editorId: interaction.user.id,
+      guildId: interaction.guildId,
+    });
+
+    if (!applied.ok) {
+      await interaction.editReply(`❌ ${applied.error}`);
+      return;
+    }
+
+    await interaction.editReply([
+      '✅ **Activity updated successfully.**',
+      `**Trello:** ${shortId}`,
+      `**Changed:** <@${currentUser.id}> → <@${correctUser.id}>`,
+      '',
+      'I only updated the saved user mention/ID and kept the log format alone.',
+    ].join('\n'));
+    return;
+  }
+
   const template = buildEditTemplateFromLineup(lineup);
   const embed = new EmbedBuilder()
     .setColor(resolved.source === 'log' ? 0xf44336 : 0x6cb2eb)
@@ -965,8 +1189,8 @@ async function startEditActivity(interaction) {
       `**Host:** ${lineup.hostId ? `<@${lineup.hostId}>` : lineup.hostName || 'Unknown'}`,
       '',
       'Reply to this message, or send your corrected lineup as your next message in this channel.',
-      'Only change the wrong user mention/username/ID. Keep the section headers and the same number of lines.',
-      'If Discord will not suggest someone, paste their Discord user ID instead.',
+      'Change the wrong user mention/username/ID under the correct section.',
+      'If Discord will not suggest someone in your message, paste their Discord user ID instead, or use `/editactivity` with the optional current_user and correct_user fields.',
     ].join('\n'));
 
   const prompt = await interaction.channel.send({
@@ -1073,9 +1297,9 @@ async function handleEditActivityReply(message) {
       `**Trello:** ${pending.shortId}`,
       `**Changed spots:** ${applied.changedSpots.join(', ')}`,
       '',
-      changes,
+      changes || 'Section updated from the edited lineup.',
       '',
-      'I only updated the saved user mentions/IDs. The log format was left alone.',
+      'I only updated the saved user mention/ID fields and kept the activity format smooth.',
     ].join('\n'),
   });
 

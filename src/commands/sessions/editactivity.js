@@ -11,6 +11,18 @@ module.exports = {
         .setName('card')
         .setDescription('Trello card link or short ID')
         .setRequired(true),
+    )
+    .addUserOption((option) =>
+      option
+        .setName('current_user')
+        .setDescription('Optional: the wrong user currently in the log')
+        .setRequired(false),
+    )
+    .addUserOption((option) =>
+      option
+        .setName('correct_user')
+        .setDescription('Optional: the correct user to replace them with')
+        .setRequired(false),
     ),
 
   async execute(interaction) {
