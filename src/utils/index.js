@@ -13,13 +13,6 @@ const { runSessionAnnouncementTick } = require("./utils/sessionAnnouncements");
 const { handleQueueButtonInteraction } = require("./utils/sessionQueueManager");
 const { handleEditActivityReply } = require("./utils/editActivityManager");
 const { runWeeklyMaintenance } = require("./utils/activityTracker");
-let banAppeals = null;
-try {
-  banAppeals = require("./utils/banAppeals");
-} catch (err) {
-  console.error("[BAN APPEALS] Failed to load ban appeal system:", err);
-}
-
 const { runBanAppealReminderTick, handleBanAppealInteraction } = require("./utils/banAppeals");
 
 let handleJuniorActivityLogMessage = null;
@@ -60,7 +53,6 @@ const intents = [
   GatewayIntentBits.GuildMembers,
   GatewayIntentBits.GuildVoiceStates,
   GatewayIntentBits.GuildMessageReactions,
-  GatewayIntentBits.DirectMessages,
 ];
 
 if (ENABLE_MESSAGE_CONTENT) {
@@ -146,11 +138,6 @@ if (fs.existsSync(commandsPathRoot)) {
 // READY
 client.once(Events.ClientReady, (c) => {
   runWeeklyMaintenance();
-  if (banAppeals?.runBanAppealReminderTick) {
-    banAppeals.runBanAppealReminderTick(c).catch((err) =>
-      console.error("[BAN APPEALS] Ready tick error:", err)
-    );
-  }
   runBanAppealReminderTick(c).catch((err) => console.error("[BAN APPEALS] Ready tick error:", err));
   console.log(
     `[READY] Logged in as ${c.user.tag} (id: ${c.user.id}) in ${c.guilds.cache.size} guild(s).`
@@ -201,17 +188,6 @@ setInterval(() => {
     console.error("[ACTIVITY] Weekly maintenance error:", err);
   }
 }, 60 * 60 * 1000);
-
-// Ban appeal cooldown checks: every 10 minutes
-setInterval(async () => {
-  try {
-    if (banAppeals?.runBanAppealReminderTick) {
-      await banAppeals.runBanAppealReminderTick(client);
-    }
-  } catch (err) {
-    console.error("[BAN APPEALS] Reminder tick error:", err);
-  }
-}, 10 * 60 * 1000);
 
 // Ban appeal cooldown checks: every 10 minutes
 setInterval(async () => {
@@ -270,10 +246,6 @@ if (ENABLE_MESSAGE_CONTENT) {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    if (banAppeals?.handleBanAppealInteraction) {
-      const banAppealHandled = await banAppeals.handleBanAppealInteraction(interaction);
-      if (banAppealHandled) return;
-    }
     const banAppealHandled = await handleBanAppealInteraction(interaction);
     if (banAppealHandled) return;
 
