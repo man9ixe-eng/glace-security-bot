@@ -9,6 +9,7 @@ const {
   getRuleChoices,
   createBanAppealRecord,
   sendBanNotice,
+  markBanFailed,
   formatDateTime,
   formatRelative,
 } = require("../../utils/banAppeals");
@@ -85,30 +86,31 @@ module.exports = {
       });
     }
 
-    // Create the DM channel before banning when possible. This gives the bot the best chance
-    // to send the appeal notice even after the member leaves the mutual server by being banned.
-    const preBanDmChannel = await user.createDM().catch(() => null);
-
     const reason = `${rule.label} | Appealable: ${appealable ? "Yes" : "No"} | Cooldown: ${cooldownDays} day(s)`;
+
+    // Important: send/save the appeal notice BEFORE banning.
+    // After a ban, Discord may block the DM because the user no longer shares the server with the bot.
+    const record = createBanAppealRecord({
+      guild: interaction.guild,
+      user,
+      moderator: interaction.user,
+      rule,
+      appealable,
+      cooldownDays,
+    });
+
+    const dmResult = await sendBanNotice(user, record);
 
     try {
       await interaction.guild.members.ban(user.id, { reason });
 
-      const record = createBanAppealRecord({
-        guild: interaction.guild,
-        user,
-        moderator: interaction.user,
-        rule,
-        appealable,
-        cooldownDays,
-      });
-
-      const dmResult = await sendBanNotice(user, record, preBanDmChannel);
       const appealLine = !appealable
         ? "Not appealable"
         : cooldownDays === 0
           ? "Open now"
           : `${formatDateTime(record.availableAt)} (${formatRelative(record.availableAt)})`;
+
+      const dmText = dmResult.ok ? "Sent" : `Failed / ${dmResult.error || "DMs may be closed"}`;
 
       await interaction.editReply({
         content:
@@ -116,7 +118,8 @@ module.exports = {
           `**Rule:** ${rule.label}\n` +
           `**Appeal:** ${appealable ? "Yes" : "No"}\n` +
           `**Appeal Opens:** ${appealLine}\n` +
-          `**DM:** ${dmResult.ok ? "Sent" : "Failed / DMs may be closed"}`,
+          `**DM:** ${dmText}` +
+          `${dmResult.ok ? "" : "\nUse `/sendappeal` after they open DMs if you need to retry."}`,
       });
 
       await logModerationAction(interaction, {
@@ -127,13 +130,16 @@ module.exports = {
           `Appealable: ${appealable ? "Yes" : "No"}\n` +
           `Appeal Cooldown: ${cooldownDays} day(s)\n` +
           `Appeal Opens: ${appealable ? formatDateTime(record.availableAt) : "Not available"}\n` +
-          `DM Status: ${dmResult.ok ? "Sent" : "Failed / DMs may be closed"}\n` +
+          `DM Status: ${dmText}\n` +
           `Appeal Case: ${record.id}`,
       });
     } catch (error) {
       console.error("[BAN] Failed to ban member:", error);
+      markBanFailed(record.id, error?.message || String(error));
       await interaction.editReply({
-        content: "I could not ban that member. Check my permissions and role position.",
+        content:
+          "I could not ban that member. Check my permissions and role position.\n" +
+          `The saved appeal case was marked as failed: ${record.id}`,
       });
     }
   },

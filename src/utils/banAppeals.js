@@ -267,14 +267,17 @@ function safeText(value, limit = 1024) {
   return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
 }
 
-function buildAppealButton(record) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`banappeal:start:${record.id}`)
-      .setLabel("Submit Ban Appeal")
-      .setEmoji({ id: "1489052500341297344", name: "GlaceHotels" })
-      .setStyle(ButtonStyle.Primary)
-  );
+function buildAppealButton(record, withEmoji = true) {
+  const button = new ButtonBuilder()
+    .setCustomId(`banappeal:start:${record.id}`)
+    .setLabel("Submit Ban Appeal")
+    .setStyle(ButtonStyle.Primary);
+
+  // Custom emoji buttons can occasionally fail in DMs depending on Discord/client state.
+  // Keep the emoji for server-side review buttons, but allow plain DM buttons for reliability.
+  if (withEmoji) button.setEmoji({ id: "1489052500341297344", name: "GlaceHotels" });
+
+  return new ActionRowBuilder().addComponents(button);
 }
 
 function buildReviewButtons(record, disabled = false) {
@@ -309,6 +312,15 @@ function updateAppealRecord(recordId, updater) {
   store.appeals[index] = updated;
   writeStore(store);
   return updated;
+}
+
+function markBanFailed(recordId, errorText = "Unknown error") {
+  return updateAppealRecord(recordId, (current) => {
+    current.status = "ban_failed";
+    current.banFailedAt = Date.now();
+    current.banFailedReason = String(errorText || "Unknown error").slice(0, 500);
+    return current;
+  });
 }
 
 function getAppealRecord(recordId) {
@@ -436,7 +448,7 @@ async function sendUserDm(user, payload, preferredChannel = null) {
 
 async function sendBanNotice(user, record, preferredChannel = null) {
   const components = [];
-  if (record.appealable && record.availableAt <= Date.now()) components.push(buildAppealButton(record));
+  if (record.appealable && record.availableAt <= Date.now()) components.push(buildAppealButton(record, false));
 
   const result = await sendUserDm(user, { embeds: [buildBanNoticeEmbed(record)], components }, preferredChannel);
   updateAppealRecord(record.id, (current) => {
@@ -465,7 +477,7 @@ async function sendAppealInvite(client, record) {
 
   const result = await sendUserDm(
     user,
-    { embeds: [buildAppealReadyEmbed(record)], components: [buildAppealButton(record)] },
+    { embeds: [buildAppealReadyEmbed(record)], components: [buildAppealButton(record, false)] },
     preferredChannel
   );
 
@@ -953,6 +965,7 @@ module.exports = {
   getLatestAppealForUser,
   sendBanNotice,
   sendAppealInvite,
+  markBanFailed,
   runBanAppealReminderTick,
   handleBanAppealInteraction,
   formatDateTime,
