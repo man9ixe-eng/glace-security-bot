@@ -46,6 +46,12 @@ const RECOVERY_CHANNEL_NAME_HINTS = [
 ];
 
 const RECOVERY_CHANNEL_LIMIT = Number(process.env.EDITACTIVITY_RECOVERY_CHANNEL_LIMIT || 35);
+const SESSION_LOG_SCAN_LIMIT = Number(process.env.EDITACTIVITY_SESSION_LOG_SCAN_LIMIT || 2500);
+
+const SESSION_LOG_CHANNEL_NAMES = [
+  'session-logs',
+  'sessions-logs',
+];
 
 function getEditableSections(sessionType) {
   if (sessionType === 'training') {
@@ -206,6 +212,67 @@ async function fetchTextChannel(client, channelId) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) return null;
   return channel;
+}
+
+async function fetchChannelMessagesDeep(channel, totalLimit = SESSION_LOG_SCAN_LIMIT) {
+  const allMessages = [];
+  let before = null;
+  let remaining = Number.isFinite(totalLimit) && totalLimit > 0 ? totalLimit : 2500;
+
+  while (remaining > 0) {
+    const batchLimit = Math.min(100, remaining);
+    const options = before ? { limit: batchLimit, before } : { limit: batchLimit };
+    const batch = await channel.messages.fetch(options).catch((error) => {
+      console.error(`[EDITACTIVITY] Failed scanning #${channel.name || channel.id}:`, error?.message || error);
+      return null;
+    });
+
+    if (!batch?.size) break;
+
+    const ordered = [...batch.values()].sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+    allMessages.push(...ordered);
+    before = ordered[ordered.length - 1]?.id;
+
+    if (batch.size < batchLimit || !before) break;
+    remaining -= batch.size;
+  }
+
+  return allMessages;
+}
+
+async function getExactSessionLogChannels(client, guildId, preferredChannelId) {
+  const channels = [];
+  const seen = new Set();
+
+  async function addChannel(channel) {
+    if (!channel?.id || seen.has(channel.id) || !channel.isTextBased?.()) return;
+    seen.add(channel.id);
+    channels.push(channel);
+  }
+
+  for (const channelId of unique([
+    preferredChannelId,
+    process.env.SESSION_LOG_CHANNEL_ID,
+    process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID,
+    process.env.ACTIVITY_LOG_CHANNEL_ID,
+  ])) {
+    const channel = await fetchTextChannel(client, channelId);
+    if (channel) await addChannel(channel);
+  }
+
+  const guild = guildId ? await client.guilds.fetch(guildId).catch(() => null) : null;
+  const guildChannels = guild ? await guild.channels.fetch().catch(() => null) : null;
+
+  if (guildChannels?.size) {
+    const exactLogs = [...guildChannels.values()]
+      .filter((channel) => channel?.isTextBased?.())
+      .filter((channel) => SESSION_LOG_CHANNEL_NAMES.includes(String(channel.name || '').toLowerCase()))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    for (const channel of exactLogs) await addChannel(channel);
+  }
+
+  return channels;
 }
 
 function channelLooksRelevant(channel) {
@@ -555,15 +622,27 @@ async function recoverSessionFromExactMessage({ client, shortId, card, guildId, 
 }
 
 async function findSessionLogForCard(client, shortId, card, preferredChannelId, guildId) {
-  const channels = await getCandidateRecoveryChannels(client, guildId, preferredChannelId);
+  const exactLogChannels = await getExactSessionLogChannels(client, guildId, preferredChannelId);
+  const exactIds = new Set(exactLogChannels.map((channel) => channel.id));
+  const fallbackChannels = (await getCandidateRecoveryChannels(client, guildId, preferredChannelId))
+    .filter((channel) => !exactIds.has(channel.id));
+  const channels = [...exactLogChannels, ...fallbackChannels];
 
   for (const channel of channels) {
-    const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
-    if (!messages?.size) continue;
+    const shouldDeepScan = SESSION_LOG_CHANNEL_NAMES.includes(String(channel.name || '').toLowerCase())
+      || channel.id === process.env.SESSION_LOG_CHANNEL_ID
+      || channel.id === process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID
+      || channel.id === process.env.ACTIVITY_LOG_CHANNEL_ID;
 
-    const matches = [...messages.values()]
-      .filter((message) => message.embeds?.length)
+    const messages = shouldDeepScan
+      ? await fetchChannelMessagesDeep(channel, SESSION_LOG_SCAN_LIMIT)
+      : [...((await channel.messages.fetch({ limit: 100 }).catch(() => null))?.values?.() || [])];
+
+    if (!messages.length) continue;
+
+    const matches = messages
       .filter((message) => messageMentionsCard(message, shortId, card))
+      .filter((message) => messageLooksLikeSessionLog(message) || messageTextForSearch(message).toLowerCase().includes('trello'))
       .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 
     if (matches[0]) return { channel, message: matches[0] };
@@ -573,17 +652,21 @@ async function findSessionLogForCard(client, shortId, card, preferredChannelId, 
 }
 
 async function recoverSessionFromLogMessage({ client, shortId, card, guildId, preferredChannelId }) {
-  const sessionType = detectSessionTypeFromCard(card);
-  if (!sessionType) return null;
-
   const foundLog = await findSessionLogForCard(client, shortId, card, preferredChannelId, guildId);
   if (!foundLog?.channel || !foundLog?.message) return null;
 
-  const lineup = parseSessionLogMessage(foundLog.message, sessionType);
+  const sessionType = detectSessionTypeFromMessage(foundLog.message, card);
+  if (!sessionType) return null;
+
+  let lineup = null;
+  if (foundLog.message.embeds?.length) lineup = parseSessionLogMessage(foundLog.message, sessionType);
+  if (!lineup && foundLog.message.content) lineup = parseAttendeesPostContent(foundLog.message.content, sessionType);
+  if (!lineup && foundLog.message.content) lineup = parseBracketLineupMessage(foundLog.message.content, sessionType);
   if (!lineup) return null;
 
   lineup.shortId = shortId;
 
+  const isEmbedLog = Boolean(foundLog.message.embeds?.length);
   const sessionRecord = upsertSession({
     shortId,
     sessionType,
@@ -592,15 +675,18 @@ async function recoverSessionFromLogMessage({ client, shortId, card, guildId, pr
     guildId: guildId || null,
     cardName: card?.name || null,
     cardUrl: card?.shortUrl || card?.url || null,
-    logChannelId: foundLog.channel.id,
-    logMessageId: foundLog.message.id,
+    logChannelId: isEmbedLog ? foundLog.channel.id : null,
+    logMessageId: isEmbedLog ? foundLog.message.id : null,
+    queueChannelId: !isEmbedLog ? foundLog.channel.id : null,
+    attendeesMessageId: !isEmbedLog ? foundLog.message.id : null,
     loggedAt: foundLog.message.createdTimestamp || Date.now(),
     recoveredAt: Date.now(),
+    recoveredFromSessionLogsScan: true,
     lineup,
   });
 
   return {
-    source: 'recovered-log',
+    source: isEmbedLog ? 'recovered-session-logs' : 'recovered-session-logs-message',
     lineup: sessionRecord.lineup,
     sessionType,
     hostId: lineup.hostId || null,
@@ -683,16 +769,6 @@ async function resolveLineupForShortId(client, shortId, options = {}) {
   }
 
   if (options.card) {
-    const recovered = await recoverSessionFromAttendeesPost({
-      client,
-      shortId,
-      card: options.card,
-      guildId: options.guildId || null,
-      preferredChannelId: options.channelId || null,
-    });
-
-    if (recovered?.lineup) return recovered;
-
     const recoveredLog = await recoverSessionFromLogMessage({
       client,
       shortId,
@@ -702,6 +778,16 @@ async function resolveLineupForShortId(client, shortId, options = {}) {
     });
 
     if (recoveredLog?.lineup) return recoveredLog;
+
+    const recovered = await recoverSessionFromAttendeesPost({
+      client,
+      shortId,
+      card: options.card,
+      guildId: options.guildId || null,
+      preferredChannelId: options.channelId || null,
+    });
+
+    if (recovered?.lineup) return recovered;
   }
 
   return null;
@@ -853,7 +939,7 @@ async function parseLineupReply(text, sessionType, guild) {
   if (!sawKnownSection) {
     return {
       ok: false,
-      error: 'I could not read that lineup. Please keep the section headers like `[Trainer]`, `[Supervisor]`, `[Co-Host]`, and `[Overseer]`.',
+      error: '❌ I couldn’t read that lineup. Please keep the section headers like `[Trainer]`, `[Supervisor]`, `[Co-Host]`, and `[Overseer]`.',
     };
   }
 
@@ -861,8 +947,8 @@ async function parseLineupReply(text, sessionType, guild) {
     return {
       ok: false,
       error:
-        `I could not find this user from your edited message: **${unresolved[0]}**\n` +
-        'Please paste their Discord user ID if Discord does not suggest them in the message box.',
+        `❌ I couldn’t find this user from your edit: **${unresolved[0]}**\n` +
+        'Please paste their Discord user ID if Discord does not suggest them.',
     };
   }
 
@@ -892,8 +978,8 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
           return {
             ok: false,
             error:
-              `I found the same old user being changed into two different people.\n` +
-              'Please run one clean edit at a time so I do not update the wrong person.',
+              `❌ One staff member is being changed into two different people.\n` +
+              'Please send one clean edit so the log updates correctly.',
           };
         }
 
@@ -924,8 +1010,8 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
         return {
           ok: false,
           error:
-            `I found the same old user being changed into two different people.\n` +
-            'Please run one clean edit at a time so I do not update the wrong person.',
+            `❌ One staff member is being changed into two different people.\n` +
+            'Please send one clean edit so the log updates correctly.',
         };
       }
 
@@ -936,7 +1022,7 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
   if (!replacementsByOldId.size && !sectionRewrites.length) {
     return {
       ok: false,
-      error: 'I did not see any changed users in that lineup.',
+      error: 'I couldn’t find anything new to update. Please make sure you changed the staff member’s mention, username, or Discord ID before sending it again.',
     };
   }
 
@@ -1312,12 +1398,9 @@ async function startEditActivity(interaction) {
   if (!resolved?.lineup) {
     await interaction.editReply(
       [
-        'I could not find saved edit data for that Trello card, and I could not recover the attendees post or session log from recent queue/log channels.',
+        '❌ I couldn’t find that session log.',
         '',
-        'For older logs made before Trello card links were saved, run it like this:',
-        '`/editactivity card:<trello card> log_message:<message link from #session-logs>`',
-        '',
-        'After that, I can open the editor and save the link between that card and log.',
+        'Please make sure the Trello card link is included in #session-logs, or try using the session log message link with `/editactivity`.',
       ].join('\n'),
     );
     return;
@@ -1339,7 +1422,7 @@ async function startEditActivity(interaction) {
 
     if (!direct.found) {
       await interaction.editReply(
-        `I found the Trello card, but I could not find <@${currentUser.id}> in the saved lineup/log for this card. Open the message editor without the user options if the recovered log is missing IDs.`,
+        `❌ I found the session, but I couldn’t find <@${currentUser.id}> in the saved lineup. Try opening the editor without the user options and paste the corrected lineup instead.`,
       );
       return;
     }
@@ -1359,27 +1442,30 @@ async function startEditActivity(interaction) {
     }
 
     await interaction.editReply([
-      '✅ **Activity updated successfully.**',
+      '✅ **Activity updated!**',
       `**Trello:** ${shortId}`,
-      `**Changed:** <@${currentUser.id}> → <@${correctUser.id}>`,
+      `**Updated:** <@${currentUser.id}> → <@${correctUser.id}>`,
       '',
-      'I only updated the saved user mention/ID and kept the log format alone.',
+      'The saved session log has been corrected.',
     ].join('\n'));
     return;
   }
 
   const template = buildEditTemplateFromLineup(lineup);
+  const sourceLabel = String(resolved.source || '').includes('log') ? 'Session Log' : 'Queue / Attendees Post';
   const embed = new EmbedBuilder()
     .setColor(resolved.source === 'log' ? 0xf44336 : 0x6cb2eb)
-    .setTitle('Edit Activity | Current Lineup')
+    .setTitle('Edit Activity | Lineup Check')
     .setDescription([
       `**Session:** ${card?.name || shortId}`,
-      `**Source:** ${resolved.source === 'log' ? 'Logged Session' : resolved.source === 'recovered-log' ? 'Recovered Session Log' : resolved.source === 'recovered-log-link' ? 'Recovered Session Log Link' : resolved.source === 'recovered-attendees-link' ? 'Recovered Attendees Link' : resolved.source === 'recovered-attendees' ? 'Recovered Attendees Post' : 'Queue / Attendees Post'}`,
+      `**Source:** ${sourceLabel}`,
       `**Host:** ${lineup.hostId ? `<@${lineup.hostId}>` : lineup.hostName || 'Unknown'}`,
       '',
-      'Reply to this message, or send your corrected lineup as your next message in this channel.',
-      'Change the wrong user mention/username/ID under the correct section.',
-      'If Discord will not suggest someone in your message, paste their Discord user ID instead, or use `/editactivity` with the optional current_user and correct_user fields.',
+      'Please reply with the corrected lineup below.',
+      '',
+      'Only change the staff member that needs to be fixed. You can use a mention, username, or Discord ID.',
+      '',
+      'Once sent, I’ll update the saved session log.',
     ].join('\n'));
 
   const prompt = await interaction.channel.send({
@@ -1395,7 +1481,7 @@ async function startEditActivity(interaction) {
   });
 
   await interaction.editReply(
-    `✅ Editor opened. Reply to the new message with your corrected lineup, or send the corrected lineup as your next message here.`,
+    `✅ Editor opened. Send the corrected lineup whenever you’re ready.`,
   );
 }
 
@@ -1420,7 +1506,7 @@ async function handleEditActivityReply(message) {
 
   if (pending.editorUserId !== message.author.id) {
     await message.reply({
-      content: 'Only the staff member who opened `/editactivity` can submit the edited lineup.',
+      content: 'Only the staff member who opened `/editactivity` can send this edit.',
     });
     return true;
   }
@@ -1435,7 +1521,7 @@ async function handleEditActivityReply(message) {
 
   if (!sessionType || !resolved?.lineup) {
     await message.reply({
-      content: 'I could not determine the saved lineup for this edit anymore. Please run `/editactivity` again.',
+      content: '❌ I couldn’t find the saved lineup anymore. Please run `/editactivity` again.',
     });
     if (clearPromptMessageId) clearPendingEdit(clearPromptMessageId);
     return true;
@@ -1482,13 +1568,11 @@ async function handleEditActivityReply(message) {
 
   await message.reply({
     content: [
-      '✅ **Activity updated successfully.**',
+      '✅ **Activity updated!**',
       `**Trello:** ${pending.shortId}`,
-      `**Changed spots:** ${applied.changedSpots.join(', ')}`,
+      `**Updated Section:** ${applied.changedSpots.join(', ')}`,
       '',
-      changes || 'Section updated from the edited lineup.',
-      '',
-      'I only updated the saved user mention/ID fields and kept the activity format smooth.',
+      changes || 'The saved session log has been corrected.',
     ].join('\n'),
   });
 

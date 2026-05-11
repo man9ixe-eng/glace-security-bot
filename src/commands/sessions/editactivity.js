@@ -4,7 +4,7 @@ const { startEditActivity } = require('../../utils/editActivityManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('editactivity')
-    .setDescription('Open an activity editor for an attendee post or logged session using a Trello card.')
+    .setDescription('Edit a saved session activity log using a Trello card.')
     .setDMPermission(false)
     .addStringOption((option) =>
       option
@@ -15,19 +15,19 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('log_message')
-        .setDescription('Optional: session log or attendees message link for older logs without card links')
+        .setDescription('Optional: session log message link for older logs')
         .setRequired(false),
     )
     .addUserOption((option) =>
       option
         .setName('current_user')
-        .setDescription('Optional: the wrong user currently in the log')
+        .setDescription('Optional: the staff member that needs to be fixed')
         .setRequired(false),
     )
     .addUserOption((option) =>
       option
         .setName('correct_user')
-        .setDescription('Optional: the correct user to replace them with')
+        .setDescription('Optional: the correct staff member')
         .setRequired(false),
     ),
 
