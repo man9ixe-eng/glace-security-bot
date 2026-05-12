@@ -39,11 +39,22 @@ const PriorityStore = require("./utils/priorityStore");
 // HTTP SERVER FOR RENDER
 // ===========================
 const PORT = process.env.PORT || 3000;
+let webClient = null;
 
 http
-  .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Glace bot is running.\n");
+  .createServer(async (req, res) => {
+    try {
+      if (req.url?.startsWith("/appeal") && banAppeals?.handleAppealWebRequest) {
+        return await banAppeals.handleAppealWebRequest(req, res, webClient);
+      }
+
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Glace bot is running.\nBan appeals: /appeal\n");
+    } catch (err) {
+      console.error("[HTTP] Request error:", err);
+      if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Something went wrong.\n");
+    }
   })
   .listen(PORT, () => {
     console.log(`HTTP server listening on port ${PORT}`);
@@ -73,6 +84,8 @@ const client = new Client({
   intents,
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
+webClient = client;
+
 
 // Commands collection
 client.commands = new Collection();
@@ -236,6 +249,15 @@ if (ENABLE_MESSAGE_CONTENT) {
 
     if (message.author?.bot) return;
 
+
+    try {
+      if (banAppeals?.handleAppealTicketMessage) {
+        const handledAppealTicket = await banAppeals.handleAppealTicketMessage(message);
+        if (handledAppealTicket) return;
+      }
+    } catch (err) {
+      console.error("[BAN APPEALS] Ticket message handling error:", err);
+    }
     try {
       const handledEditReply = await handleEditActivityReply(message);
       if (handledEditReply) return;
@@ -264,6 +286,17 @@ if (ENABLE_MESSAGE_CONTENT) {
   });
 }
 
+
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  try {
+    if (banAppeals?.handleBanAppealReaction) {
+      await banAppeals.handleBanAppealReaction(reaction, user);
+    }
+  } catch (err) {
+    console.error("[BAN APPEALS] Reaction handling error:", err);
+  }
+});
+
 // ===========================
 // INTERACTIONS (BUTTONS + SLASH)
 // ===========================
@@ -279,6 +312,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
       const id = interaction.customId || "";
+
+      if (banAppeals?.handleBanAppealInteraction) {
+        const handledBanAppeal = await banAppeals.handleBanAppealInteraction(interaction);
+        if (handledBanAppeal) return;
+      }
 
       if (interaction.isButton()) {
         // ticket close yes/no buttons

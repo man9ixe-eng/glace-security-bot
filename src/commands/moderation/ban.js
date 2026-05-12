@@ -12,7 +12,7 @@ const {
   markBanFailed,
   formatDateTime,
   formatRelative,
-  getPublicAppealUrl,
+  getAppealServerInvite,
 } = require("../../utils/banAppeals");
 
 module.exports = {
@@ -82,15 +82,12 @@ module.exports = {
 
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     if (member && !member.bannable) {
-      return interaction.editReply({
-        content: "I cannot ban this member. They might have a higher role than me.",
-      });
+      return interaction.editReply({ content: "I cannot ban this member. They might have a higher role than me." });
     }
 
     const reason = `${rule.label} | Appealable: ${appealable ? "Yes" : "No"} | Cooldown: ${cooldownDays} day(s)`;
 
-    // Important: create/save the appeal case and try the DM BEFORE banning.
-    // After the ban, Discord may block DMs because the user no longer shares Glace with the bot.
+    // Save the appeal case and try to DM BEFORE banning. After the ban, Discord may block DMs.
     const record = createBanAppealRecord({
       guild: interaction.guild,
       user,
@@ -112,7 +109,7 @@ module.exports = {
           : `${formatDateTime(record.availableAt)} (${formatRelative(record.availableAt)})`;
 
       const dmText = dmResult.ok ? "Sent" : `Failed / ${dmResult.error || "Discord blocked the DM"}`;
-      const publicAppeal = getPublicAppealUrl() || "Not configured yet";
+      const invite = getAppealServerInvite() || "Not configured yet";
 
       await interaction.editReply({
         content:
@@ -121,7 +118,7 @@ module.exports = {
           `**Appeal:** ${appealable ? "Yes" : "No"}\n` +
           `**Appeal Opens:** ${appealLine}\n` +
           `**DM:** ${dmText}\n` +
-          `**Public Appeal Center:** ${publicAppeal}`,
+          `**Appeals Server:** ${invite}`,
       });
 
       await logModerationAction(interaction, {
@@ -133,7 +130,7 @@ module.exports = {
           `Appeal Cooldown: ${cooldownDays} day(s)\n` +
           `Appeal Opens: ${appealable ? formatDateTime(record.availableAt) : "Not available"}\n` +
           `DM Status: ${dmText}\n` +
-          `Appeal Center: ${publicAppeal}\n` +
+          `Appeals Server: ${invite}\n` +
           `Appeal Case: ${record.id}`,
       });
     } catch (error) {
