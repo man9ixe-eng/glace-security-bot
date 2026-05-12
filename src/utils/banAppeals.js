@@ -18,6 +18,8 @@ const DATA_PATH =
 
 const GLACE = "<:GlaceHotels:1489052500341297344>";
 const ACCEPTED = "<:accepted:882053450643431434>";
+// Use the Appeals server Approved emoji for Appeals-server panel/ticket messages.
+// The old accepted emoji can show as plain :accepted: in GH | Appeals if that emoji is not available there.
 
 const DEFAULTS = {
   appealsGuildId: "1503667501127438406",
@@ -374,7 +376,7 @@ function buildAppealPanelEmbed() {
         "",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
-        `${ACCEPTED} **Before You Start**`,
+        `${getAppealsServerEmoji("approved")} **Before You Start**`,
         "",
         "Please do **not** include:",
         "",
@@ -834,7 +836,7 @@ async function submitAppeal(interaction, recordId) {
     embeds: [
       new EmbedBuilder()
         .setColor(COLORS.approved)
-        .setTitle(`${ACCEPTED} Appeal Submitted`)
+        .setTitle(`${getAppealsServerEmoji("approved")} Appeal Submitted`)
         .setDescription(
           [
             "Thank you for submitting your ban appeal.",
@@ -963,7 +965,7 @@ async function dmDecision(client, record, approved) {
   const invite = process.env.BAN_APPEAL_APPROVED_INVITE || process.env.DISCORD_INVITE || "";
   const embed = new EmbedBuilder()
     .setColor(approved ? COLORS.approved : COLORS.denied)
-    .setTitle(approved ? `${ACCEPTED} Glace Hotels | Appeal Approved` : `${GLACE} Glace Hotels | Appeal Denied`)
+    .setTitle(approved ? `${getEmoji("approved")} Glace Hotels | Appeal Approved` : `${GLACE} Glace Hotels | Appeal Denied`)
     .setDescription(
       approved
         ? [
@@ -993,7 +995,7 @@ async function logDecision(client, guild, record, reviewer, approved, unbanText 
   if (!channel?.send) return false;
   const embed = new EmbedBuilder()
     .setColor(approved ? COLORS.approved : COLORS.denied)
-    .setTitle(approved ? `${ACCEPTED} Ban Appeal Approved` : `${GLACE} Ban Appeal Denied`)
+    .setTitle(approved ? `${getEmoji("approved")} Ban Appeal Approved` : `${GLACE} Ban Appeal Denied`)
     .setDescription(approved ? "A ban appeal has been approved." : "A ban appeal has been denied.")
     .addFields(
       { name: "User", value: `${record.userTag || "Unknown"}\n${record.userId}`, inline: true },
@@ -1071,7 +1073,7 @@ async function handleDecisionReaction(reaction, user, decision) {
 
   const resultEmbed = new EmbedBuilder()
     .setColor(approved ? COLORS.approved : COLORS.denied)
-    .setTitle(approved ? `${ACCEPTED} Appeal Approved` : `${GLACE} Appeal Denied`)
+    .setTitle(approved ? `${getEmoji("approved")} Appeal Approved` : `${GLACE} Appeal Denied`)
     .setDescription(
       [
         approved ? "This appeal has been approved." : "This appeal has been denied.",
