@@ -9,6 +9,7 @@ const {
   sendAppealInvite,
   formatDateTime,
   formatRelative,
+  getPublicAppealUrl,
 } = require("../../utils/banAppeals");
 
 function cleanDiscordId(value) {
@@ -18,7 +19,7 @@ function cleanDiscordId(value) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("sendappeal")
-    .setDescription("Resend a saved ban appeal notice/button by Discord ID.")
+    .setDescription("Resend a saved ban appeal notice/link by Discord ID.")
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .addStringOption((option) =>
@@ -77,8 +78,9 @@ module.exports = {
     if (result.ok) {
       return interaction.editReply({
         content:
-          `✅ Appeal ${ready ? "button" : "notice"} sent to **${record.userTag}**.\n` +
-          `Appeal Opens: ${ready ? "Open now" : `${formatDateTime(record.availableAt)} (${formatRelative(record.availableAt)})`}`,
+          `✅ Appeal ${ready ? "link" : "notice"} sent to **${record.userTag}**.\n` +
+          `Appeal Opens: ${ready ? "Open now" : `${formatDateTime(record.availableAt)} (${formatRelative(record.availableAt)})`}\n` +
+          `Public Appeal Center: ${getPublicAppealUrl() || "Not configured yet"}`,
       });
     }
 
@@ -86,7 +88,7 @@ module.exports = {
       content:
         `I still could not DM **${record.userTag}**.\n` +
         `Reason: ${result.error || "Discord blocked the DM."}\n\n` +
-        "Ask them to open DMs, have at least one mutual server with the bot, or message the bot first if possible, then run `/sendappeal` again.",
+        `Their appeal case still exists. They can use the public Ban Appeal Center if it is configured: ${getPublicAppealUrl() || "Not configured yet"}`,
     });
   },
 };

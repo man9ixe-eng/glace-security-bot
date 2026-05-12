@@ -12,6 +12,7 @@ const {
   markBanFailed,
   formatDateTime,
   formatRelative,
+  getPublicAppealUrl,
 } = require("../../utils/banAppeals");
 
 module.exports = {
@@ -88,8 +89,8 @@ module.exports = {
 
     const reason = `${rule.label} | Appealable: ${appealable ? "Yes" : "No"} | Cooldown: ${cooldownDays} day(s)`;
 
-    // Important: send/save the appeal notice BEFORE banning.
-    // After a ban, Discord may block the DM because the user no longer shares the server with the bot.
+    // Important: create/save the appeal case and try the DM BEFORE banning.
+    // After the ban, Discord may block DMs because the user no longer shares Glace with the bot.
     const record = createBanAppealRecord({
       guild: interaction.guild,
       user,
@@ -110,7 +111,8 @@ module.exports = {
           ? "Open now"
           : `${formatDateTime(record.availableAt)} (${formatRelative(record.availableAt)})`;
 
-      const dmText = dmResult.ok ? "Sent" : `Failed / ${dmResult.error || "DMs may be closed"}`;
+      const dmText = dmResult.ok ? "Sent" : `Failed / ${dmResult.error || "Discord blocked the DM"}`;
+      const publicAppeal = getPublicAppealUrl() || "Not configured yet";
 
       await interaction.editReply({
         content:
@@ -118,8 +120,8 @@ module.exports = {
           `**Rule:** ${rule.label}\n` +
           `**Appeal:** ${appealable ? "Yes" : "No"}\n` +
           `**Appeal Opens:** ${appealLine}\n` +
-          `**DM:** ${dmText}` +
-          `${dmResult.ok ? "" : "\nUse `/sendappeal` after they open DMs if you need to retry."}`,
+          `**DM:** ${dmText}\n` +
+          `**Public Appeal Center:** ${publicAppeal}`,
       });
 
       await logModerationAction(interaction, {
@@ -131,6 +133,7 @@ module.exports = {
           `Appeal Cooldown: ${cooldownDays} day(s)\n` +
           `Appeal Opens: ${appealable ? formatDateTime(record.availableAt) : "Not available"}\n` +
           `DM Status: ${dmText}\n` +
+          `Appeal Center: ${publicAppeal}\n` +
           `Appeal Case: ${record.id}`,
       });
     } catch (error) {
