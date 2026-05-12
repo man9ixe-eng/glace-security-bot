@@ -26,9 +26,15 @@ const DEFAULTS = {
   appealLogsChannelId: "1503678819247198228",
   mainReviewChannelId: "1503271992994824242",
   reviewerRoleIds: ["1412712646305779823", "1457201903808282634", "1412712767907037305"],
+  // Main Glace server review emojis. These are used on the #Ban-Appeals review thread.
   approvedEmojiId: "1503676388492967936",
   deniedEmojiId: "1503676691145556038",
   issueEmojiId: "1503677274220789871",
+
+  // GH Appeals server emojis. These are used inside the Appeals server/ticket side.
+  appealApprovedEmojiId: "1503675344425586750",
+  appealDeniedEmojiId: "1503675444036370604",
+  appealIssueEmojiId: "1503677661866623117",
 };
 
 const COLORS = {
@@ -69,6 +75,9 @@ const RULES = [
 
 const SECOND_QUESTION =
   "Why should we consider unbanning you? Please write at least 4 full sentences explaining what you learned, how you would act differently, and why you believe you are ready to return to Glace Hotels.";
+
+const activePanelRefreshes = new Set();
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function env(name, fallback = "") {
   const value = process.env[name];
@@ -117,6 +126,20 @@ function getEmojiId(name) {
   if (name === "approved") return env("BAN_APPEAL_APPROVED_EMOJI_ID", DEFAULTS.approvedEmojiId);
   if (name === "denied") return env("BAN_APPEAL_DENIED_EMOJI_ID", DEFAULTS.deniedEmojiId);
   if (name === "issue") return env("BAN_APPEAL_ISSUE_EMOJI_ID", DEFAULTS.issueEmojiId);
+  return "";
+}
+
+function getAppealsServerEmoji(name) {
+  if (name === "approved") return `<:Approved:${env("BAN_APPEAL_SERVER_APPROVED_EMOJI_ID", DEFAULTS.appealApprovedEmojiId)}>`;
+  if (name === "denied") return `<:Denied:${env("BAN_APPEAL_SERVER_DENIED_EMOJI_ID", DEFAULTS.appealDeniedEmojiId)}>`;
+  if (name === "issue") return `<:Issue:${env("BAN_APPEAL_SERVER_ISSUE_EMOJI_ID", DEFAULTS.appealIssueEmojiId)}>`;
+  return "";
+}
+
+function getAppealsServerEmojiId(name) {
+  if (name === "approved") return env("BAN_APPEAL_SERVER_APPROVED_EMOJI_ID", DEFAULTS.appealApprovedEmojiId);
+  if (name === "denied") return env("BAN_APPEAL_SERVER_DENIED_EMOJI_ID", DEFAULTS.appealDeniedEmojiId);
+  if (name === "issue") return env("BAN_APPEAL_SERVER_ISSUE_EMOJI_ID", DEFAULTS.appealIssueEmojiId);
   return "";
 }
 
@@ -371,18 +394,60 @@ function buildAppealPanelEmbed() {
 }
 
 async function postAppealPanel(client, channelId = getStartChannelId()) {
-  const channel = await fetchChannel(client, channelId);
-  if (!channel?.send) throw new Error("I could not find the #start channel or I cannot send messages there.");
-
-  const recent = await channel.messages.fetch({ limit: 25 }).catch(() => null);
-  if (recent) {
-    for (const msg of recent.values()) {
-      const hasPanel = msg.author?.id === client.user.id && msg.components?.some((row) => row.components?.some((c) => c.customId === "banappeal:start"));
-      if (hasPanel) await msg.delete().catch(() => null);
-    }
+  const lockKey = String(channelId || "default");
+  if (activePanelRefreshes.has(lockKey)) {
+    // If Mani clicks/runs the setup twice quickly, wait for the first refresh to finish
+    // and then reuse the same panel instead of making another post.
+    await sleep(1500);
   }
 
-  return channel.send({ embeds: [buildAppealPanelEmbed()], components: [appealPanelRow()] });
+  activePanelRefreshes.add(lockKey);
+  try {
+    const channel = await fetchChannel(client, channelId);
+    if (!channel?.send) throw new Error("I could not find the #start channel or I cannot send messages there.");
+
+    const embed = buildAppealPanelEmbed();
+    const components = [appealPanelRow()];
+
+    // Make /appealpanel safe to run more than once.
+    // It now edits the first existing panel and removes any extras instead of stacking duplicate posts.
+    const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+    const panels = [];
+
+    if (recent) {
+      for (const msg of recent.values()) {
+        const hasPanel =
+          msg.author?.id === client.user.id &&
+          msg.components?.some((row) => row.components?.some((c) => c.customId === "banappeal:start"));
+
+        const looksLikePanel =
+          msg.author?.id === client.user.id &&
+          msg.embeds?.some((e) => String(e.title || "").toLowerCase().includes("start a ban appeal"));
+
+        if (hasPanel || looksLikePanel) panels.push(msg);
+      }
+    }
+
+    if (panels.length) {
+      panels.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+      const keeper = panels[0];
+
+      await keeper.edit({ embeds: [embed], components }).catch(async () => {
+        await keeper.delete().catch(() => null);
+      });
+
+      for (const extra of panels.slice(1)) {
+        await extra.delete().catch(() => null);
+      }
+
+      const refreshed = await channel.messages.fetch(keeper.id).catch(() => null);
+      if (refreshed) return refreshed;
+    }
+
+    return channel.send({ embeds: [embed], components });
+  } finally {
+    activePanelRefreshes.delete(lockKey);
+  }
 }
 
 function sanitizeChannelName(username, appealNumber) {
@@ -453,7 +518,7 @@ function buildAppealQuestionsEmbed(record) {
 function buildTooShortEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.issue)
-    .setTitle(`${getEmoji("issue")} Appeal Response Too Short`)
+    .setTitle(`${getAppealsServerEmoji("issue")} Appeal Response Too Short`)
     .setDescription(
       [
         "Please make sure your response includes a clear answer and at least **4 full sentences** for why you should be unbanned.",
@@ -471,13 +536,23 @@ function buildConfirmEmbed(record, answer) {
       [
         "Please review your answers before submitting.",
         "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "## Before You Submit",
+        "",
+        "Please stay in this appeal server until your result comes out.",
+        "",
+        "Please also make sure your DMs are open, and send the bot a quick DM if you can. This helps the bot notify you once your appeal is reviewed.",
+        "",
+        "If Discord blocks the DM, your appeal will still be reviewed here. DMs are only for result notifications.",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
         "Once you submit your appeal:",
         "",
         "- This channel will close.",
         "- Your appeal will be sent to the Glace Hotels Corporate Team.",
         "- A private review thread will be created in the main Glace server.",
-        "- You should stay in this appeal server until your result comes out.",
-        "- You should DM the bot or turn on your DMs so the bot can try to notify you when your appeal is reviewed.",
         "",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
@@ -648,7 +723,6 @@ async function logAppealSubmission(client, record) {
 function buildReviewEmbed(record) {
   const approved = getEmoji("approved");
   const denied = getEmoji("denied");
-  const issue = getEmoji("issue");
 
   return new EmbedBuilder()
     .setColor(COLORS.soft)
@@ -680,7 +754,6 @@ function buildReviewEmbed(record) {
         "",
         `React with ${approved} to approve and unban.`,
         `React with ${denied} to deny the appeal.`,
-        `React with ${issue} to put this application on halt/review (Nothing will happen).`,
         "",
         "Only the Check and X reactions will count as a final decision!",
       ].join("\n")
@@ -704,7 +777,6 @@ async function createMainReviewThread(client, record) {
 
   await reviewMessage.react(getEmoji("approved")).catch(() => null);
   await reviewMessage.react(getEmoji("denied")).catch(() => null);
-  await reviewMessage.react(getEmoji("issue")).catch(() => null);
 
   await starter.edit({ content: `${GLACE} New ban appeal submitted: ${thread}` }).catch(() => null);
 
@@ -935,6 +1007,20 @@ async function logDecision(client, guild, record, reviewer, approved, unbanText 
   return true;
 }
 
+async function reactToReviewStarter(client, record, decision) {
+  const emoji = decision === "approved" ? getEmoji("approved") : getEmoji("denied");
+  if (!record?.reviewChannelId || !record?.reviewStarterMessageId || !emoji) return false;
+
+  const channel = await fetchChannel(client, record.reviewChannelId);
+  if (!channel?.messages?.fetch) return false;
+
+  const starter = await channel.messages.fetch(record.reviewStarterMessageId).catch(() => null);
+  if (!starter) return false;
+
+  await starter.react(emoji).catch(() => null);
+  return true;
+}
+
 async function handleDecisionReaction(reaction, user, decision) {
   if (user?.bot) return true;
 
@@ -999,6 +1085,7 @@ async function handleDecisionReaction(reaction, user, decision) {
 
   await message.channel.send({ embeds: [resultEmbed] }).catch(() => null);
   await logDecision(message.client, guild, updated, user, approved, unbanText);
+  await reactToReviewStarter(message.client, updated, approved ? "approved" : "denied").catch(() => null);
 
   // Lock/archive the thread after a short moment so staff can see the result message first.
   setTimeout(() => {
