@@ -294,7 +294,7 @@ function buildCoHostSection(current, last) {
 }
 
 async function buildActivityEmbed(interaction, targetMember) {
-  await backfillFromLogChannel(interaction.client);
+  await backfillFromLogChannel(interaction.client, { guildId: interaction.guildId });
 
   const quotaProfile = getQuotaProfileForMember(targetMember);
   if (!quotaProfile) return null;
@@ -302,7 +302,7 @@ async function buildActivityEmbed(interaction, targetMember) {
   const currentRange = getWeekRange(0, TIME_ZONE);
   const lastRange = getWeekRange(-1, TIME_ZONE);
 
-  const activity = getUserActivity(targetMember.id);
+  const activity = await getUserActivity(interaction.client, targetMember.id, { guildId: interaction.guildId });
   const current = summarizeActivity(activity, currentRange);
   const last = summarizeActivity(activity, lastRange);
 

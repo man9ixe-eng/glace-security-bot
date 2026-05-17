@@ -585,139 +585,29 @@ function getWeekKeyForDate(date, timeZone = TIME_ZONE) {
   return `${range.startLocal.year}-${String(range.startLocal.month).padStart(2, '0')}-${String(range.startLocal.day).padStart(2, '0')}`;
 }
 
+
 function runWeeklyMaintenance() {
-  const data = readStore();
-  const currentWeekKey = getWeekKeyForDate(new Date(), TIME_ZONE);
-
-  if (data.meta.currentWeekKey !== currentWeekKey) {
-    data.meta.previousWeekKey = data.meta.currentWeekKey || null;
-    data.meta.currentWeekKey = currentWeekKey;
-  }
-
-  data.meta.lastMaintenanceAt = Date.now();
-  writeStore(data);
-  return data.meta;
+  // Activity is now read directly from #session-logs/#sessions-logs.
+  // This is intentionally a no-op so old stored activity cannot create hidden counts.
+  return {
+    currentWeekKey: getWeekKeyForDate(new Date(), TIME_ZONE),
+    previousWeekKey: getWeekKeyForDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), TIME_ZONE),
+    source: 'session-logs',
+  };
 }
 
-function upsertByKeys(collection, matcher, payload) {
-  const existing = collection.find(matcher);
-  if (existing) {
-    Object.assign(existing, payload);
-    return false;
-  }
-
-  collection.push(payload);
+function recordHostedSession() {
+  // No persistent activity storage. #session-logs is the source of truth.
   return true;
 }
 
-function recordHostedSession({
-  userId,
-  shortId,
-  sessionType,
-  guildId = null,
-  timestamp = Date.now(),
-  cancelled = false,
-}) {
-  if (!userId || !shortId || !sessionType) return false;
-
-  runWeeklyMaintenance();
-  const data = readStore();
-
-  upsertByKeys(
-    data.hostedSessions,
-    (entry) => entry.userId === userId && entry.shortId === shortId,
-    {
-      userId,
-      shortId,
-      sessionType,
-      guildId,
-      timestamp,
-      cancelled,
-    },
-  );
-
-  writeStore(data);
+function recordSupportSession() {
+  // No persistent activity storage. #session-logs is the source of truth.
   return true;
 }
 
-function recordSupportSession({
-  userId,
-  shortId,
-  sessionType,
-  roleKey,
-  guildId = null,
-  timestamp = Date.now(),
-  cancelled = false,
-}) {
-  if (!userId || !shortId || !sessionType || !roleKey) return false;
-
-  runWeeklyMaintenance();
-  const data = readStore();
-
-  upsertByKeys(
-    data.supportSessions,
-    (entry) =>
-      entry.userId === userId &&
-      entry.shortId === shortId &&
-      entry.roleKey === roleKey,
-    {
-      userId,
-      shortId,
-      sessionType,
-      roleKey,
-      guildId,
-      timestamp,
-      cancelled,
-    },
-  );
-
-  writeStore(data);
-  return true;
-}
-
-function replaceSessionActivity({
-  shortId,
-  hostId = null,
-  sessionType,
-  guildId = null,
-  supportEntries = [],
-  timestamp = Date.now(),
-  cancelled = false,
-}) {
-  if (!shortId || !sessionType) return false;
-
-  runWeeklyMaintenance();
-  const data = readStore();
-
-  data.hostedSessions = data.hostedSessions.filter((entry) => entry.shortId !== shortId);
-  data.supportSessions = data.supportSessions.filter((entry) => entry.shortId !== shortId);
-
-  if (hostId) {
-    data.hostedSessions.push({
-      userId: hostId,
-      shortId,
-      sessionType,
-      guildId,
-      timestamp,
-      cancelled,
-    });
-  }
-
-  for (const entry of supportEntries) {
-    if (!entry?.userId || !entry?.roleKey) continue;
-
-    data.supportSessions.push({
-      userId: entry.userId,
-      shortId,
-      sessionType,
-      roleKey: entry.roleKey,
-      guildId,
-      timestamp,
-      cancelled,
-    });
-  }
-
-  writeStore(data);
+function replaceSessionActivity() {
+  // /editactivity updates the actual log message. Activity reads that log message directly.
   return true;
 }
 
@@ -734,151 +624,331 @@ function extractIdsFromFieldValue(value) {
   return [...ids];
 }
 
+function embedToPlainObject(embed) {
+  return embed?.toJSON?.() || embed || {};
+}
+
 function detectSessionTypeFromEmbed(embed) {
-  const title = String(embed.title || '').toLowerCase();
-  const description = String(embed.description || '').toLowerCase();
+  const data = embedToPlainObject(embed);
+  const title = String(data.title || '').toLowerCase();
+  const description = String(data.description || '').toLowerCase();
+  const footer = String(data.footer?.text || '').toLowerCase();
+  const fields = Array.isArray(data.fields)
+    ? data.fields.map((field) => `${field.name || ''} ${field.value || ''}`).join('\n').toLowerCase()
+    : '';
+  const text = `${title}\n${description}\n${footer}\n${fields}`;
 
-  if (title.includes('interview') || description.includes('interview')) return 'interview';
-  if (title.includes('training') || description.includes('training')) return 'training';
-  if (title.includes('mass shift') || title.includes('massshift') || description.includes('mass shift') || description.includes('massshift')) return 'mass_shift';
+  if (text.includes('mass shift') || text.includes('massshift') || text.includes('mass-shift')) return 'mass_shift';
+  if (text.includes('interview')) return 'interview';
+  if (text.includes('training') || text.includes('trainer')) return 'training';
 
   return null;
 }
 
-function mapFieldNameToRoleKey(fieldName) {
-  const name = String(fieldName || '').toLowerCase();
+function embedLooksCancelled(embed) {
+  const data = embedToPlainObject(embed);
+  const parts = [data.title, data.description, data.footer?.text];
+  for (const field of data.fields || []) {
+    parts.push(field.name, field.value);
+  }
+  const text = parts.filter(Boolean).join('\n').toLowerCase();
+  return text.includes('cancelled') || text.includes('canceled') || text.includes('not counted');
+}
 
-  if (name.includes('co-host') || name.includes('cohost')) return 'cohost';
+function normalizeFieldName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[–—]/g, '-')
+    .replace(/[^a-z0-9\s-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mapFieldNameToRoleKey(fieldName, sessionType = null) {
+  const name = normalizeFieldName(fieldName);
+
+  if (!name) return null;
+  if (name.includes('trello') || name.includes('card link') || name === 'session') return null;
+  if (name.includes('co-host') || name.includes('cohost') || name.includes('co host')) return 'cohost';
   if (name.includes('overseer')) return 'overseer';
-  if (name.includes('interviewer')) return 'interviewer';
-  if (name.includes('trainer')) return 'trainer';
-  if (name.includes('helper')) return 'helper';
-  if (name.includes('attendees')) return 'attendee';
-  if (name.includes('spectator')) return 'spectator';
   if (name.includes('supervisor')) return 'supervisor';
-  if (name.includes('host')) return null;
+  if (name.includes('helper')) return 'helper';
+  if (name.includes('spectator')) return 'spectator';
+  if (name.includes('trainer')) return 'trainer';
+  if (name.includes('interviewer')) return 'interviewer';
+  if (name.includes('attendee')) return sessionType === 'mass_shift' ? 'attendee' : 'attendee';
+  if (name === 'host' || (name.includes('host') && !name.includes('co'))) return null;
 
   return null;
 }
 
-async function backfillFromLogChannel(client) {
-  if (!client) return;
+function isHostField(fieldName) {
+  const name = normalizeFieldName(fieldName);
+  return (name === 'host' || name.endsWith(' host') || name.includes('host')) &&
+    !name.includes('co-host') &&
+    !name.includes('cohost') &&
+    !name.includes('co host');
+}
 
-  runWeeklyMaintenance();
-  const data = readStore();
-  const now = Date.now();
+function messageTextForActivitySearch(message) {
+  const parts = [message?.content || ''];
 
-  if (now - (data.meta.lastBackfillAt || 0) < 5 * 60 * 1000) {
-    return;
+  for (const embed of message?.embeds || []) {
+    const data = embedToPlainObject(embed);
+    parts.push(data.title || '', data.description || '', data.url || '', data.footer?.text || '');
+    for (const field of data.fields || []) parts.push(field.name || '', field.value || '');
   }
 
-  const channel = await client.channels.fetch(SESSION_LOG_CHANNEL_ID).catch(() => null);
-  if (!channel || !channel.isTextBased()) {
-    data.meta.lastBackfillAt = now;
-    writeStore(data);
-    return;
+  return parts.join('\n');
+}
+
+function extractTrelloShortIdFromText(text) {
+  const value = String(text || '');
+  const urlMatch = value.match(/trello\.com\/c\/([A-Za-z0-9]+)/i);
+  if (urlMatch) return urlMatch[1];
+
+  const footerMatch = value.match(/trello\s*card\s*:?\s*([A-Za-z0-9_-]{4,})/i);
+  if (footerMatch) return footerMatch[1];
+
+  return null;
+}
+
+function getSessionKeyForLogMessage(message, embed, embedIndex = 0) {
+  const data = embedToPlainObject(embed);
+  const text = [
+    message?.content || '',
+    data.title || '',
+    data.description || '',
+    data.url || '',
+    data.footer?.text || '',
+    ...(data.fields || []).flatMap((field) => [field.name || '', field.value || '']),
+  ].join('\n');
+
+  const shortId = extractTrelloShortIdFromText(text);
+  return shortId ? `trello:${shortId}` : `message:${message.id}:${embedIndex}`;
+}
+
+function parseActivityFromLogMessage(message) {
+  const entries = [];
+  if (!message?.embeds?.length) return entries;
+
+  for (let embedIndex = 0; embedIndex < message.embeds.length; embedIndex += 1) {
+    const embed = message.embeds[embedIndex];
+    const data = embedToPlainObject(embed);
+    const sessionType = detectSessionTypeFromEmbed(data);
+    if (!sessionType) continue;
+    if (embedLooksCancelled(data)) continue;
+
+    const sessionKey = getSessionKeyForLogMessage(message, data, embedIndex);
+    const timestamp = message.createdTimestamp || Date.now();
+    const guildId = message.guildId || null;
+    const hostedSeen = new Set();
+    const supportSeen = new Set();
+
+    for (const field of data.fields || []) {
+      const fieldName = String(field.name || '');
+      const ids = extractIdsFromFieldValue(field.value);
+      if (!ids.length) continue;
+
+      if (isHostField(fieldName)) {
+        for (const userId of ids) {
+          const key = `${sessionKey}:host:${userId}`;
+          if (hostedSeen.has(key)) continue;
+          hostedSeen.add(key);
+          entries.push({
+            type: 'hosted',
+            userId,
+            shortId: sessionKey,
+            sessionType,
+            guildId,
+            timestamp,
+            cancelled: false,
+          });
+        }
+        continue;
+      }
+
+      const roleKey = mapFieldNameToRoleKey(fieldName, sessionType);
+      if (!roleKey) continue;
+
+      for (const userId of ids) {
+        const key = `${sessionKey}:${roleKey}:${userId}`;
+        if (supportSeen.has(key)) continue;
+        supportSeen.add(key);
+        entries.push({
+          type: 'support',
+          userId,
+          shortId: sessionKey,
+          sessionType,
+          roleKey,
+          guildId,
+          timestamp,
+          cancelled: false,
+        });
+      }
+    }
   }
 
-  let before;
-  let scanned = 0;
+  return entries;
+}
 
-  while (scanned < 500) {
-    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
-    if (!batch || batch.size === 0) break;
+const SESSION_LOG_CHANNEL_NAMES = ['session-logs', 'sessions-logs'];
+const ACTIVITY_LOG_SCAN_LIMIT = Number(process.env.ACTIVITY_SESSION_LOG_SCAN_LIMIT || 2500);
+const ACTIVITY_CACHE_TTL_MS = Number(process.env.ACTIVITY_SESSION_LOG_CACHE_MS || 2500);
+const activityScanCache = new Map();
 
-    for (const message of batch.values()) {
-      scanned += 1;
+function getConfiguredSessionLogChannelIds() {
+  return [
+    process.env.SESSION_LOG_CHANNEL_ID,
+    process.env.SESSION_ATTENDEES_LOG_CHANNEL_ID,
+    process.env.ACTIVITY_LOG_CHANNEL_ID,
+    SESSION_LOG_CHANNEL_ID,
+  ].filter(Boolean);
+}
 
-      const embed = message.embeds?.[0];
-      if (!embed) continue;
+async function fetchTextChannel(client, channelId) {
+  if (!client || !channelId) return null;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased?.()) return null;
+  return channel;
+}
 
-      const sessionType = detectSessionTypeFromEmbed(embed);
-      if (!sessionType) continue;
+async function resolveSessionLogChannels(client, guildId = null) {
+  const channels = [];
+  const seen = new Set();
 
-      const shortId = message.id;
-      const timestamp = message.createdTimestamp;
+  async function addChannel(channel) {
+    if (!channel?.id || seen.has(channel.id) || !channel.isTextBased?.()) return;
+    seen.add(channel.id);
+    channels.push(channel);
+  }
 
-      let hostIds = [];
-      const supportEntries = [];
+  for (const channelId of getConfiguredSessionLogChannelIds()) {
+    const channel = await fetchTextChannel(client, channelId);
+    if (channel) await addChannel(channel);
+  }
 
-      for (const field of embed.fields || []) {
-        const loweredName = String(field.name || '').toLowerCase();
+  const guild = guildId ? await client.guilds.fetch(guildId).catch(() => null) : null;
+  const guildChannels = guild ? await guild.channels.fetch().catch(() => null) : null;
 
-        if (loweredName === 'host') {
-          hostIds = extractIdsFromFieldValue(field.value);
+  if (guildChannels?.size) {
+    const exactLogs = [...guildChannels.values()]
+      .filter((channel) => channel?.isTextBased?.())
+      .filter((channel) => SESSION_LOG_CHANNEL_NAMES.includes(String(channel.name || '').toLowerCase()))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    for (const channel of exactLogs) await addChannel(channel);
+  }
+
+  return channels;
+}
+
+async function fetchRecentSessionLogEntries(client, { guildId = null, force = false } = {}) {
+  const currentRange = getWeekRange(0, TIME_ZONE);
+  const lastRange = getWeekRange(-1, TIME_ZONE);
+  const earliestMs = lastRange.startMs;
+  const latestMs = currentRange.endMs;
+  const cacheKey = guildId || 'global';
+  const cached = activityScanCache.get(cacheKey);
+
+  if (!force && cached && Date.now() - cached.cachedAt < ACTIVITY_CACHE_TTL_MS) {
+    return cached.entries;
+  }
+
+  const channels = await resolveSessionLogChannels(client, guildId);
+  const allEntries = [];
+  const seenEntryKeys = new Set();
+  const seenSessionKeys = new Set();
+
+  for (const channel of channels) {
+    let before = null;
+    let scanned = 0;
+
+    while (scanned < ACTIVITY_LOG_SCAN_LIMIT) {
+      const limit = Math.min(100, ACTIVITY_LOG_SCAN_LIMIT - scanned);
+      const batch = await channel.messages.fetch(before ? { limit, before } : { limit }).catch((error) => {
+        console.error(`[ACTIVITY] Failed scanning #${channel.name || channel.id}:`, error?.message || error);
+        return null;
+      });
+
+      if (!batch?.size) break;
+
+      const ordered = [...batch.values()].sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+      scanned += ordered.length;
+      before = ordered[ordered.length - 1]?.id || before;
+
+      let reachedOlderThanWindow = false;
+
+      for (const message of ordered) {
+        if (message.createdTimestamp > latestMs + 24 * 60 * 60 * 1000) continue;
+        if (message.createdTimestamp < earliestMs) {
+          reachedOlderThanWindow = true;
           continue;
         }
 
-        const roleKey = mapFieldNameToRoleKey(field.name);
-        if (!roleKey) continue;
+        const parsedEntries = parseActivityFromLogMessage(message);
+        if (!parsedEntries.length) continue;
 
-        const ids = extractIdsFromFieldValue(field.value);
-        for (const userId of ids) {
-          supportEntries.push({ userId, roleKey });
+        const messageSessionKeys = [...new Set(parsedEntries.map((entry) => entry.shortId).filter(Boolean))];
+        if (messageSessionKeys.length && messageSessionKeys.every((key) => seenSessionKeys.has(key))) {
+          continue;
         }
+
+        for (const entry of parsedEntries) {
+          if (seenSessionKeys.has(entry.shortId)) continue;
+          const key = `${entry.type}:${entry.shortId}:${entry.roleKey || 'host'}:${entry.userId}`;
+          if (seenEntryKeys.has(key)) continue;
+          seenEntryKeys.add(key);
+          allEntries.push(entry);
+        }
+
+        for (const key of messageSessionKeys) seenSessionKeys.add(key);
       }
 
-      for (const userId of hostIds) {
-        upsertByKeys(
-          data.hostedSessions,
-          (entry) => entry.userId === userId && entry.shortId === shortId,
-          {
-            userId,
-            shortId,
-            sessionType,
-            guildId: message.guildId || null,
-            timestamp,
-            cancelled: false,
-          },
-        );
-      }
-
-      for (const entry of supportEntries) {
-        upsertByKeys(
-          data.supportSessions,
-          (existing) =>
-            existing.userId === entry.userId &&
-            existing.shortId === shortId &&
-            existing.roleKey === entry.roleKey,
-          {
-            userId: entry.userId,
-            shortId,
-            sessionType,
-            roleKey: entry.roleKey,
-            guildId: message.guildId || null,
-            timestamp,
-            cancelled: false,
-          },
-        );
-      }
+      if (reachedOlderThanWindow || batch.size < limit || !before) break;
     }
-
-    before = batch.last()?.id;
-    if (!before) break;
   }
 
-  data.meta.lastBackfillAt = now;
-  writeStore(data);
+  activityScanCache.set(cacheKey, {
+    cachedAt: Date.now(),
+    entries: allEntries,
+  });
+
+  return allEntries;
+}
+
+async function backfillFromLogChannel(client, options = {}) {
+  // Kept for command compatibility. This refreshes the short in-memory scan cache only.
+  if (!client) return;
+  await fetchRecentSessionLogEntries(client, { guildId: options.guildId || null, force: true }).catch(() => null);
 }
 
 function getAllActivity() {
-  return readStore();
+  return {
+    hostedSessions: [],
+    supportSessions: [],
+    meta: {
+      source: 'session-logs',
+      note: 'Persistent activity storage is disabled. Activity is scanned directly from #session-logs.',
+    },
+  };
 }
 
-function getUserActivity(userId, { includeCancelled = false } = {}) {
-  const data = readStore();
+async function getUserActivity(client, userId, { includeCancelled = false, guildId = null, force = false } = {}) {
+  if (!client || !userId || typeof client === 'string') {
+    return { hosted: [], support: [] };
+  }
 
-  const hosted = data.hostedSessions.filter((entry) => {
-    if (entry.userId !== userId) return false;
-    if (!includeCancelled && entry.cancelled) return false;
-    return true;
-  });
+  const entries = await fetchRecentSessionLogEntries(client, { guildId, force });
+  const hosted = [];
+  const support = [];
 
-  const support = data.supportSessions.filter((entry) => {
-    if (entry.userId !== userId) return false;
-    if (!includeCancelled && entry.cancelled) return false;
-    return true;
-  });
+  for (const entry of entries) {
+    if (entry.userId !== userId) continue;
+    if (!includeCancelled && entry.cancelled) continue;
+    if (entry.type === 'hosted') hosted.push(entry);
+    if (entry.type === 'support') support.push(entry);
+  }
 
   return { hosted, support };
 }

@@ -29,6 +29,12 @@ module.exports = {
         .setName('correct_user')
         .setDescription('Optional: the correct staff member')
         .setRequired(false),
+    )
+    .addUserOption((option) =>
+      option
+        .setName('add_helper')
+        .setDescription('Optional: add one helper to a training log')
+        .setRequired(false),
     ),
 
   async execute(interaction) {

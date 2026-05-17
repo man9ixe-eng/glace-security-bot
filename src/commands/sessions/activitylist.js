@@ -101,7 +101,7 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
-    await backfillFromLogChannel(interaction.client);
+    await backfillFromLogChannel(interaction.client, { guildId: interaction.guildId });
 
     const period = interaction.options.getString('period', true);
     const isCurrent = period === 'current';
@@ -116,7 +116,7 @@ module.exports = {
       const quotaProfile = getQuotaProfileForMember(member);
       if (!quotaProfile) continue;
 
-      const activity = getUserActivity(member.id);
+      const activity = await getUserActivity(interaction.client, member.id, { guildId: interaction.guildId });
       const summary = summarizeActivity(activity, selectedRange);
 
       if (hasMetQuota(summary, quotaProfile)) continue;

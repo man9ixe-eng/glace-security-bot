@@ -583,12 +583,12 @@ async function startAppealTicket(interaction) {
 
   const record = latestCaseForUser(interaction.user.id);
   if (!record) {
-    await interaction.reply({ content: "Sorry, I could not find an available ban appeal for your Discord account.", ephemeral: true });
+    await interaction.reply({ content: "Sorry, I could not find an available ban for your Discord account.", ephemeral: true });
     return true;
   }
 
   if (!record.appealable || record.status === "not_appealable") {
-    await interaction.reply({ content: "Sorry, this ban is currently marked as **not appealable**.", ephemeral: true });
+    await interaction.reply({ content: "Sorry, this ban is currently marked as **non appealable**. You may contact an Reviewer or Admin if you think this is a mistake.", ephemeral: true });
     return true;
   }
 

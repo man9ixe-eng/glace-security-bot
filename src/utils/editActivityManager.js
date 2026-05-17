@@ -13,7 +13,6 @@ const {
   extractShortId,
   fetchCardByShortId,
   buildStructuredLineup,
-  buildEditTemplateFromLineup,
 } = require('./sessionQueueManager');
 
 const activeQueuesRef = (() => {
@@ -58,6 +57,7 @@ function getEditableSections(sessionType) {
     return [
       { key: 'interviewer', label: 'Trainer', aliases: ['trainer', 'trainers'] },
       { key: 'supervisor', label: 'Supervisor', aliases: ['supervisor', 'supervisors'] },
+      { key: 'helper', label: 'Helper', aliases: ['helper', 'helpers'] },
       { key: 'cohost', label: 'Co-Host', aliases: ['co-host', 'cohost', 'co host'] },
       { key: 'overseer', label: 'Overseer', aliases: ['overseer', 'overseers'] },
     ];
@@ -90,6 +90,7 @@ function emptySections() {
   return {
     interviewer: [],
     supervisor: [],
+    helper: [],
     cohost: [],
     overseer: [],
   };
@@ -483,6 +484,11 @@ function parseSessionLogMessage(message, sessionType) {
 
     if (fieldNameMatches(name, ['supervisor'])) {
       ids.forEach((id) => pushUnique(sections.supervisor, id));
+      continue;
+    }
+
+    if (fieldNameMatches(name, ['helper'])) {
+      ids.forEach((id) => pushUnique(sections.helper, id));
       continue;
     }
 
@@ -1065,6 +1071,35 @@ function formatPlainSectionList(ids) {
   return cleanIds.map((id, index) => `${index + 1}. <@${id}>`).join('\n');
 }
 
+
+function buildEditTemplateFromLineupLocal(lineup) {
+  const sections = getEditableSections(lineup.sessionType);
+  const blocks = [];
+
+  for (const section of sections) {
+    blocks.push(`[${section.label}]`);
+    const ids = lineup.sections?.[section.key] || [];
+    if (!ids.length) {
+      blocks.push('None');
+    } else {
+      ids.forEach((userId, index) => blocks.push(`${index + 1}. <@${userId}>`));
+    }
+    blocks.push('');
+  }
+
+  return blocks.join('\n').trim();
+}
+
+function getLogFieldNameForSection(section, sessionType) {
+  if (!section) return 'Staff';
+  if (section.key === 'interviewer' && sessionType === 'training') return 'Trainers';
+  if (section.key === 'interviewer' && sessionType === 'interview') return 'Interviewers';
+  if (section.key === 'interviewer' && sessionType === 'massshift') return 'Attendees';
+  if (section.key === 'supervisor') return 'Supervisors';
+  if (section.key === 'helper') return 'Helpers';
+  return section.label;
+}
+
 function rewriteSimpleBracketSections(content, lineup, rewriteKeys = []) {
   if (!content || !lineup?.sessionType || !rewriteKeys?.length) return content;
 
@@ -1221,9 +1256,13 @@ async function editStoredMessages(client, sessionRecord, replacementDetails, lin
         }
 
         if (Array.isArray(json.fields)) {
+          const seenSectionKeys = new Set();
+
           json.fields = json.fields.map((field) => {
             const sectionKey = lineup?.sessionType ? getSectionKeyForLogField(field.name, lineup.sessionType) : null;
             const nextField = { ...field };
+
+            if (sectionKey) seenSectionKeys.add(sectionKey);
 
             const nextName = replaceUserText(nextField.name, replacementDetails);
             if (nextName !== nextField.name) changed = true;
@@ -1240,6 +1279,18 @@ async function editStoredMessages(client, sessionRecord, replacementDetails, lin
 
             return nextField;
           });
+
+          if (lineup?.sessionType && rewriteKeys.size) {
+            for (const section of getEditableSections(lineup.sessionType)) {
+              if (!rewriteKeys.has(section.key) || seenSectionKeys.has(section.key)) continue;
+              json.fields.push({
+                name: getLogFieldNameForSection(section, lineup.sessionType),
+                value: formatLogSectionValue(lineup.sections?.[section.key] || []),
+                inline: section.key !== 'interviewer',
+              });
+              changed = true;
+            }
+          }
         }
 
         if (json.footer?.text) {
@@ -1270,7 +1321,7 @@ function updateLiveQueue(shortId, sections) {
   const queue = getLiveQueue(shortId);
   if (!queue?.roles) return;
 
-  for (const key of ['interviewer', 'supervisor', 'cohost', 'overseer']) {
+  for (const key of ['interviewer', 'supervisor', 'helper', 'cohost', 'overseer']) {
     queue.roles[key] = (sections[key] || []).map((userId) => ({
       userId,
       claimedAt: Date.now(),
@@ -1327,6 +1378,7 @@ async function applyReplyBasedEdit({ client, shortId, oldLineup, newSections, ed
     const supportEntries = [];
     for (const userId of lineup.sections.interviewer || []) supportEntries.push({ userId, roleKey: 'interviewer' });
     for (const userId of lineup.sections.supervisor || []) supportEntries.push({ userId, roleKey: 'supervisor' });
+    for (const userId of lineup.sections.helper || []) supportEntries.push({ userId, roleKey: 'helper' });
     for (const userId of lineup.sections.cohost || []) supportEntries.push({ userId, roleKey: 'cohost' });
     for (const userId of lineup.sections.overseer || []) supportEntries.push({ userId, roleKey: 'overseer' });
 
@@ -1362,6 +1414,7 @@ async function startEditActivity(interaction) {
   const cardInput = interaction.options.getString('card', true);
   const currentUser = interaction.options.getUser('current_user');
   const correctUser = interaction.options.getUser('correct_user');
+  const addHelper = interaction.options.getUser('add_helper');
   const logMessageLink = interaction.options.getString('log_message');
   const shortId = extractShortId(cardInput);
   if (!shortId) {
@@ -1375,6 +1428,14 @@ async function startEditActivity(interaction) {
   if ((currentUser && !correctUser) || (!currentUser && correctUser)) {
     await interaction.reply({
       content: 'Please choose both **current_user** and **correct_user**, or leave both blank to use the message editor.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (addHelper && (currentUser || correctUser)) {
+    await interaction.reply({
+      content: 'Please use **add_helper** by itself, or use **current_user/correct_user** by themselves.',
       ephemeral: true,
     });
     return;
@@ -1412,6 +1473,50 @@ async function startEditActivity(interaction) {
     hostId: resolved.lineup.hostId || resolved.hostId || null,
     hostName: resolved.lineup.hostName || resolved.hostName || null,
   };
+
+  if (addHelper) {
+    if (lineup.sessionType !== 'training') {
+      await interaction.editReply('❌ Helpers can only be added to **training** session logs.');
+      return;
+    }
+
+    const nextSections = emptySections();
+    for (const key of Object.keys(nextSections)) {
+      nextSections[key] = Array.isArray(lineup.sections?.[key])
+        ? lineup.sections[key].map(String)
+        : [];
+    }
+
+    if (nextSections.helper.includes(addHelper.id)) {
+      await interaction.editReply(`❌ <@${addHelper.id}> is already listed as a helper for this log.`);
+      return;
+    }
+
+    nextSections.helper.push(addHelper.id);
+
+    const applied = await applyReplyBasedEdit({
+      client: interaction.client,
+      shortId,
+      oldLineup: lineup,
+      newSections: nextSections,
+      editorId: interaction.user.id,
+      guildId: interaction.guildId,
+    });
+
+    if (!applied.ok) {
+      await interaction.editReply(`❌ ${applied.error}`);
+      return;
+    }
+
+    await interaction.editReply([
+      '✅ **Activity updated!**',
+      `**Trello:** ${shortId}`,
+      `**Added Helper:** <@${addHelper.id}>`,
+      '',
+      'The saved session log has been corrected.',
+    ].join('\n'));
+    return;
+  }
 
   if (currentUser && correctUser) {
     const direct = buildDirectReplacementSections(
@@ -1451,7 +1556,7 @@ async function startEditActivity(interaction) {
     return;
   }
 
-  const template = buildEditTemplateFromLineup(lineup);
+  const template = buildEditTemplateFromLineupLocal(lineup);
   const sourceLabel = String(resolved.source || '').includes('log') ? 'Session Log' : 'Queue / Attendees Post';
   const embed = new EmbedBuilder()
     .setColor(resolved.source === 'log' ? 0xf44336 : 0x6cb2eb)
