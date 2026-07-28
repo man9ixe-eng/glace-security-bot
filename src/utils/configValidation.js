@@ -48,11 +48,12 @@ function getConfigurationReport() {
       : ['STAFF_POSTS_CHANNEL_ID or both STAFF_SCHEDULE_CHANNEL_ID and STAFF_UPDATES_CHANNEL_ID'],
   );
 
-  const hasMassShiftChannel = has('SESSION_MASS_SHIFT_CHANNEL_ID') || has('SESSION_MASSSHIFT_CHANNEL_ID');
-  const hasSeparateSessionChannels =
-    has('SESSION_INTERVIEW_CHANNEL_ID') &&
-    has('SESSION_TRAINING_CHANNEL_ID') &&
-    hasMassShiftChannel;
+  const hasInterviewChannel = has('SESSION_INTERVIEW_CHANNEL_ID') || has('QUEUE_INTERVIEW_CHANNEL_ID') || has('INTERVIEW_CHANNEL_ID');
+  const hasTrainingChannel = has('SESSION_TRAINING_CHANNEL_ID') || has('QUEUE_TRAINING_CHANNEL_ID') || has('TRAINING_CHANNEL_ID');
+  const hasMassShiftChannel =
+    has('SESSION_MASS_SHIFT_CHANNEL_ID') || has('SESSION_MASSSHIFT_CHANNEL_ID') || has('SESSION_MASS_SHIFTS_CHANNEL_ID') ||
+    has('QUEUE_MASS_SHIFT_CHANNEL_ID') || has('QUEUE_MASSSHIFT_CHANNEL_ID') || has('MASS_SHIFT_CHANNEL_ID');
+  const hasSeparateSessionChannels = hasInterviewChannel && hasTrainingChannel && hasMassShiftChannel;
   const hasSessionDestination = has('SESSION_HUB_CHANNEL_ID') || hasSeparateSessionChannels;
   const hasSessionLog = has('SESSION_LOG_CHANNEL_ID') || has('SESSION_ATTENDEES_CHANNEL_ID');
 

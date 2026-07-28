@@ -6,15 +6,15 @@ const HUB_PING_ROLE_ID = process.env.SESSION_HUB_PING_ROLE_ID || null;
 
 const SESSION_CONFIG = {
   interview: {
-    channelId: process.env.SESSION_INTERVIEW_CHANNEL_ID || HUB_CHANNEL_ID,
+    channelId: process.env.SESSION_INTERVIEW_CHANNEL_ID || process.env.QUEUE_INTERVIEW_CHANNEL_ID || process.env.INTERVIEW_CHANNEL_ID || HUB_CHANNEL_ID,
     pingRoleId: process.env.SESSION_INTERVIEW_PING_ROLE_ID || HUB_PING_ROLE_ID,
   },
   training: {
-    channelId: process.env.SESSION_TRAINING_CHANNEL_ID || HUB_CHANNEL_ID,
+    channelId: process.env.SESSION_TRAINING_CHANNEL_ID || process.env.QUEUE_TRAINING_CHANNEL_ID || process.env.TRAINING_CHANNEL_ID || HUB_CHANNEL_ID,
     pingRoleId: process.env.SESSION_TRAINING_PING_ROLE_ID || HUB_PING_ROLE_ID,
   },
   mass_shift: {
-    channelId: process.env.SESSION_MASS_SHIFT_CHANNEL_ID || process.env.SESSION_MASSSHIFT_CHANNEL_ID || HUB_CHANNEL_ID,
+    channelId: process.env.SESSION_MASS_SHIFT_CHANNEL_ID || process.env.SESSION_MASSSHIFT_CHANNEL_ID || process.env.SESSION_MASS_SHIFTS_CHANNEL_ID || process.env.QUEUE_MASS_SHIFT_CHANNEL_ID || process.env.QUEUE_MASSSHIFT_CHANNEL_ID || process.env.MASS_SHIFT_CHANNEL_ID || HUB_CHANNEL_ID,
     pingRoleId: process.env.SESSION_MASS_SHIFT_PING_ROLE_ID || process.env.SESSION_MASSSHIFT_PING_ROLE_ID || HUB_PING_ROLE_ID,
   },
 };

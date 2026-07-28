@@ -244,7 +244,7 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061426"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css"></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061426"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.2.0"></head><body>
   <main class="login-shell">
     <section class="login-hero">
       <div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -269,7 +269,7 @@ function publicLoginPage(req) {
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061426"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css"><script defer src="/ops/assets/ops.js"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061426"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.2.0"><script defer src="/ops/assets/ops.js?v=2.2.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
       <div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -289,17 +289,18 @@ function portalPage() {
       <div class="sidebar-bottom"><a href="/ops/logout"><span>Sign out</span></a></div>
     </aside>
     <main class="app-main">
-      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>Discord-synced management portal</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section…"></div><div class="top-actions"><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview as</label><select id="previewTier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">❄</button></div></header>
+      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>Discord-synced management portal</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section…"></div><div class="top-actions"><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">❄</button></div></header>
       <div id="loading" class="loading-screen"><div><div class="loading-orb"></div><div id="loadingMessage">Verifying your Glace server rank…</div></div></div>
       <div id="app" hidden class="content">
-        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="page-head"><div><span id="pageEyebrow" class="page-eyebrow">YOUR STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><div class="page-tier-card"><span>Current view</span><strong id="pageTierLabel">Loading…</strong></div></div>
+        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="page-head"><div class="page-heading-copy"><span id="pageEyebrow" class="page-eyebrow">YOUR STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><aside class="page-tier-card"><span class="access-view-kicker">Access view</span><strong id="pageTierLabel">Loading…</strong><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview another tier</label><select id="previewTier" aria-label="Preview another staff tier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div></aside></div>
 
         <section id="section-dashboard" class="section active">
           <div id="dashboardStats" class="dashboard-grid"></div>
-          <div class="panel-grid">
-            <div class="panel-stack"><article class="panel"><div class="panel-head"><h2>Staff Journey</h2><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list"></div></article><article class="panel"><div class="panel-head"><h2>Role Access System</h2></div><div id="rankOverview" class="rank-ladder"></div></article></div>
-            <article class="panel"><div class="panel-head"><h2>Approval & Completion Queue</h2><button class="panel-link" data-go="promotions">Open queue</button></div><div id="approvalPreview" class="activity-list"></div></article>
-            <div class="panel-stack"><article class="panel"><div class="panel-head"><h2>Quick Actions</h2></div><div id="quickActions" class="quick-grid"></div></article><article class="panel"><div class="panel-head"><h2>Workflow Standard</h2></div><div class="record-body">Corporate investigates → submits → Corporate Board reviews → Presidential approves → assigned Corporate member carries it out → the portal verifies the Discord rank → Staff Journey announcement.</div></article></div>
+          <div class="panel-grid dashboard-panels">
+            <article class="panel queue-panel"><div class="panel-head"><div><span class="panel-kicker">Your action center</span><h2>Approval & Completion Queue</h2></div><button class="panel-link" data-go="promotions">Open full queue</button></div><div id="approvalPreview" class="activity-list"></div></article>
+            <div class="panel-stack dashboard-side"><article class="panel quick-panel"><div class="panel-head"><div><span class="panel-kicker">Get things done</span><h2>Quick Actions</h2></div></div><div id="quickActions" class="quick-grid"></div></article><article class="panel access-panel"><div class="panel-head"><div><span class="panel-kicker">Rank-based visibility</span><h2>Role Access</h2></div></div><div id="rankOverview" class="rank-ladder"></div></article></div>
+            <article class="panel journey-panel"><div class="panel-head"><div><span class="panel-kicker">Recent Glace moments</span><h2>Staff Journey</h2></div><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list journey-grid"></div></article>
+            <article class="panel workflow-panel"><div class="panel-head"><div><span class="panel-kicker">Promotion ownership</span><h2>Workflow Standard</h2></div></div><div class="workflow-steps"><span>1</span><p><b>Corporate investigates</b> and submits after due diligence.</p><span>2</span><p><b>Corporate Board reviews</b> the completed submission.</p><span>3</span><p><b>Presidential approves</b> the decision.</p><span>4</span><p><b>The assigned Corporate member completes it</b>, the portal verifies the Discord rank, and Staff Journey posts.</p></div></article>
           </div>
         </section>
 
@@ -700,7 +701,8 @@ function serveAsset(res, fileName) {
   let content;
   try { content = fs.readFileSync(fullPath, 'utf8'); } catch { sendText(res, 404, 'Not found.'); return true; }
   securityHeaders(res, allowed[fileName]);
-  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
   res.writeHead(200);
   res.end(content);
   return true;

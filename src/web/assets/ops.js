@@ -147,31 +147,48 @@ function applyPreviewLock() {
 }
 
 function renderViewer() {
-  const viewer = state.data.viewer;
-  const viewTier = effectiveTier();
-  const previewing = isPreviewing();
-  state.viewCapabilities = previewing ? capabilitiesForTier(viewTier) : { ...state.data.capabilities };
+  const viewer = state.data?.viewer || {};
+  const realTier = Math.min(8, Math.max(3, Number(viewer.tier) || 3));
+  const canPreview = Boolean(viewer.canPreviewTiers) || realTier >= 8;
+  const viewTier = Math.min(8, Math.max(3, effectiveTier()));
+  const previewing = canPreview && viewTier !== realTier;
+
+  state.viewCapabilities = previewing ? capabilitiesForTier(viewTier) : { ...(state.data?.capabilities || {}) };
   applyTheme(viewTier);
 
-  $('#profileName').textContent = viewer.displayName;
-  $('#profileRole').textContent = previewing
-    ? `${viewer.tierLabel} • previewing ${roleName(viewTier)}`
-    : viewer.tierLabel;
-  $('#opsBadge').textContent = previewing ? `${roleName(viewTier)} Preview` : viewer.tierLabel;
-  $('#opsBadge').className = `role-chip ${roleClass(viewTier)}`;
-  $('#pageTierLabel').textContent = roleName(viewTier);
-  $('#pageTierLabel').className = roleClass(viewTier);
-  $('#pageEyebrow').textContent = previewing ? 'PRESIDENTIAL PREVIEW MODE' : `${roleName(viewTier).toUpperCase()} STAFF HUB`;
+  const displayName = viewer.displayName || viewer.username || 'Glace Staff';
+  const realLabel = viewer.tierLabel || roleName(realTier);
+  const viewLabel = roleName(viewTier);
+
+  const profileName = $('#profileName');
+  const profileRole = $('#profileRole');
+  const opsBadge = $('#opsBadge');
+  const pageTierLabel = $('#pageTierLabel');
+  const pageEyebrow = $('#pageEyebrow');
+  if (profileName) profileName.textContent = displayName;
+  if (profileRole) profileRole.textContent = previewing ? `${realLabel} • previewing ${viewLabel}` : realLabel;
+  if (opsBadge) {
+    opsBadge.textContent = previewing ? `${viewLabel} Preview` : realLabel;
+    opsBadge.className = `role-chip ${roleClass(viewTier)}`;
+  }
+  if (pageTierLabel) {
+    pageTierLabel.textContent = previewing ? `${viewLabel} preview` : `${viewLabel} access`;
+    pageTierLabel.className = roleClass(viewTier);
+  }
+  if (pageEyebrow) pageEyebrow.textContent = previewing ? 'PRESIDENTIAL PREVIEW MODE' : `${viewLabel.toUpperCase()} STAFF HUB`;
 
   const previewControl = $('#previewControl');
-  previewControl.hidden = !viewer.canPreviewTiers;
-  if (viewer.canPreviewTiers) $('#previewTier').value = String(viewTier);
+  const previewTier = $('#previewTier');
+  if (previewControl) {
+    previewControl.hidden = !canPreview;
+    previewControl.classList.toggle('visible', canPreview);
+  }
+  if (canPreview && previewTier) previewTier.value = String(viewTier);
 
   const avatar = $('#profileAvatar');
-  if (viewer.avatar) {
-    avatar.innerHTML = `<img src="${escapeHtml(viewer.avatar)}" alt="" class="avatar">`;
-  } else {
-    avatar.innerHTML = `<div class="avatar">${escapeHtml((viewer.displayName || 'G')[0].toUpperCase())}</div>`;
+  if (avatar) {
+    if (viewer.avatar) avatar.innerHTML = `<img src="${escapeHtml(viewer.avatar)}" alt="" class="avatar">`;
+    else avatar.innerHTML = `<div class="avatar">${escapeHtml(displayName[0].toUpperCase())}</div>`;
   }
 
   $$('[data-tab]').forEach((button) => { button.hidden = !navAllowed(button); });
@@ -372,7 +389,15 @@ async function refresh() {
   const result = await api('/ops/api/bootstrap');
   state.data = result.data;
   state.csrf = result.data.csrf;
-  if (!state.data.viewer.canPreviewTiers) state.previewTier = null;
+  const realTier = Number(state.data?.viewer?.tier) || 3;
+  const canPreview = Boolean(state.data?.viewer?.canPreviewTiers) || realTier >= 8;
+  if (!canPreview) {
+    state.previewTier = null;
+    sessionStorage.removeItem('glacePreviewTier');
+  } else if (state.previewTier === null) {
+    const savedTier = Number(sessionStorage.getItem('glacePreviewTier'));
+    if (savedTier >= 3 && savedTier <= 8 && savedTier !== realTier) state.previewTier = savedTier;
+  }
   renderAll();
 }
 
@@ -453,12 +478,15 @@ function bindEvents() {
     if (!state.data?.viewer?.canPreviewTiers) return;
     const selected = Number(event.target.value);
     state.previewTier = selected === Number(state.data.viewer.tier) ? null : selected;
+    if (state.previewTier) sessionStorage.setItem('glacePreviewTier', String(state.previewTier));
+    else sessionStorage.removeItem('glacePreviewTier');
     state.activeTab = 'dashboard';
     renderAll();
     notify(state.previewTier ? `Previewing the portal as ${roleName(selected)}.` : 'Returned to your real Presidential access.');
   });
   $('#exitPreview')?.addEventListener('click', () => {
     state.previewTier = null;
+    sessionStorage.removeItem('glacePreviewTier');
     $('#previewTier').value = String(state.data.viewer.tier);
     state.activeTab = 'dashboard';
     renderAll();
