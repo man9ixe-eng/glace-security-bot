@@ -214,57 +214,100 @@ function renderDashboard() {
   const awaitingCompletion = d.promotions.filter((x) => x.status === 'approved_awaiting_completion').length;
   const openCases = d.cases.filter((x) => !['closed', 'denied', 'reversed'].includes(x.status)).length;
   const activeWatch = d.watchRecords.filter((x) => ['active', 'improving', 'escalated'].includes(x.status)).length;
-  const stats = [
-    ['Promotion Submissions', capabilities.viewPromotions ? pendingPromotions : '—', capabilities.viewPromotions ? `${awaitingCompletion} awaiting completion` : 'Corporate access', 'role-intern', '♛'],
-    ['Staff Actions', capabilities.viewStaffCases ? openCases : '—', capabilities.viewStaffCases ? `${d.cases.filter((x) => x.status === 'pending_approval').length} awaiting Board` : 'Senior Management access', 'role-management', '◇'],
-    ['Current LOAs', d.loas.length, `${d.loaHistory.length} recent ended records`, 'role-senior', '◔'],
-    ['Watch Records', capabilities.viewWatchRecords ? activeWatch : '—', capabilities.viewWatchRecords ? `${d.watchRecords.filter((x) => x.status === 'escalated').length} escalated` : 'Corporate access', 'role-corporate', '◉'],
-    ['Restricted Records', capabilities.viewRestrictedRecords ? d.restrictedRecords.filter((x) => x.status !== 'archived').length : '—', capabilities.viewRestrictedRecords ? 'Board-level confidentiality' : 'Corporate Board access', 'role-board', '◆'],
-    ['Documents', capabilities.viewDocuments ? d.documents.length : '—', `${d.posts.length} schedule/update posts`, 'role-presidential', '▤'],
-  ];
-  $('#dashboardStats').innerHTML = stats.map((item) => statCard(...item)).join('');
+
+  const stats = [];
+  if (capabilities.viewPosts) stats.push(['Staff Updates', d.posts.length, `${d.feed.length} recent Staff Journey items`, 'role-intern', '✦']);
+  if (capabilities.viewLoas) stats.push(['Current LOAs', d.loas.length, `${d.loaHistory.length} recent ended records`, 'role-senior', '◔']);
+  if (capabilities.viewDocuments) stats.push(['Documents', d.documents.length, 'Resources available to your role', 'role-management', '▤']);
+  if (capabilities.viewStaffCases) stats.push(['Staff Actions', openCases, `${d.cases.filter((x) => x.status === 'pending_approval').length} awaiting review`, 'role-management', '◇']);
+  if (capabilities.viewPromotions) stats.push(['Promotion Submissions', pendingPromotions, `${awaitingCompletion} awaiting completion`, 'role-corporate', '♛']);
+  if (capabilities.viewWatchRecords) stats.push(['Watch Records', activeWatch, `${d.watchRecords.filter((x) => x.status === 'escalated').length} escalated`, 'role-senior', '◉']);
+  if (capabilities.viewRestrictedRecords) stats.push(['Restricted Records', d.restrictedRecords.filter((x) => x.status !== 'archived').length, 'Confidential records available to you', 'role-board', '◆']);
+  if (capabilities.viewAudit) stats.push(['Audit Activity', d.audit.length, 'Protected actions in your view', 'role-presidential', '⌁']);
+
+  const dashboardStats = $('#dashboardStats');
+  if (dashboardStats) dashboardStats.innerHTML = stats.map((item) => statCard(...item)).join('');
 
   const feed = d.feed.slice(0, 7);
-  $('#journeyFeed').innerHTML = feed.length ? feed.map((entry) => `
+  const journeyFeed = $('#journeyFeed');
+  if (journeyFeed) journeyFeed.innerHTML = feed.length ? feed.map((entry) => `
     <div class="activity-item">
       <div class="activity-icon ${roleClass(entry.tier || 3)}">${escapeHtml(entry.icon || '❄')}</div>
       <div class="activity-copy"><strong>${escapeHtml(entry.title)}</strong><span>${escapeHtml(entry.detail || '')}</span></div>
       <span class="activity-time">${escapeHtml(relativeTime(entry.createdAt))}</span>
-    </div>`).join('') : '<div class="empty-state"><strong>No recent activity</strong>New portal activity will appear here.</div>';
+    </div>`).join('') : '<div class="empty-state"><strong>No recent updates</strong>Your available Staff Journey and update activity will appear here.</div>';
+
+  const canViewPromotions = Boolean(capabilities.viewPromotions);
+  const canViewCases = Boolean(capabilities.viewStaffCases);
+  const canViewQueue = canViewPromotions || canViewCases;
+  const approvalPanel = $('#approvalPanel');
+  const dashboardPanels = $('.dashboard-panels');
+  if (approvalPanel) approvalPanel.hidden = !canViewQueue;
+  if (dashboardPanels) dashboardPanels.classList.toggle('no-action-queue', !canViewQueue);
+
+  const approvalTitle = $('#approvalPanelTitle');
+  const approvalOpenButton = $('#approvalOpenButton');
+  if (approvalTitle) approvalTitle.textContent = canViewPromotions && canViewCases
+    ? 'Approval & Completion Queue'
+    : canViewPromotions ? 'Promotion Queue' : 'Staff Action Queue';
+  if (approvalOpenButton) {
+    approvalOpenButton.dataset.go = canViewPromotions ? 'promotions' : 'cases';
+    approvalOpenButton.textContent = canViewPromotions ? 'Open promotions' : 'Open staff actions';
+  }
 
   const approvals = [
-    ...(capabilities.viewPromotions ? d.promotions.filter((x) => ['board_review', 'presidential_review', 'approved_awaiting_completion'].includes(x.status)).map((x) => ({
+    ...(canViewPromotions ? d.promotions.filter((x) => ['board_review', 'presidential_review', 'approved_awaiting_completion'].includes(x.status)).map((x) => ({
       title: `${x.candidateUsername || x.candidateId}: ${x.currentRank} → ${x.proposedRank}`,
       meta: `${x.submissionNumber} • ${prettify(x.status)}`,
       tier: x.proposedTier,
       tab: 'promotions',
     })) : []),
-    ...(capabilities.viewStaffCases ? d.cases.filter((x) => x.status === 'pending_approval').map((x) => ({
+    ...(canViewCases ? d.cases.filter((x) => x.status === 'pending_approval').map((x) => ({
       title: `${x.caseNumber}: ${x.targetUsername || x.targetId}`,
-      meta: `${prettify(x.actionType)} • Board review`,
-      tier: 7,
+      meta: `${prettify(x.actionType)} • awaiting review`,
+      tier: effectiveTier(),
       tab: 'cases',
     })) : []),
   ].slice(0, 7);
-  $('#approvalPreview').innerHTML = approvals.length ? approvals.map((item) => `
+  const approvalPreview = $('#approvalPreview');
+  if (approvalPreview && canViewQueue) approvalPreview.innerHTML = approvals.length ? approvals.map((item) => `
     <button class="activity-item" data-go="${item.tab}" style="width:100%;color:inherit;text-align:left;cursor:pointer">
       <div class="activity-icon ${roleClass(item.tier)}">↗</div>
       <div class="activity-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.meta)}</span></div>
-      <span class="tiny-chip ${roleClass(item.tier)}">${escapeHtml(roleName(item.tier))}</span>
-    </button>`).join('') : '<div class="empty-state"><strong>Queue is clear</strong>No approvals are waiting at your access level.</div>';
+      <span class="tiny-chip ${roleClass(item.tier)}">Open</span>
+    </button>`).join('') : '<div class="empty-state"><strong>You are all caught up</strong>No items are waiting in the queues available to your role.</div>';
 
-  $('#rankOverview').innerHTML = [
-    [3, 'Intern Team'], [4, 'Management'], [5, 'Senior Management'], [6, 'Corporate'], [7, 'Corporate Board'], [8, 'Presidential'],
-  ].map(([tier, label]) => `<div class="rank-row ${roleClass(tier)} ${tier === effectiveTier() ? 'current' : ''}"><span class="rank-dot"></span><strong>${label}</strong><span>${tier === effectiveTier() ? 'Current view' : 'Role access'}</span></div>`).join('');
+  const availableTools = [
+    ['⌂', 'Dashboard', true],
+    ['✦', 'Staff Updates', capabilities.viewPosts],
+    ['◔', 'Leave of Absence', capabilities.viewLoas],
+    ['▤', 'Documentation', capabilities.viewDocuments],
+    ['◇', 'Staff Actions', capabilities.viewStaffCases],
+    ['♛', 'Promotion Submissions', capabilities.viewPromotions],
+    ['◉', 'Watch Records', capabilities.viewWatchRecords],
+    ['◆', 'Restricted Records', capabilities.viewRestrictedRecords],
+    ['⌁', 'Audit Log', capabilities.viewAudit],
+  ].filter(([, , allowed]) => allowed);
+  const rankOverview = $('#rankOverview');
+  if (rankOverview) rankOverview.innerHTML = availableTools.map(([icon, label]) => `
+    <div class="workspace-access-item">
+      <span class="workspace-access-icon">${icon}</span>
+      <strong>${escapeHtml(label)}</strong>
+      <span class="workspace-access-check">✓</span>
+    </div>`).join('');
+  const workspaceTitle = $('#workspaceTitle');
+  if (workspaceTitle) workspaceTitle.textContent = `${roleName(effectiveTier())} Workspace`;
 
-  $('#quickActions').innerHTML = [
+  const quickActions = $('#quickActions');
+  if (quickActions) quickActions.innerHTML = [
     ['promotions', 'submitPromotion', '♛', 'Submit Promotion'],
     ['cases', 'createRoutineCase', '◇', 'Staff Action'],
     ['watch', 'manageWatchRecords', '◉', 'Watch Record'],
     ['restricted', 'manageRestrictedRecords', '◆', 'Restricted Record'],
     ['posts', 'publishUpdate', '✦', 'Post Update'],
     ['loas', 'viewLoas', '◔', 'View LOAs'],
-  ].filter(([, cap]) => capabilities[cap]).map(([tab,, icon,label]) => `<button class="quick-action" data-go="${tab}"><b>${icon}</b>${label}</button>`).join('') || '<div class="empty-state"><strong>Your access is ready</strong>Use the navigation to view the tools assigned to your rank.</div>';
+    ['documents', 'viewDocuments', '▤', 'Open Documents'],
+  ].filter(([, cap]) => capabilities[cap]).map(([tab,, icon,label]) => `<button class="quick-action" data-go="${tab}"><b>${icon}</b><span>${label}</span></button>`).join('') || '<div class="empty-state"><strong>Your workspace is ready</strong>Use the navigation to open the pages assigned to your role.</div>';
 }
 
 function promotionStepCount(status) {

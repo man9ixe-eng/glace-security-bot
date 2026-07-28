@@ -244,32 +244,30 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061426"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.2.0"></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff7fb"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.3.0"></head><body>
   <main class="login-shell">
     <section class="login-hero">
       <div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
-      <div class="hero-content"><div class="hero-kicker">One secure operations hub</div><h1 class="hero-title"><span class="gradient">Elevate every stay.</span>Empower every team.</h1><p class="hero-copy">A polished home for Glace Hotels staff operations—promotion submissions, approvals, watch records, restricted documentation, schedules, updates, LOAs, and permanent audit history.</p>
-        <div class="feature-grid">
-          <article class="feature-tile role-intern"><div class="feature-icon">♛</div><strong>Promotion Workflow</strong><p>Corporate submits after due diligence; Board and Presidential approve.</p></article>
-          <article class="feature-tile role-management"><div class="feature-icon">◇</div><strong>Staff Records</strong><p>Keep formal actions organized without dozens of Discord log channels.</p></article>
-          <article class="feature-tile role-senior"><div class="feature-icon">◉</div><strong>Watch Records</strong><p>Private expectations, review dates, outcomes, and escalation history.</p></article>
-          <article class="feature-tile role-corporate"><div class="feature-icon">◆</div><strong>Restricted Records</strong><p>Board-level confidentiality with a permanent access and edit trail.</p></article>
-          <article class="feature-tile role-board"><div class="feature-icon">▥</div><strong>Synced Access</strong><p>Tabs and actions change automatically with current Discord roles.</p></article>
-          <article class="feature-tile role-presidential"><div class="feature-icon">✦</div><strong>Executive Oversight</strong><p>Final promotion decisions, completion tracking, and full audit visibility.</p></article>
+      <div class="hero-content"><div class="hero-kicker">Your Glace staff home</div><h1 class="hero-title"><span class="gradient">Bright, organized,</span>made for your role.</h1><p class="hero-copy">Sign in to reach the staff tools, updates, resources, and information assigned to your current Glace Hotels role. Your workspace stays simple because anything outside your access is left out completely.</p>
+        <div class="feature-grid public-feature-grid">
+          <article class="feature-tile role-intern"><div class="feature-icon">✦</div><strong>Your Staff Home</strong><p>A personalized starting point built around the role you currently hold.</p></article>
+          <article class="feature-tile role-management"><div class="feature-icon">▤</div><strong>Updates & Resources</strong><p>Find the staff information available to you without digging through channels.</p></article>
+          <article class="feature-tile role-senior"><div class="feature-icon">◔</div><strong>Simple Navigation</strong><p>Only the pages assigned to your access appear after you sign in.</p></article>
+          <article class="feature-tile role-presidential"><div class="feature-icon">✓</div><strong>Discord-Synced Access</strong><p>Your current Glace server role is checked before every protected action.</p></article>
         </div>
-        <div class="access-ladder"><h3>Role-based access</h3><div class="access-row"><span class="role-chip role-intern">Intern Team</span><span class="role-chip role-management">Management</span><span class="role-chip role-senior">Senior Management</span><span class="role-chip role-corporate">Corporate</span><span class="role-chip role-board">Corporate Board</span><span class="role-chip role-presidential">Presidential</span></div></div>
+        <div class="access-ladder public-access-note"><h3>One portal. A different workspace for every staff role.</h3><p>The colors and available pages adjust automatically after Discord verifies your account.</p><div class="color-ribbon"><span class="role-intern"></span><span class="role-management"></span><span class="role-senior"></span><span class="role-corporate"></span><span class="role-board"></span><span class="role-presidential"></span></div></div>
       </div>
       <footer class="login-footer"><span>© 2026 Glace Hotels & Resorts</span><span>Private staff system</span></footer>
     </section>
-    <section class="login-panel"><article class="login-card glass"><div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div><h1>Welcome back.</h1><p class="lead">Sign in securely with the Discord account connected to the Glace server.</p>
+    <section class="login-panel"><article class="login-card glass"><div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div><h1>Welcome to your Staff Hub.</h1><p class="lead">Continue with Discord to open the workspace assigned to your current Glace Hotels role.</p>
       ${ready ? '<a class="discord-button" href="/ops/login"><span>◈</span> Sign in with Discord</a>' : '<div class="oauth-error">OAuth setup is incomplete. Add <b>DISCORD_CLIENT_SECRET</b>, confirm <b>CLIENT_ID</b>, and set the redirect URL before opening the portal.</div>'}
-      <div class="access-note"><div class="feature-icon role-senior">✓</div><div><strong>Access is synced to your Glace server rank.</strong><span>The server re-checks your membership and permissions before every protected action. A demotion, resignation, or server departure immediately changes portal access.</span></div></div>
+      <div class="access-note"><div class="feature-icon role-senior">✓</div><div><strong>Your workspace is private and role-aware.</strong><span>The portal shows only the pages and information available to your verified Discord role. Hidden tools are not named, previewed, or listed.</span></div></div>
     </article></section>
   </main></body></html>`;
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061426"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.2.0"><script defer src="/ops/assets/ops.js?v=2.2.0"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff7fb"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.3.0"><script defer src="/ops/assets/ops.js?v=2.3.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
       <div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -297,10 +295,10 @@ function portalPage() {
         <section id="section-dashboard" class="section active">
           <div id="dashboardStats" class="dashboard-grid"></div>
           <div class="panel-grid dashboard-panels">
-            <article class="panel queue-panel"><div class="panel-head"><div><span class="panel-kicker">Your action center</span><h2>Approval & Completion Queue</h2></div><button class="panel-link" data-go="promotions">Open full queue</button></div><div id="approvalPreview" class="activity-list"></div></article>
-            <div class="panel-stack dashboard-side"><article class="panel quick-panel"><div class="panel-head"><div><span class="panel-kicker">Get things done</span><h2>Quick Actions</h2></div></div><div id="quickActions" class="quick-grid"></div></article><article class="panel access-panel"><div class="panel-head"><div><span class="panel-kicker">Rank-based visibility</span><h2>Role Access</h2></div></div><div id="rankOverview" class="rank-ladder"></div></article></div>
-            <article class="panel journey-panel"><div class="panel-head"><div><span class="panel-kicker">Recent Glace moments</span><h2>Staff Journey</h2></div><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list journey-grid"></div></article>
-            <article class="panel workflow-panel"><div class="panel-head"><div><span class="panel-kicker">Promotion ownership</span><h2>Workflow Standard</h2></div></div><div class="workflow-steps"><span>1</span><p><b>Corporate investigates</b> and submits after due diligence.</p><span>2</span><p><b>Corporate Board reviews</b> the completed submission.</p><span>3</span><p><b>Presidential approves</b> the decision.</p><span>4</span><p><b>The assigned Corporate member completes it</b>, the portal verifies the Discord rank, and Staff Journey posts.</p></div></article>
+            <article id="approvalPanel" class="panel queue-panel"><div class="panel-head"><div><span class="panel-kicker">Your action center</span><h2 id="approvalPanelTitle">Items Requiring Attention</h2></div><button id="approvalOpenButton" class="panel-link" data-go="promotions">Open</button></div><div id="approvalPreview" class="activity-list"></div></article>
+            <div class="panel-stack dashboard-side"><article class="panel quick-panel"><div class="panel-head"><div><span class="panel-kicker">Available to you</span><h2>Quick Actions</h2></div></div><div id="quickActions" class="quick-grid"></div></article><article class="panel access-panel"><div class="panel-head"><div><span class="panel-kicker">Your current workspace</span><h2 id="workspaceTitle">What You Can Access</h2></div></div><div id="rankOverview" class="workspace-access-list"></div></article></div>
+            <article class="panel journey-panel"><div class="panel-head"><div><span class="panel-kicker">Recent Glace moments</span><h2>Staff Journey & Updates</h2></div><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list journey-grid"></div></article>
+            <article class="panel workflow-panel" data-capability="viewPromotions"><div class="panel-head"><div><span class="panel-kicker">Your promotion workspace</span><h2>Submission Workflow</h2></div></div><div class="workflow-steps"><span>1</span><p><b>Corporate completes due diligence</b> before submitting.</p><span>2</span><p><b>Corporate Board reviews</b> the completed submission.</p><span>3</span><p><b>Presidential provides final approval</b>.</p><span>4</span><p><b>The assigned Corporate member carries it out</b> and confirms completion.</p></div></article>
           </div>
         </section>
 
