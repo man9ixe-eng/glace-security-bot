@@ -47,6 +47,7 @@ function getClientFromSource(source, guild) {
 
 function getRegularAuditChannelIds() {
   return [
+    process.env.OPERATIONS_LOG_CHANNEL_ID,
     process.env.REGULAR_AUDIT_LOG_CHANNEL_ID,
     process.env.AUDIT_LOG_CHANNEL_ID,
     process.env.MOD_LOG_CHANNEL_ID,
@@ -56,6 +57,7 @@ function getRegularAuditChannelIds() {
 
 function getCorpAuditChannelIds() {
   return [
+    process.env.OPERATIONS_LOG_CHANNEL_ID,
     process.env.CORP_AUDIT_LOG_CHANNEL_ID,
     process.env.CORPORATE_AUDIT_LOG_CHANNEL_ID,
     process.env.CORP_MOD_LOG_CHANNEL_ID,

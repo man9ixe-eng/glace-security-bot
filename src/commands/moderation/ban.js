@@ -20,7 +20,6 @@ module.exports = {
     .setName("ban")
     .setDescription("Ban a member and set their appeal status.")
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .addUserOption((option) =>
       option
         .setName("user")

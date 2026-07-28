@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { DATA_DIR, resolveDataPath, atomicWriteJson } = require('./dataPaths');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const STORE_PATH = path.join(DATA_DIR, 'editActivityStore.json');
+const STORE_PATH = resolveDataPath('editActivityStore.json', process.env.EDIT_ACTIVITY_STORE_PATH);
 const PENDING_TTL_MS = 30 * 60 * 1000;
 
 let store = {
@@ -26,7 +26,7 @@ function loadStore() {
 function saveStore() {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf8');
+    atomicWriteJson(STORE_PATH, store);
   } catch (err) {
     console.error('[EDITACTIVITY] Failed to save store:', err);
   }

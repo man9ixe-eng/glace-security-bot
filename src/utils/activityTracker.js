@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveDataPath, atomicWriteJson } = require('./dataPaths');
 const rolesConfig = require('../config/roles');
 
 let quotaSettings;
@@ -9,7 +10,7 @@ try {
   quotaSettings = null;
 }
 
-const DATA_PATH = path.join(__dirname, '..', 'data', 'activityLogs.json');
+const DATA_PATH = resolveDataPath('activityLogs.json', process.env.ACTIVITY_LOGS_PATH);
 const TIME_ZONE = 'America/New_York';
 const SESSION_LOG_CHANNEL_ID =
   process.env.SESSION_LOG_CHANNEL_ID || '1452217561935777884';
@@ -102,7 +103,7 @@ function readStore() {
 
 function writeStore(data) {
   ensureStore();
-  fs.writeFileSync(DATA_PATH, JSON.stringify(normalizeStoreShape(data), null, 2));
+  atomicWriteJson(DATA_PATH, normalizeStoreShape(data));
 }
 
 function getRoleIds(key) {

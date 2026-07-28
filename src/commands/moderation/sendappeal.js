@@ -10,7 +10,6 @@ module.exports = {
     .setName("sendappeal")
     .setDescription("Retry sending a user's ban appeal notice through DM.")
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .addStringOption((option) =>
       option
         .setName("discord_id")

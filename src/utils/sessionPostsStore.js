@@ -1,9 +1,9 @@
 // src/utils/sessionPostsStore.js
 const fs = require('fs');
 const path = require('path');
+const { DATA_DIR, resolveDataPath, atomicWriteJson } = require('./dataPaths');
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
-const STORE_PATH = path.join(DATA_DIR, 'sessionPosts.json');
+const STORE_PATH = resolveDataPath('sessionPosts.json', process.env.SESSION_POSTS_STORE_PATH);
 
 let store = {};
 
@@ -22,7 +22,7 @@ function saveStore() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf8');
+    atomicWriteJson(STORE_PATH, store);
   } catch (err) {
     console.error('[SESSIONS] Failed to save sessionPosts store:', err);
   }

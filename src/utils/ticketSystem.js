@@ -23,6 +23,29 @@ try {
 // -----------------------------
 // Helpers
 // -----------------------------
+function getTicketConfigMissing() {
+  const missing = [];
+  if (!cfg.SUPPORT_CATEGORY_ID) missing.push('SUPPORT_CATEGORY_ID');
+  if (!cfg.ROLES?.trial) missing.push('TICKET_ROLE_TRIAL_ID');
+  if (!cfg.ROLES?.mod) missing.push('TICKET_ROLE_MOD_ID');
+  if (!cfg.ROLES?.admin) missing.push('TICKET_ROLE_ADMIN_ID');
+  if (!cfg.ROLES?.reviewer) missing.push('TICKET_ROLE_REVIEWER_ID');
+  return missing;
+}
+
+function ticketSystemReady() {
+  return getTicketConfigMissing().length === 0;
+}
+
+async function requireTicketSystem(interaction) {
+  const missing = getTicketConfigMissing();
+  if (!missing.length) return true;
+  await respondEphemeral(interaction, {
+    content: `❌ The ticket system is not configured yet. Missing: ${missing.join(', ')}.`,
+  });
+  return false;
+}
+
 function normalizeTypeKey(raw) {
   if (!raw) return raw;
   const key = String(raw).toLowerCase().trim();
@@ -316,6 +339,7 @@ function buildPanelEmbed(typeKeyRaw) {
 }
 
 async function postPanel(interaction, typeKeyRaw) {
+  if (!await requireTicketSystem(interaction)) return null;
   const embed = buildPanelEmbed(typeKeyRaw);
   const row = buildPanelRow(typeKeyRaw);
   if (!embed || !row) return respondEphemeral(interaction, { content: "❌ Invalid ticket type." });
@@ -328,6 +352,7 @@ async function postPanel(interaction, typeKeyRaw) {
 // CREATE
 // -----------------------------
 async function createTicketChannel(interaction, typeKeyRaw) {
+  if (!await requireTicketSystem(interaction)) return null;
   const { typeKey, type } = getType(typeKeyRaw);
   if (!type) return respondEphemeral(interaction, { content: "❌ Unknown ticket type." });
 
@@ -401,6 +426,7 @@ async function createTicketChannel(interaction, typeKeyRaw) {
 // CLAIM (locks staff talking after claim)
 // -----------------------------
 async function claimTicket(interaction) {
+  if (!await requireTicketSystem(interaction)) return null;
   const channel = interaction.channel;
   if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "❌ Use inside a ticket." });
 
@@ -464,6 +490,7 @@ async function claimTicket(interaction) {
 // CLOSE PROMPT (deduped)
 // -----------------------------
 async function promptClose(interaction) {
+  if (!await requireTicketSystem(interaction)) return null;
   const channel = interaction.channel;
   if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "❌ Use inside a ticket." });
 
@@ -555,6 +582,7 @@ async function sendTranscriptToLogs(guild, typeKey, channel, meta, transcriptTxt
 // FORCE CLOSE (always ACK fast)
 // -----------------------------
 async function forceCloseTicket(interaction, reason = "No reason provided") {
+  if (!await requireTicketSystem(interaction)) return null;
   try {
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ ephemeral: true });
@@ -611,6 +639,7 @@ async function forceCloseTicket(interaction, reason = "No reason provided") {
 // ADD USER
 // -----------------------------
 async function addUserToTicket(interaction, user, reason = "No reason provided") {
+  if (!await requireTicketSystem(interaction)) return null;
   const channel = interaction.channel;
   if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "❌ Use inside a ticket." });
 
@@ -642,6 +671,7 @@ async function addUserToTicket(interaction, user, reason = "No reason provided")
 // Close buttons (opener YES/NO)
 // -----------------------------
 async function handleTicketControlButton(interaction) {
+  if (!await requireTicketSystem(interaction)) return false;
   const id = interaction.customId || "";
   if (!(id.startsWith("ticket:closeyes:") || id.startsWith("ticket:closeno:"))) return false;
 
@@ -693,6 +723,7 @@ async function handleTicketControlButton(interaction) {
 // - If claimed: opener OR claimer OR explicitly added users can speak
 // -----------------------------
 async function enforceTicketSpeak(message) {
+  if (!ticketSystemReady()) return false;
   const channel = message.channel;
   if (!isTicketChannel(channel)) return false;
 
@@ -732,6 +763,7 @@ async function enforceTicketSpeak(message) {
 }
 
 module.exports = {
+  ticketSystemReady,
   normalizeTypeKey,
   getType,
   buildPanelEmbed,

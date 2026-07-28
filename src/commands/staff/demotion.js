@@ -510,6 +510,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("add-demotion")
     .setDescription("Demote a staff member in Staff Journey and update Discord roles")
+    .setDMPermission(false)
     .addStringOption((o) =>
       o.setName("username").setDescription("Staff Journey username").setRequired(true)
     )

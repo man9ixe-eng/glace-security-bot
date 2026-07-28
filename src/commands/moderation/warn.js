@@ -10,7 +10,6 @@ module.exports = {
     .setName('warn')
     .setDescription('Issue a warning to a member.')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addUserOption(option =>
       option
         .setName('user')

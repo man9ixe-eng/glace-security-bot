@@ -10,7 +10,7 @@ const LOA_PREFIX = '🔕';
 
 const MR_LOA_ROLE_ID = process.env.MR_LOA_ROLE_ID || '1495157788190576741';
 const HR_LOA_ROLE_ID = process.env.HR_LOA_ROLE_ID || '1434829767911411874';
-const LOA_LOG_CHANNEL_ID = process.env.LOA_LOG_CHANNEL_ID || '1498580557200621578';
+const LOA_LOG_CHANNEL_ID = process.env.CURRENT_LOAS_CHANNEL_ID || process.env.LOA_LOG_CHANNEL_ID || '1498580557200621578';
 const LOA_PENDING_EMOJI = process.env.LOA_PENDING_EMOJI || '🟡';
 const LOA_ENDED_EMOJI = process.env.LOA_ENDED_EMOJI || '🟢';
 
@@ -28,8 +28,8 @@ const STAFF_CLASSES = {
   management: { label: 'Management', level: 4, loaType: 'MR', loaRoleId: MR_LOA_ROLE_ID },
   senior_management: { label: 'Senior Management', level: 5, loaType: 'MR', loaRoleId: MR_LOA_ROLE_ID },
   corporate: { label: 'Corporate', level: 6, loaType: 'HR', loaRoleId: HR_LOA_ROLE_ID },
-  corporate_board: { label: 'Corporate Board', level: 6, loaType: 'HR', loaRoleId: HR_LOA_ROLE_ID },
-  presidential: { label: 'Presidential', level: 7, loaType: 'HR', loaRoleId: HR_LOA_ROLE_ID },
+  corporate_board: { label: 'Corporate Board', level: 7, loaType: 'HR', loaRoleId: HR_LOA_ROLE_ID },
+  presidential: { label: 'Presidential', level: 8, loaType: 'HR', loaRoleId: HR_LOA_ROLE_ID },
 };
 
 function idSet(ids = []) {
@@ -1049,7 +1049,12 @@ async function removeLoa(interaction, target, options = {}) {
 
   if (!logResult.ok && logResult.warning) warnings.push(logResult.warning);
 
-  clearLoaRecord(interaction.guild.id, target.id);
+  clearLoaRecord(interaction.guild.id, target.id, {
+    officialEndDate: validated.endDate,
+    endedById: interaction.user.id,
+    endedByTag: interaction.user.tag,
+    endedAt: new Date().toISOString(),
+  });
 
   return {
     ok: true,

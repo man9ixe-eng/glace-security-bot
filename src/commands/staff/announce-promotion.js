@@ -1,11 +1,10 @@
 const {
   SlashCommandBuilder,
-  PermissionFlagsBits,
   ChannelType,
   EmbedBuilder,
 } = require("discord.js");
 
-const ANNOUNCE_CHANNEL_ID = process.env.STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID;
+const ANNOUNCE_CHANNEL_ID = process.env.STAFF_UPDATES_CHANNEL_ID || process.env.STAFF_POSTS_CHANNEL_ID || process.env.STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID;
 const PROMOTION_PING_ROLE_ID = process.env.STAFF_JOURNEY_PROMOTION_PING_ROLE_ID;
 
 const RANK_EMOJIS = {
@@ -25,7 +24,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("announce-promotion")
     .setDescription("Post a clean promotion announcement")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false)
     .addStringOption((o) =>
       o.setName("username").setDescription("Promoted username").setRequired(true)
     )
@@ -49,7 +48,7 @@ module.exports = {
     try {
       if (!ANNOUNCE_CHANNEL_ID) {
         return interaction.reply({
-          content: "❌ Missing STAFF_JOURNEY_ANNOUNCEMENTS_CHANNEL_ID",
+          content: "❌ Add STAFF_UPDATES_CHANNEL_ID (or STAFF_POSTS_CHANNEL_ID) in Render.",
           ephemeral: true,
         });
       }

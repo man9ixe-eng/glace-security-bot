@@ -75,6 +75,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("unenroll")
     .setDescription("Archive a staff member from Staff Journey")
+    .setDMPermission(false)
     .addStringOption((o) =>
       o.setName("username").setDescription("Username").setRequired(true)
     ),

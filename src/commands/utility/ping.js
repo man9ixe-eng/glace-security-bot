@@ -5,7 +5,8 @@ const { SlashCommandBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Replies with Pong!'),
+    .setDescription('Replies with Pong!')
+    .setDMPermission(false),
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
    */

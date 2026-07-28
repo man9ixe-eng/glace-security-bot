@@ -12,7 +12,6 @@ module.exports = {
     .setName('kick')
     .setDescription('Kick a member from the server.')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
     .addUserOption(option =>
       option
         .setName('user')

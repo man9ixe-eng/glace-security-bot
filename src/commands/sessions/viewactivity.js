@@ -5,6 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('viewactivity')
     .setDescription("View another member's activity panel.")
+    .setDMPermission(false)
     .addUserOption((option) =>
       option
         .setName('player')

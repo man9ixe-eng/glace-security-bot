@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveDataPath } = require("./dataPaths");
 
 /**
  * PriorityStore
@@ -19,7 +20,7 @@ class PriorityStore {
     this.filePath =
       filePath && String(filePath).trim().length > 0
         ? String(filePath).trim()
-        : path.join(process.cwd(), "src", "data", "priority.json");
+        : resolveDataPath("priority.json", process.env.PRIORITY_STORE_PATH);
 
     this.data = { users: {} };
 

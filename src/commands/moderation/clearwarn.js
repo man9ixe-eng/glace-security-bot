@@ -11,7 +11,6 @@ module.exports = {
     .setName('clearwarn')
     .setDescription('Clear a specific warning for a member.')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addUserOption(option =>
       option
         .setName('user')

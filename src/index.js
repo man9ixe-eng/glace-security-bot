@@ -1,71 +1,43 @@
 // src/index.js
-"use strict";
+'use strict';
 
-require("dotenv").config();
+require('dotenv').config();
 
-const http = require("http");
-const { Client, GatewayIntentBits, Partials, Collection, Events } = require("discord.js");
-const fs = require("node:fs");
-const path = require("node:path");
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 
-const { handleMessageAutomod } = require("./utils/automod");
-const { runSessionAnnouncementTick } = require("./utils/sessionAnnouncements");
-const { handleQueueButtonInteraction } = require("./utils/sessionQueueManager");
-const { handleEditActivityReply } = require("./utils/editActivityManager");
-const { runWeeklyMaintenance } = require("./utils/activityTracker");
+const { handleMessageAutomod } = require('./utils/automod');
+const { runSessionAnnouncementTick } = require('./utils/sessionAnnouncements');
+const { handleQueueButtonInteraction } = require('./utils/sessionQueueManager');
+const { handleEditActivityReply } = require('./utils/editActivityManager');
+const { runWeeklyMaintenance } = require('./utils/activityTracker');
+const ticketSystem = require('./utils/ticketSystem');
+const PriorityStore = require('./utils/priorityStore');
+const { enforceCommandAccess, denyAccess } = require('./utils/commandAccess');
+const { auditCommand } = require('./utils/operationsAudit');
+const { getConfigurationReport, logConfigurationReport } = require('./utils/configValidation');
+const { handleOpsWebRequest } = require('./web/opsPortal');
+
 let banAppeals = null;
 try {
-  banAppeals = require("./utils/banAppeals");
-} catch (err) {
-  console.error("[BAN APPEALS] Failed to load ban appeal system:", err);
+  banAppeals = require('./utils/banAppeals');
+} catch (error) {
+  console.error('[BAN APPEALS] System disabled because it could not load:', error);
 }
-
-const { runBanAppealReminderTick, handleBanAppealInteraction } = require("./utils/banAppeals");
 
 let handleJuniorActivityLogMessage = null;
 try {
-  ({ handleJuniorActivityLogMessage } = require("./utils/juniorActivityTracker"));
-} catch {
-  handleJuniorActivityLogMessage = null;
+  ({ handleJuniorActivityLogMessage } = require('./utils/juniorActivityTracker'));
+} catch (error) {
+  console.warn('[JUNIOR ACTIVITY] Live tracking disabled:', error.message || error);
 }
 
-// ✅ Only keep enforceTicketSpeak (we route ticket buttons inside InteractionCreate)
-const ticketSystem = require("./utils/ticketSystem");
-
-// IMPORTANT: priorityStore.js exports the CLASS (module.exports = PriorityStore)
-const PriorityStore = require("./utils/priorityStore");
-
 // ===========================
-// HTTP SERVER FOR RENDER
+// DISCORD CLIENT
 // ===========================
-const PORT = process.env.PORT || 3000;
-let webClient = null;
-
-http
-  .createServer(async (req, res) => {
-    try {
-      if (req.url?.startsWith("/appeal") && banAppeals?.handleAppealWebRequest) {
-        return await banAppeals.handleAppealWebRequest(req, res, webClient);
-      }
-
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("Glace bot is running.\nBan appeals: /appeal\n");
-    } catch (err) {
-      console.error("[HTTP] Request error:", err);
-      if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end("Something went wrong.\n");
-    }
-  })
-  .listen(PORT, () => {
-    console.log(`HTTP server listening on port ${PORT}`);
-  });
-
-// ===========================
-// DISCORD CLIENT SETUP
-// ===========================
-const ENABLE_MESSAGE_CONTENT =
-  (process.env.ENABLE_MESSAGE_CONTENT || "true").toLowerCase() === "true";
-
+const ENABLE_MESSAGE_CONTENT = String(process.env.ENABLE_MESSAGE_CONTENT || 'true').toLowerCase() === 'true';
 const intents = [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMembers,
@@ -73,316 +45,253 @@ const intents = [
   GatewayIntentBits.GuildMessageReactions,
   GatewayIntentBits.DirectMessages,
 ];
-
-if (ENABLE_MESSAGE_CONTENT) {
-  intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
-} else {
-  console.log("[INTENTS] ENABLE_MESSAGE_CONTENT=false -> messageCreate automod/!ping will not run.");
-}
+if (ENABLE_MESSAGE_CONTENT) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
 
 const client = new Client({
   intents,
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
-webClient = client;
-
-
-// Commands collection
 client.commands = new Collection();
+
+// ===========================
+// HTTP / STAFF OPERATIONS SITE
+// ===========================
+const PORT = Number(process.env.PORT || 3000);
+const server = http.createServer(async (req, res) => {
+  try {
+    if (await handleOpsWebRequest(req, res, client)) return;
+
+    if (req.url?.startsWith('/appeal') && banAppeals?.handleAppealWebRequest) {
+      return await banAppeals.handleAppealWebRequest(req, res, client);
+    }
+
+    if (req.url === '/health' || req.url === '/healthz') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(JSON.stringify({
+        ok: true,
+        service: 'glace-security-bot',
+        discordReady: client.isReady(),
+        guilds: client.guilds.cache.size,
+        uptimeSeconds: Math.floor(process.uptime()),
+        configuration: getConfigurationReport(),
+        timestamp: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end('Glace Security Bot is running.\nHealth: /health\nStaff Operations: /ops\nBan appeals: /appeal\n');
+  } catch (error) {
+    console.error('[HTTP] Request error:', error);
+    if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Something went wrong.\n');
+  }
+});
+server.listen(PORT, () => console.log(`[HTTP] Listening on port ${PORT}`));
 
 // ===========================
 // PRIORITY STORE
 // ===========================
 try {
-  const storePath = process.env.PRIORITY_STORE_PATH; // optional
-  const priorityStore = new PriorityStore(storePath);
-
+  const priorityStore = new PriorityStore(process.env.PRIORITY_STORE_PATH);
   priorityStore.load();
   client.priorityStore = priorityStore;
-
-  console.log(
-    `[PRIORITY] Store loaded. Path: ${
-      storePath && storePath.trim().length
-        ? storePath
-        : "default (src/data/priority.json)"
-    }`
-  );
-} catch (err) {
-  console.error("[PRIORITY] Failed to init priority store:", err);
+  console.log('[PRIORITY] Store loaded.');
+} catch (error) {
+  console.error('[PRIORITY] Store disabled:', error);
   client.priorityStore = {
-    load: () => {},
-    saveNow: () => {},
-    recordAttendance: () => {},
-    getLastAttendedAt: () => 0,
-    getAttendedCount: () => 0,
+    load: () => {}, saveNow: () => {}, recordAttendance: () => {},
+    getLastAttendedAt: () => 0, getAttendedCount: () => 0,
   };
 }
 
 // ===========================
-// LOAD SLASH COMMANDS
+// COMMAND LOADER
 // ===========================
-const commandsPathRoot = path.join(__dirname, "commands");
-
+const commandsPathRoot = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPathRoot)) {
-  const commandFolders = fs.readdirSync(commandsPathRoot);
-
-  for (const folder of commandFolders) {
+  for (const folder of fs.readdirSync(commandsPathRoot)) {
     const commandsPath = path.join(commandsPathRoot, folder);
     if (!fs.statSync(commandsPath).isDirectory()) continue;
 
-    const commandFiles = fs
-      .readdirSync(commandsPath)
-      .filter((file) => file.endsWith(".js"));
-
-    for (const file of commandFiles) {
+    for (const file of fs.readdirSync(commandsPath).filter((name) => name.endsWith('.js'))) {
       const filePath = path.join(commandsPath, file);
-
-      delete require.cache[require.resolve(filePath)];
-      const command = require(filePath);
-
-      if ("data" in command && "execute" in command) {
-        client.commands.set(command.data.name, command);
-        console.log(`[COMMAND] Loaded /${command.data.name} from ${filePath}`);
-      } else {
-        console.log(`[WARN] Command at ${filePath} missing "data" or "execute". Skipping.`);
+      try {
+        delete require.cache[require.resolve(filePath)];
+        const command = require(filePath);
+        if (command?.data && typeof command.execute === 'function') {
+          client.commands.set(command.data.name, command);
+          console.log(`[COMMAND] Loaded /${command.data.name}`);
+        } else {
+          console.warn(`[COMMAND] Skipped ${filePath}: missing data or execute.`);
+        }
+      } catch (error) {
+        // One optional system must never prevent the whole security bot from starting.
+        console.error(`[COMMAND] Failed to load ${filePath}:`, error);
       }
     }
   }
-} else {
-  console.log("[COMMAND] No commands folder found at:", commandsPathRoot);
 }
 
 // ===========================
-// EVENTS
+// READY / AUTOMATION
 // ===========================
-
-// READY
-client.once(Events.ClientReady, (c) => {
-  runWeeklyMaintenance();
+client.once(Events.ClientReady, async (readyClient) => {
+  logConfigurationReport();
+  try { await Promise.resolve(runWeeklyMaintenance()); } catch (error) { console.error('[ACTIVITY] Ready maintenance failed:', error); }
   if (banAppeals?.runBanAppealReminderTick) {
-    banAppeals.runBanAppealReminderTick(c).catch((err) =>
-      console.error("[BAN APPEALS] Ready tick error:", err)
-    );
+    banAppeals.runBanAppealReminderTick(readyClient).catch((error) => console.error('[BAN APPEALS] Ready tick failed:', error));
   }
-  runBanAppealReminderTick(c).catch((err) => console.error("[BAN APPEALS] Ready tick error:", err));
-  console.log(
-    `[READY] Logged in as ${c.user.tag} (id: ${c.user.id}) in ${c.guilds.cache.size} guild(s).`
-  );
+  console.log(`[READY] Logged in as ${readyClient.user.tag} in ${readyClient.guilds.cache.size} guild(s).`);
 });
 
-// SHARD / GATEWAY DEBUG
-client.on("shardReady", (id) => console.log(`[SHARD] Ready: ${id}`));
-client.on("shardDisconnect", (event, id) =>
-  console.log(`[SHARD] Disconnect: ${id}`, event?.code, event?.reason)
-);
-client.on("shardReconnecting", (id) => console.log(`[SHARD] Reconnecting: ${id}`));
-client.on("shardResume", (id) => console.log(`[SHARD] Resumed: ${id}`));
-client.on("shardError", (err, id) => console.error(`[SHARD] Error: ${id}`, err));
+client.on('shardReady', (id) => console.log(`[SHARD] Ready: ${id}`));
+client.on('shardDisconnect', (event, id) => console.warn(`[SHARD] Disconnect ${id}:`, event?.code, event?.reason));
+client.on('shardReconnecting', (id) => console.log(`[SHARD] Reconnecting: ${id}`));
+client.on('shardResume', (id) => console.log(`[SHARD] Resumed: ${id}`));
+client.on('shardError', (error, id) => console.error(`[SHARD] Error ${id}:`, error));
+client.on('warn', (message) => console.warn('[DISCORD WARN]', message));
+client.on('error', (error) => console.error('[DISCORD ERROR]', error));
 
-setTimeout(() => {
-  if (!client.isReady()) console.error("[READY] Still NOT ready after 30s.");
-}, 30_000);
-
-const ENABLE_DISCORD_DEBUG =
-  (process.env.ENABLE_DISCORD_DEBUG || "false").toLowerCase() === "true";
-
-if (ENABLE_DISCORD_DEBUG) {
-  client.on("debug", (msg) => {
-    if (typeof msg === "string" && msg.includes("Provided token")) return;
-    console.log("[DISCORD DEBUG]", msg);
+if (String(process.env.ENABLE_DISCORD_DEBUG || 'false').toLowerCase() === 'true') {
+  client.on('debug', (message) => {
+    if (typeof message === 'string' && message.includes('Provided token')) return;
+    console.log('[DISCORD DEBUG]', message);
   });
 }
 
-client.on("warn", (msg) => console.warn("[DISCORD WARN]", msg));
-client.on("error", (err) => console.error("[DISCORD ERROR]", err));
+const intervals = [];
+intervals.push(setInterval(async () => {
+  try { await runSessionAnnouncementTick(client); }
+  catch (error) { console.error('[AUTO] Session announcement failed:', error); }
+}, 60_000));
 
-// Session announcements: every 1 minute
-setInterval(async () => {
-  try {
-    console.log("[AUTO] Session announcement tick...");
-    await runSessionAnnouncementTick(client);
-  } catch (err) {
-    console.error("[AUTO] Session announcement error:", err);
-  }
-}, 60 * 1000);
+intervals.push(setInterval(async () => {
+  try { await Promise.resolve(runWeeklyMaintenance()); }
+  catch (error) { console.error('[ACTIVITY] Weekly maintenance failed:', error); }
+}, 60 * 60_000));
 
-// Weekly activity maintenance: every 1 hour
-setInterval(() => {
-  try {
-    runWeeklyMaintenance();
-  } catch (err) {
-    console.error("[ACTIVITY] Weekly maintenance error:", err);
-  }
-}, 60 * 60 * 1000);
+if (banAppeals?.runBanAppealReminderTick) {
+  intervals.push(setInterval(async () => {
+    try { await banAppeals.runBanAppealReminderTick(client); }
+    catch (error) { console.error('[BAN APPEALS] Reminder tick failed:', error); }
+  }, 10 * 60_000));
+}
 
-// Ban appeal cooldown checks: every 10 minutes
-setInterval(async () => {
-  try {
-    if (banAppeals?.runBanAppealReminderTick) {
-      await banAppeals.runBanAppealReminderTick(client);
-    }
-  } catch (err) {
-    console.error("[BAN APPEALS] Reminder tick error:", err);
-  }
-}, 10 * 60 * 1000);
-
-// Ban appeal cooldown checks: every 10 minutes
-setInterval(async () => {
-  try {
-    await runBanAppealReminderTick(client);
-  } catch (err) {
-    console.error("[BAN APPEALS] Reminder tick error:", err);
-  }
-}, 10 * 60 * 1000);
-
-// MESSAGE CREATE
+// ===========================
+// MESSAGES
+// ===========================
 if (ENABLE_MESSAGE_CONTENT) {
-  client.on("messageCreate", async (message) => {
-    // Roblox/TC logs may come from a webhook or bot user, so record them before ignoring bots.
+  client.on(Events.MessageCreate, async (message) => {
     if (handleJuniorActivityLogMessage) {
-      try {
-        await handleJuniorActivityLogMessage(message);
-      } catch (err) {
-        console.error("[JUNIOR ACTIVITY] Live log handling error:", err);
-      }
+      try { await handleJuniorActivityLogMessage(message); }
+      catch (error) { console.error('[JUNIOR ACTIVITY] Live log failed:', error); }
     }
 
     if (message.author?.bot) return;
 
-
     try {
-      if (banAppeals?.handleAppealTicketMessage) {
-        const handledAppealTicket = await banAppeals.handleAppealTicketMessage(message);
-        if (handledAppealTicket) return;
-      }
-    } catch (err) {
-      console.error("[BAN APPEALS] Ticket message handling error:", err);
-    }
-    try {
-      const handledEditReply = await handleEditActivityReply(message);
-      if (handledEditReply) return;
-    } catch (err) {
-      console.error("[EDITACTIVITY] Reply handling error:", err);
-    }
+      if (banAppeals?.handleAppealTicketMessage && await banAppeals.handleAppealTicketMessage(message)) return;
+    } catch (error) { console.error('[BAN APPEALS] Ticket message failed:', error); }
 
-    // Ticket typing enforcement (tickets should not be automodded)
-    try {
-      const inTicket = await ticketSystem.enforceTicketSpeak(message);
-      if (inTicket) return;
-    } catch (err) {
-      console.error("[TICKETS] enforceTicketSpeak error:", err);
-    }
+    try { if (await handleEditActivityReply(message)) return; }
+    catch (error) { console.error('[EDITACTIVITY] Reply handling failed:', error); }
 
-    // Automod
-    try {
-      await handleMessageAutomod(message);
-    } catch (err) {
-      console.error("[AUTOMOD] Error while processing message:", err);
-    }
+    try { if (await ticketSystem.enforceTicketSpeak(message)) return; }
+    catch (error) { console.error('[TICKETS] Speak enforcement failed:', error); }
 
-    if (message.content === "!ping") {
-      message.reply("Pong! (prefix command)");
-    }
+    try { await handleMessageAutomod(message); }
+    catch (error) { console.error('[AUTOMOD] Message processing failed:', error); }
+
+    if (message.content === '!ping') message.reply('Pong!').catch(() => null);
   });
 }
 
-
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   try {
-    if (banAppeals?.handleBanAppealReaction) {
-      await banAppeals.handleBanAppealReaction(reaction, user);
-    }
-  } catch (err) {
-    console.error("[BAN APPEALS] Reaction handling error:", err);
-  }
+    if (banAppeals?.handleBanAppealReaction) await banAppeals.handleBanAppealReaction(reaction, user);
+  } catch (error) { console.error('[BAN APPEALS] Reaction handling failed:', error); }
 });
 
 // ===========================
-// INTERACTIONS (BUTTONS + SLASH)
+// INTERACTIONS
 // ===========================
-
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    if (banAppeals?.handleBanAppealInteraction) {
-      const banAppealHandled = await banAppeals.handleBanAppealInteraction(interaction);
-      if (banAppealHandled) return;
-    }
-    const banAppealHandled = await handleBanAppealInteraction(interaction);
-    if (banAppealHandled) return;
+    if (banAppeals?.handleBanAppealInteraction && await banAppeals.handleBanAppealInteraction(interaction)) return;
 
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      const id = interaction.customId || "";
-
-      if (banAppeals?.handleBanAppealInteraction) {
-        const handledBanAppeal = await banAppeals.handleBanAppealInteraction(interaction);
-        if (handledBanAppeal) return;
-      }
-
+      const id = interaction.customId || '';
       if (interaction.isButton()) {
-        // ticket close yes/no buttons
-        if (id.startsWith("ticket:closeyes:") || id.startsWith("ticket:closeno:")) {
-          const { handleTicketControlButton } = require("./utils/ticketSystem");
-          const handled = await handleTicketControlButton(interaction);
-          if (handled) return;
+        if (id.startsWith('ticket:closeyes:') || id.startsWith('ticket:closeno:')) {
+          if (await ticketSystem.handleTicketControlButton(interaction)) return;
         }
-
-        // ticket create buttons
-        if (id.startsWith("ticket:create:")) {
-          const typeKeyRaw = id.split(":").slice(2).join(":");
-          const { createTicketChannel } = require("./utils/ticketSystem");
-          await createTicketChannel(interaction, typeKeyRaw);
+        if (id.startsWith('ticket:create:')) {
+          await ticketSystem.createTicketChannel(interaction, id.split(':').slice(2).join(':'));
           return;
         }
       }
-
-      const queueHandled = await handleQueueButtonInteraction(interaction);
-      if (queueHandled) return;
+      if (await handleQueueButtonInteraction(interaction)) return;
     }
 
-    // SLASH COMMANDS
-    if (interaction.isChatInputCommand()) {
-      const command = interaction.client.commands.get(interaction.commandName);
-      if (!command) return;
-      await command.execute(interaction);
+    if (!interaction.isChatInputCommand()) return;
+    const command = interaction.client.commands.get(interaction.commandName);
+    if (!command) return;
+
+    const access = await enforceCommandAccess(interaction);
+    if (!access.ok) {
+      await auditCommand(interaction, 'denied', { error: access.reason });
+      await denyAccess(interaction, access);
       return;
     }
-  } catch (err) {
-    console.error("[INTERACTION] Error while executing:", err);
+
     try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.reply({ content: "❌ Error while executing this interaction.", ephemeral: true });
-      }
-    } catch {}
+      await command.execute(interaction);
+      await auditCommand(interaction, 'executed');
+    } catch (error) {
+      console.error(`[COMMAND] /${interaction.commandName} failed:`, error);
+      await auditCommand(interaction, 'failed', { error: error?.message || String(error) });
+      const payload = { content: '❌ That command failed safely. Nothing else will continue running from this request. The error was added to the Operations Audit.', ephemeral: true };
+      if (interaction.deferred && !interaction.replied) await interaction.editReply(payload).catch(() => null);
+      else if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
+      else await interaction.reply(payload).catch(() => null);
+    }
+  } catch (error) {
+    console.error('[INTERACTION] Unhandled interaction error:', error);
+    const payload = { content: '❌ This interaction could not be completed.', ephemeral: true };
+    if (interaction.deferred && !interaction.replied) await interaction.editReply(payload).catch(() => null);
+    else if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
+    else await interaction.reply(payload).catch(() => null);
   }
 });
 
 // ===========================
-// GLOBAL ERROR HANDLERS
+// PROCESS / LOGIN
 // ===========================
-process.on("unhandledRejection", (reason) => {
-  console.error("[UNHANDLED REJECTION]", reason);
-});
+process.on('unhandledRejection', (reason) => console.error('[UNHANDLED REJECTION]', reason));
+process.on('uncaughtException', (error) => console.error('[UNCAUGHT EXCEPTION]', error));
 
-process.on("uncaughtException", (err) => {
-  console.error("[UNCAUGHT EXCEPTION]", err);
-});
+async function shutdown(signal) {
+  console.log(`[SHUTDOWN] ${signal} received.`);
+  for (const interval of intervals) clearInterval(interval);
+  try { client.priorityStore?.saveNow?.(); } catch {}
+  try { client.destroy(); } catch {}
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
-// ===========================
-// LOGIN TO DISCORD
-// ===========================
-const rawToken = process.env.DISCORD_TOKEN;
-
-if (!rawToken) {
-  console.error("[LOGIN] No DISCORD_TOKEN found in environment. Set it in Render env vars.");
+const token = String(process.env.DISCORD_TOKEN || '').trim();
+if (!token) {
+  console.error('[LOGIN] DISCORD_TOKEN is missing.');
   process.exit(1);
 }
-
-const token = rawToken.trim();
-console.log(
-  `[LOGIN] DISCORD_TOKEN detected. Raw length: ${rawToken.length}, trimmed length: ${token.length}.`
-);
-
-client
-  .login(token)
-  .then(() => console.log("[LOGIN] client.login() resolved. Waiting for READY event..."))
-  .catch((err) => console.error("[LOGIN] Failed to login to Discord:", err));
+client.login(token).catch((error) => {
+  console.error('[LOGIN] Discord login failed:', error);
+  process.exitCode = 1;
+});

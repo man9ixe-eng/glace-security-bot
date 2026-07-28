@@ -48,7 +48,6 @@ module.exports = {
     .setName('clear')
     .setDescription('Delete up to 100 messages in this channel (fast, handles old messages too).')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addIntegerOption((option) =>
       option
         .setName('amount')

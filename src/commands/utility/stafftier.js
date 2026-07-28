@@ -24,7 +24,8 @@ module.exports = {
       case 4: label = 'Tier 4 — Management'; break;
       case 5: label = 'Tier 5 — Senior Management'; break;
       case 6: label = 'Tier 6 — Corporate'; break;
-      case 7: label = 'Tier 7 — Presidential / Owner'; break;
+      case 7: label = 'Tier 7 — Corporate Board'; break;
+      case 8: label = 'Tier 8 — Presidential / Owner'; break;
       default: label = `Unknown tier (${tier})`; break;
     }
 

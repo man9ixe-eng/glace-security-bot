@@ -4,8 +4,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { DATA_DIR: ROOT_DATA_DIR, atomicWriteJson } = require('./dataPaths');
 
-const DATA_DIR = path.join(__dirname, '..', 'data', 'juniorActivity');
+const DATA_DIR = path.join(ROOT_DATA_DIR, 'juniorActivity');
 const META_PATH = path.join(DATA_DIR, 'meta.json');
 
 const TIME_ZONE = 'America/New_York';
@@ -84,7 +85,7 @@ function readJson(filePath, fallback) {
 function writeJson(filePath, value) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+  atomicWriteJson(filePath, value);
 }
 
 function readMeta() {

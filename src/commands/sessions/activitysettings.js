@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const {
   updateQuotaSettings,
   getQuotaEntry,
@@ -33,7 +33,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('activitysettings')
     .setDescription('Edit activity quota settings for a tier.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDMPermission(false)
     .addStringOption((option) =>
       option
         .setName('tier')

@@ -13,7 +13,6 @@ module.exports = {
     .setName('unlock')
     .setDescription('Unlock a channel (restore @everyone ability to send messages).')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     // REQUIRED first
     .addStringOption(option =>
       option

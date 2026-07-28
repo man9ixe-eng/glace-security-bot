@@ -353,7 +353,8 @@ async function buildActivityEmbed(interaction, targetMember) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('activity')
-    .setDescription('View your activity.'),
+    .setDescription('View your activity.')
+    .setDMPermission(false),
 
   async execute(interaction) {
     const embed = await buildActivityEmbed(interaction, interaction.member);

@@ -12,7 +12,6 @@ module.exports = {
     .setName('timeout')
     .setDescription('Timeout (mute) a member for a set number of minutes.')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addUserOption(option =>
       option
         .setName('user')

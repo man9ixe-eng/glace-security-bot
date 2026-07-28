@@ -4,6 +4,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { resolveDataPath, atomicWriteJson } = require("./dataPaths");
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -13,8 +14,7 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 
-const DATA_PATH =
-  process.env.BAN_APPEALS_STORE_PATH || path.join(__dirname, "..", "data", "banAppeals.json");
+const DATA_PATH = resolveDataPath("banAppeals.json", process.env.BAN_APPEALS_STORE_PATH);
 
 const GLACE = "<:GlaceHotels:1489052500341297344>";
 const ACCEPTED = "<:accepted:882053450643431434>";
@@ -174,7 +174,7 @@ function loadStore() {
 
 function saveStore(store) {
   ensureStore();
-  fs.writeFileSync(DATA_PATH, JSON.stringify(store, null, 2));
+  atomicWriteJson(DATA_PATH, store);
 }
 
 function updateRecord(recordId, updater) {

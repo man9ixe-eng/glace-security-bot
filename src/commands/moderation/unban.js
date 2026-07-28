@@ -9,7 +9,6 @@ module.exports = {
     .setName('unban')
     .setDescription('Unban a user from the server by Discord ID.')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .addStringOption(option =>
       option
         .setName('discord_id')

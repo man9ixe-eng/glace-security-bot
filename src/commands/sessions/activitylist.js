@@ -88,6 +88,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('activitylist')
     .setDescription('Show members who have not met quota.')
+    .setDMPermission(false)
     .addStringOption((option) =>
       option
         .setName('period')

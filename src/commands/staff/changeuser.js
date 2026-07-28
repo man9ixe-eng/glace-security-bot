@@ -90,6 +90,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("changeuser")
     .setDescription("Change a staff member username on their Staff Journey card")
+    .setDMPermission(false)
     .addStringOption((o) =>
       o.setName("old_username").setDescription("Current username").setRequired(true)
     )

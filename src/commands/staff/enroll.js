@@ -236,6 +236,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("enroll")
     .setDescription("Enroll a staff member into Staff Journey")
+    .setDMPermission(false)
     .addStringOption((o) =>
       o.setName("username").setDescription("Username").setRequired(true)
     )

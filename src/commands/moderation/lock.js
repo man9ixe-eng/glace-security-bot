@@ -13,7 +13,6 @@ module.exports = {
     .setName('lock')
     .setDescription('Lock a channel (prevent @everyone from sending messages).')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     // REQUIRED option MUST come before optional ones
     .addStringOption(option =>
       option

@@ -1,11 +1,13 @@
 {
-  "name": "all-in-one-bot",
-  "version": "1.0.0",
-  "description": "",
+  "name": "glace-security-bot",
+  "version": "2.0.0",
+  "description": "Glace Hotels security, sessions, staff operations website, LOA, and moderation bot",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "deploy-commands": "node src/deploy-commands.js"
+    "deploy-commands": "node src/deploy-commands.js",
+    "validate": "node scripts/validate-project.js",
+    "test": "node scripts/validate-project.js"
   },
   "keywords": [],
   "author": "",
@@ -15,8 +17,11 @@
     "node": "20.x"
   },
   "dependencies": {
-    "axios": "^1.13.6",
-    "discord.js": "^14.16.3",
+    "axios": "^1.18.1",
+    "discord.js": "^14.26.5",
     "dotenv": "^16.4.5"
+  },
+  "overrides": {
+    "undici": "^6.27.0"
   }
 }

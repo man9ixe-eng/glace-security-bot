@@ -13,7 +13,6 @@ module.exports = {
     .setName('slowmode')
     .setDescription('Set or clear slowmode for a channel.')
     .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addIntegerOption(option =>
       option
         .setName('seconds')

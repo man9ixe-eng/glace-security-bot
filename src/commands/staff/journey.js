@@ -368,7 +368,8 @@ function pickBestEligibleCard(current, next) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("staff-journey")
-    .setDescription("Generate today's monthly milestone cards and post the journey list"),
+    .setDescription("Generate today's monthly milestone cards and post the journey list")
+    .setDMPermission(false),
 
   async execute(interaction) {
     if (!BOARD_ID || !MONTHLY_MILESTONES_LIST_ID || !LABEL_HAPPY_MONTHS) {

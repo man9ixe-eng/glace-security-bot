@@ -1,7 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveDataPath, atomicWriteJson } = require('./dataPaths');
 
-const DATA_PATH = path.join(__dirname, '..', 'data', 'quotaSettings.json');
+const DATA_PATH = resolveDataPath('quotaSettings.json', process.env.QUOTA_SETTINGS_PATH);
 
 function splitRequirement(total) {
   const value = Number(total || 0);
@@ -250,7 +251,7 @@ function getAllQuotas() {
 
 function saveAllQuotas(data) {
   ensureStore();
-  fs.writeFileSync(DATA_PATH, JSON.stringify(normalize(data), null, 2));
+  atomicWriteJson(DATA_PATH, normalize(data));
 }
 
 function resolveKey(tierKey) {
