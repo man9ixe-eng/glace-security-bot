@@ -1,7 +1,7 @@
 'use strict';
 
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const { getTierLabel, getOpsLabel, getTier, getOpsLevel } = require('../../utils/permissions');
+const { getTierLabel, getTier } = require('../../utils/permissions');
 
 function portalUrl() {
   const base = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
@@ -11,7 +11,7 @@ function portalUrl() {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('opspanel')
-    .setDescription('Post the Glace Staff Operations website panel.')
+    .setDescription('Post the Glace Hotels Staff Hub website panel.')
     .setDMPermission(false),
 
   async execute(interaction) {
@@ -24,9 +24,9 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('❄ Glace Staff Operations')
+      .setTitle('❄ Glace Hotels Staff Hub')
       .setDescription([
-        'Use the private website for staff documentation, actions, approvals, schedules, updates, and LOA records.',
+        'Use the private Staff Hub for documentation, actions, approvals, schedules, updates, and LOA records.',
         '',
         '**Discord stays simple:** panels, live session posts, current LOAs, schedules, updates, and one operations log.',
         '',
@@ -34,17 +34,17 @@ module.exports = {
       ].join('\n'))
       .setColor(0x8b5cf6)
       .setFooter({
-        text: `${getOpsLabel(getOpsLevel(interaction.member))} • ${getTierLabel(getTier(interaction.member))}`,
+        text: `${getTierLabel(getTier(interaction.member))} access • Glace Hotels`,
       });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
-        .setLabel('Open Staff Operations')
+        .setLabel('Open Glace Staff Hub')
         .setURL(url),
     );
 
     await interaction.channel.send({ embeds: [embed], components: [row] });
-    return interaction.reply({ content: '✅ Staff Operations panel posted.', ephemeral: true });
+    return interaction.reply({ content: '✅ Glace Staff Hub panel posted.', ephemeral: true });
   },
 };

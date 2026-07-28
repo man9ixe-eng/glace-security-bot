@@ -84,7 +84,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end('Glace Security Bot is running.\nHealth: /health\nStaff Operations: /ops\nBan appeals: /appeal\n');
+    res.end('Glace Security Bot is running.\nHealth: /health\nGlace Staff Hub: /ops\nBan appeals: /appeal\n');
   } catch (error) {
     console.error('[HTTP] Request error:', error);
     if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });

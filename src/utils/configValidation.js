@@ -48,11 +48,20 @@ function getConfigurationReport() {
       : ['STAFF_POSTS_CHANNEL_ID or both STAFF_SCHEDULE_CHANNEL_ID and STAFF_UPDATES_CHANNEL_ID'],
   );
 
-  report.sessionChannels = makeState(
-    has('SESSION_HUB_CHANNEL_ID') && has('SESSION_LOG_CHANNEL_ID')
-      ? []
-      : ['SESSION_HUB_CHANNEL_ID', 'SESSION_LOG_CHANNEL_ID'].filter((name) => !has(name)),
-  );
+  const hasMassShiftChannel = has('SESSION_MASS_SHIFT_CHANNEL_ID') || has('SESSION_MASSSHIFT_CHANNEL_ID');
+  const hasSeparateSessionChannels =
+    has('SESSION_INTERVIEW_CHANNEL_ID') &&
+    has('SESSION_TRAINING_CHANNEL_ID') &&
+    hasMassShiftChannel;
+  const hasSessionDestination = has('SESSION_HUB_CHANNEL_ID') || hasSeparateSessionChannels;
+  const hasSessionLog = has('SESSION_LOG_CHANNEL_ID') || has('SESSION_ATTENDEES_CHANNEL_ID');
+
+  const sessionMissing = [];
+  if (!hasSessionDestination) {
+    sessionMissing.push('SESSION_HUB_CHANNEL_ID or all separate interview/training/mass-shift channel IDs');
+  }
+  if (!hasSessionLog) sessionMissing.push('SESSION_LOG_CHANNEL_ID or SESSION_ATTENDEES_CHANNEL_ID');
+  report.sessionChannels = makeState(sessionMissing);
 
   report.portalStaffJourney = makeState(
     has('STAFF_JOURNEY_CHANNEL_ID') || has('STAFF_UPDATES_CHANNEL_ID') || has('STAFF_POSTS_CHANNEL_ID')

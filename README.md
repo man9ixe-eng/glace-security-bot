@@ -1,26 +1,27 @@
 # Glace Security Bot — Reorganized Build
 
-This build keeps Discord focused on **live operations** while moving permanent staff documentation into the private, redesigned **Glace Management Portal** at `/ops`.
+This build keeps Discord focused on **live operations** while moving permanent staff documentation into the private, redesigned **Glace Hotels Staff Hub** at `/ops`.
 
 ## What is included
 
 - Existing moderation, tickets, sessions, activity, Trello, Staff Journey, ban appeals, and LOA features.
 - A private Discord OAuth website for staff actions, approval decisions, documents, schedules, updates, active LOAs, LOA history, and audits.
 - One central permission matrix for all 47 slash commands.
-- The complete eight-tier rank ladder and five Ops access groups.
+- The complete Glace rank ladder with user-facing access based on real team titles—never OPS numbers.
 - A single combined Operations Log option instead of many separate log channels.
 - Persistent JSON storage through `DATA_DIR`, with automatic first-boot copying of existing bundled records.
 - Safe command loading, startup diagnostics, health endpoint, audit trail, and graceful shutdown.
 
 ## Access model
 
-| Ops | Team | Internal tier | Website access |
-|---|---|---:|---|
-| Ops 1 | Intern + Management | 3–4 | Sign in; view rank-appropriate dashboard, posts, LOAs, and available documents |
-| Ops 2 | Senior Management | 5 | View staff actions and expanded internal documentation |
-| Ops 3 | Corporate | 6 | Submit promotions after due diligence; carry out approved promotions; manage routine actions, watch records, documents, schedules, and updates |
-| Ops 4 | Corporate Board | 7 | Review promotion submissions, approve serious staff actions, manage restricted records, reassign promotion completion, and view audits |
-| Ops 5 | Presidential | 8 | Final promotion approval and highest portal authority |
+| Glace team | Internal tier | Website access |
+|---|---:|---|
+| Intern Team | 3 | Sign in; view the tier-themed dashboard, posts, and LOAs |
+| Management | 4 | Intern access plus available internal documentation |
+| Senior Management | 5 | View formal staff-action records and expanded internal documentation |
+| Corporate | 6 | Submit fully investigated promotions; complete approved promotions; manage routine actions, watch records, documents, schedules, and updates |
+| Corporate Board | 7 | Review promotion submissions, approve serious actions, manage restricted records, reassign completion, and view audits |
+| Presidential | 8 | Final promotion approval, full portal authority, and safe Preview As Tier mode |
 
 `Corporate Intern` remains Senior Management. `Presidential Intern` remains Corporate Board.
 
@@ -32,7 +33,7 @@ You no longer need a separate log or documentation channel for every action. A c
 2. `#current-loas` — `/addloa`, `/extendloa`, and `/removeloa` maintain the current display
 3. `#staff-schedule` — current weekly schedule, or combine this with staff updates
 4. `#staff-updates` — promotions and important staff announcements
-5. `#session-hub` — current session announcements and queue panels
+5. Keep separate `#interview`, `#training`, and `#mass-shifts` channels, or use one optional session hub
 6. `#session-logs` — completed session/activity source of truth
 7. `#operations-log` — one private audit feed for important bot and website actions
 8. Optional `#ticket-panel` and the existing private ban-appeal review channel
@@ -47,17 +48,11 @@ Do **not** delete your current Render variables. Keep the Trello IDs, role IDs, 
 
 Never upload or share your real bot token, Discord client secret, Trello token, or API keys.
 
-### 2. Add a persistent data folder
+### 2. Choose record storage safely
 
-Set:
+On free Render, leave `DATA_DIR` unset. Setting `/var/data/glace` without a mounted disk will crash the service. The bot and portal still run without it, but local JSON changes are temporary across redeploys. Connect a free database before treating website records as permanent.
 
-```env
-DATA_DIR=/var/data/glace
-```
-
-That folder must be mounted to persistent storage by your host. Without persistent storage, website cases, LOA history, activity data, warnings, queues, and audit records can disappear on a redeploy.
-
-On first boot, the bot copies existing bundled JSON records into the persistent folder when the destination file does not exist.
+If a persistent disk is added later, set `DATA_DIR` to that disk's real mount path. On first boot, the bot copies bundled JSON records into the destination when the file does not exist.
 
 ### 3. Configure Discord OAuth
 
@@ -99,7 +94,9 @@ OPERATIONS_LOG_CHANNEL_ID=
 CURRENT_LOAS_CHANNEL_ID=
 STAFF_SCHEDULE_CHANNEL_ID=
 STAFF_UPDATES_CHANNEL_ID=
-SESSION_HUB_CHANNEL_ID=
+SESSION_INTERVIEW_CHANNEL_ID=
+SESSION_TRAINING_CHANNEL_ID=
+SESSION_MASS_SHIFT_CHANNEL_ID=
 SESSION_LOG_CHANNEL_ID=
 ```
 
@@ -118,13 +115,13 @@ npm start
 
 After the bot is online, use `/opspanel` in `#staff-operations`. Open `/health` on the public service URL to view non-secret configuration readiness.
 
-## Management Portal behavior
+## Staff Hub behavior
 
 - **Leadership Intern+:** may sign in. The server only returns tabs and records allowed by the member’s current Discord tier.
 - **Senior Management:** can view formal staff-action records.
 - **Corporate:** creates routine staff actions, watch records, documents, schedules/updates, and fully investigated promotion submissions.
 - **Corporate Board+:** decides serious actions, reviews promotion submissions, manages restricted records, and sees protected audit history.
-- **Presidential:** provides final promotion approval. Standard promotions need one distinct Presidential approval; Corporate Board/Presidential promotions need two distinct approvals.
+- **Presidential:** provides final promotion approval and can use **Preview As Tier** to test every tier’s theme, navigation, and visibility without changing backend permissions. Standard promotions need one distinct Presidential approval; Corporate Board/Presidential promotions need two distinct approvals.
 - The original Corporate submitter remains the promotion completion owner unless Board+ records a reassignment.
 - Approval and completion are separate. After carrying out the promotion, the Corporate owner uses **Verify & Complete**. The portal checks both the candidate’s Discord tier and a normalized role-name match before posting the Staff Journey announcement.
 - Serious actions remain `pending_approval` until Corporate Board acts.

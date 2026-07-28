@@ -19,7 +19,7 @@
 
 Create or select:
 
-- Staff Operations panel
+- Glace Staff Hub panel
 - Current LOAs
 - Staff schedule/updates (one or two channels)
 - Session hub
@@ -41,7 +41,7 @@ Add their IDs to the environment and restart once.
 ## Hour 5 — Switch over
 
 - Lock old documentation/punishment channels to read-only.
-- Post the Staff Operations panel for the Corporate team.
+- Post the Glace Staff Hub panel for the Corporate team.
 - Tell Senior Management that website access is view-only.
 - Tell Corporate that routine records and posts move to the website.
 - Tell Corporate Board that serious actions require their website decision.

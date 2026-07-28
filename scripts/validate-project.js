@@ -86,7 +86,7 @@ async function main() {
     if (actualTier !== expectedTier) fail(`${label} resolved to Tier ${actualTier}, expected ${expectedTier}`);
     if (actualOps !== expectedOps) fail(`${label} resolved to Ops ${actualOps}, expected ${expectedOps}`);
   }
-  pass('The eight-tier role ladder and five Ops groups resolve correctly');
+  pass('The Glace tier ladder and internal access bands resolve correctly');
 
   // 4. Bundled JSON data validity
   for (const file of fs.readdirSync(path.join(root, 'src/data')).filter((name) => name.endsWith('.json'))) {
@@ -109,7 +109,7 @@ async function main() {
   if (!created.caseNumber || created.status !== 'pending_approval' || updated?.status !== 'approved' || !doc.id || !post.id || !watch.recordNumber || !restricted.recordNumber) {
     fail('Staff Operations store create/approval/document/watch/restricted/post round-trip failed');
   } else {
-    pass('Management Portal stores pass staff action, watch, restricted, document, and post validation');
+    pass('Staff Hub stores pass staff action, watch, restricted, document, and post validation');
   }
 
   // 5b. Promotion submission ownership and approval/completion round-trip
@@ -157,14 +157,14 @@ async function main() {
     end(value = '') { body += String(value); },
   };
   const handled = await handleOpsWebRequest(req, res, { guilds: { cache: new Map() } });
-  if (!handled || statusCode !== 200 || !body.includes('Glace Hotels') || !body.includes('Management Portal')) fail('Management Portal public route smoke test failed');
-  else pass('Management Portal public route responds successfully');
+  if (!handled || statusCode !== 200 || !body.includes('Glace Hotels') || !body.includes('Management Portal')) fail('Staff Hub public route smoke test failed');
+  else pass('Staff Hub public route responds successfully');
 
   // 10. Browser-side portal JavaScript syntax
   const browserScriptPath = path.join(root, 'src/web/assets/ops.js');
   const browserCheck = spawnSync(process.execPath, ['--check', browserScriptPath], { encoding: 'utf8' });
-  if (browserCheck.status !== 0) fail(`Management Portal browser JavaScript has a syntax error: ${browserCheck.stderr.trim()}`);
-  else pass('Management Portal browser JavaScript passes syntax validation');
+  if (browserCheck.status !== 0) fail(`Staff Hub browser JavaScript has a syntax error: ${browserCheck.stderr.trim()}`);
+  else pass('Staff Hub browser JavaScript passes syntax validation');
 
   if (failures) {
     console.error(`\nValidation failed with ${failures} problem(s).`);

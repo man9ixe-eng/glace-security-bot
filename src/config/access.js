@@ -13,12 +13,8 @@
  * 7 Corporate Board
  * 8 Presidential / Owner
  *
- * Ops labels:
- * 1 Intern + Management
- * 2 Senior Management
- * 3 Corporate
- * 4 Corporate Board
- * 5 Presidential
+ * Legacy access bands are retained internally for command compatibility.
+ * The website and user-facing messages always use the real Glace tier names.
  */
 const TIERS = Object.freeze({
   MEMBER: 1,

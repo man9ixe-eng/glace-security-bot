@@ -1,7 +1,7 @@
 {
   "name": "glace-security-bot",
-  "version": "2.0.0",
-  "description": "Glace Hotels security, sessions, staff operations website, LOA, and moderation bot",
+  "version": "2.1.0",
+  "description": "Glace Hotels security bot and colorful Discord-synced Staff Hub portal",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

@@ -8,7 +8,6 @@ const {
   getTier,
   getTierLabel,
   getOpsLevel,
-  getOpsLabel,
   outranks,
   normalizeRoleName,
   getMemberRoleNames,
@@ -252,7 +251,7 @@ function publicLoginPage(req) {
       <div class="hero-content"><div class="hero-kicker">One secure operations hub</div><h1 class="hero-title"><span class="gradient">Elevate every stay.</span>Empower every team.</h1><p class="hero-copy">A polished home for Glace Hotels staff operations—promotion submissions, approvals, watch records, restricted documentation, schedules, updates, LOAs, and permanent audit history.</p>
         <div class="feature-grid">
           <article class="feature-tile role-intern"><div class="feature-icon">♛</div><strong>Promotion Workflow</strong><p>Corporate submits after due diligence; Board and Presidential approve.</p></article>
-          <article class="feature-tile role-management"><div class="feature-icon">◇</div><strong>Staff Operations</strong><p>Keep formal actions organized without dozens of Discord log channels.</p></article>
+          <article class="feature-tile role-management"><div class="feature-icon">◇</div><strong>Staff Records</strong><p>Keep formal actions organized without dozens of Discord log channels.</p></article>
           <article class="feature-tile role-senior"><div class="feature-icon">◉</div><strong>Watch Records</strong><p>Private expectations, review dates, outcomes, and escalation history.</p></article>
           <article class="feature-tile role-corporate"><div class="feature-icon">◆</div><strong>Restricted Records</strong><p>Board-level confidentiality with a permanent access and edit trail.</p></article>
           <article class="feature-tile role-board"><div class="feature-icon">▥</div><strong>Synced Access</strong><p>Tabs and actions change automatically with current Discord roles.</p></article>
@@ -277,7 +276,7 @@ function portalPage() {
       <div class="sidebar-profile"><div class="profile-line"><div id="profileAvatar"></div><div class="profile-copy"><strong id="profileName">Loading…</strong><span id="profileRole"></span></div></div></div>
       <div class="sidebar-section">Workspace</div>
       <nav class="nav">
-        <button class="active" data-tab="dashboard" data-title="Operations Overview" data-subtitle="A live view of the systems available to your current rank."><span class="nav-icon">⌂</span><span>Overview</span></button>
+        <button class="active" data-tab="dashboard" data-title="Staff Hub Dashboard" data-subtitle="A bright, role-aware view of the tools available to your current Glace tier."><span class="nav-icon">⌂</span><span>Dashboard</span></button>
         <button data-tab="promotions" data-capability="viewPromotions" data-title="Promotion Submissions" data-subtitle="Corporate owns the submission from due diligence through verified completion."><span class="nav-icon">♛</span><span>Promotions</span></button>
         <button data-tab="cases" data-capability="viewStaffCases" data-title="Staff Actions" data-subtitle="Permanent coaching, warning, suspension, demotion, and termination records."><span class="nav-icon">◇</span><span>Staff Actions</span></button>
         <button data-tab="watch" data-capability="viewWatchRecords" data-title="Watch Records" data-subtitle="Private monitoring records, expectations, review dates, and outcomes."><span class="nav-icon">◉</span><span>Watch Records</span></button>
@@ -290,10 +289,10 @@ function portalPage() {
       <div class="sidebar-bottom"><a href="/ops/logout"><span>Sign out</span></a></div>
     </aside>
     <main class="app-main">
-      <header class="topbar"><div class="topbar-title"><strong>Glace Management Portal</strong><span>Discord-synced staff operations</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search the open section…"></div><div class="top-actions"><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Notifications">◌</button></div></header>
+      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>Discord-synced management portal</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section…"></div><div class="top-actions"><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview as</label><select id="previewTier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">❄</button></div></header>
       <div id="loading" class="loading-screen"><div><div class="loading-orb"></div><div id="loadingMessage">Verifying your Glace server rank…</div></div></div>
       <div id="app" hidden class="content">
-        <div class="page-head"><div><h1 id="pageTitle">Operations Overview</h1><p id="pageSubtitle">Your Glace operations workspace.</p></div></div>
+        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="page-head"><div><span id="pageEyebrow" class="page-eyebrow">YOUR STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><div class="page-tier-card"><span>Current view</span><strong id="pageTierLabel">Loading…</strong></div></div>
 
         <section id="section-dashboard" class="section active">
           <div id="dashboardStats" class="dashboard-grid"></div>
@@ -395,9 +394,10 @@ async function bootstrap(session) {
       tier: session.tier,
       tierLabel: getTierLabel(session.tier),
       opsLevel: session.opsLevel,
-      opsLabel: getOpsLabel(session.opsLevel),
+      canPreviewTiers: session.tier >= TIERS.PRESIDENTIAL,
     },
     capabilities,
+    capabilityMinimums: WEBSITE_CAPABILITIES,
     promotions: capabilities.viewPromotions ? allPromotions : [],
     cases: capabilities.viewStaffCases ? staffOps.listCases({ guildId: session.guildId }) : [],
     watchRecords: capabilities.viewWatchRecords ? staffOps.listWatchRecords({ guildId: session.guildId }) : [],

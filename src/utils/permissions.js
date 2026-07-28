@@ -99,12 +99,12 @@ function getTierLabel(tier) {
   switch (Number(tier)) {
     case TIERS.MEMBER: return 'Regular Member';
     case TIERS.JUNIOR_STAFF: return 'Junior Staff';
-    case TIERS.INTERN: return 'Intern';
+    case TIERS.INTERN: return 'Intern Team';
     case TIERS.MANAGEMENT: return 'Management';
     case TIERS.SENIOR_MANAGEMENT: return 'Senior Management';
     case TIERS.CORPORATE: return 'Corporate';
     case TIERS.CORPORATE_BOARD: return 'Corporate Board';
-    case TIERS.PRESIDENTIAL: return 'Presidential / Owner';
+    case TIERS.PRESIDENTIAL: return 'Presidential';
     default: return `Unknown (Tier ${tier})`;
   }
 }
@@ -121,11 +121,11 @@ function getOpsLevel(member) {
 
 function getOpsLabel(level) {
   switch (Number(level)) {
-    case OPS_LEVELS.INTERN_MANAGEMENT: return 'Ops 1 — Intern & Management';
-    case OPS_LEVELS.SENIOR_MANAGEMENT: return 'Ops 2 — Senior Management';
-    case OPS_LEVELS.CORPORATE: return 'Ops 3 — Corporate';
-    case OPS_LEVELS.CORPORATE_BOARD: return 'Ops 4 — Corporate Board';
-    case OPS_LEVELS.PRESIDENTIAL: return 'Ops 5 — Presidential';
+    case OPS_LEVELS.INTERN_MANAGEMENT: return 'Intern Team / Management';
+    case OPS_LEVELS.SENIOR_MANAGEMENT: return 'Senior Management';
+    case OPS_LEVELS.CORPORATE: return 'Corporate';
+    case OPS_LEVELS.CORPORATE_BOARD: return 'Corporate Board';
+    case OPS_LEVELS.PRESIDENTIAL: return 'Presidential';
     default: return 'No Operations Access';
   }
 }

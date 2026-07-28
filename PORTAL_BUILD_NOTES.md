@@ -1,19 +1,19 @@
-# Glace Management Portal — Website Build
+# Glace Hotels Staff Hub — Website Build v2.1
 
-This project now includes the redesigned dark, futuristic Glace Hotels portal at `/ops`.
+This project now includes the redesigned bright, bubbly, futuristic Glace Hotels Staff Hub at `/ops`.
 
 ## What changed
 
-- Modern responsive login screen and operations dashboard.
+- Brighter responsive login and dashboard with larger typography, full-screen spacing, and clearer navigation.
 - Discord OAuth sign-in with a fresh server-role check before every protected API action.
-- Role-colored access system:
+- Dynamic role-colored themes throughout the portal:
   - Intern Team — pink
   - Management — purple
   - Senior Management — green
   - Corporate — red
   - Corporate Board — orange
   - Presidential — yellow/gold
-- Leadership Intern+ may sign in, but tabs and data are filtered server-side by current rank.
+- Leadership Intern+ may sign in, with tabs and data filtered server-side by current rank. Presidential users also receive a read-only Preview As Tier selector for safe testing.
 - Promotion Submissions workflow is fully connected to the existing persistent promotion store.
 - Watch Records and Restricted Records are now permanent website systems.
 - Staff Actions, documents, schedules/updates, current LOAs, LOA history, and audit records remain available in the portal.
@@ -48,7 +48,7 @@ PRESIDENTIAL_ROLE_IDS=
 
 STAFF_JOURNEY_CHANNEL_ID=
 OPERATIONS_LOG_CHANNEL_ID=
-DATA_DIR=/var/data/glace
+# Leave DATA_DIR unset on free Render unless a disk is actually mounted.
 ```
 
 In the Discord Developer Portal, add the exact OAuth redirect URL shown above.
@@ -67,3 +67,13 @@ npm start
 ```
 
 Then open `/ops` or post the portal button with `/opspanel`.
+
+
+## v2.1 interface changes
+
+- Removed visible OPS I/II/III/IV/V naming. The portal now uses Intern Team, Management, Senior Management, Corporate, Corporate Board, and Presidential.
+- The logged-in tier controls the portal accent theme automatically.
+- Presidential accounts can preview every tier’s navigation and interface. Preview mode locks forms and record actions.
+- Dashboard cards, navigation, forms, records, and text are larger and easier to scan.
+- The dashboard uses fewer columns at normal desktop widths so cards no longer appear tiny.
+- Session diagnostics accept either one shared session hub or the three separate interview/training/mass-shift channels.
