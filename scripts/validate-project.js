@@ -104,20 +104,19 @@ async function main() {
   const updated = staffOps.updateCase(created.id, { status: 'approved', decisionReason: 'Validated' }, { id: '2', tag: 'Board Validator' });
   const doc = staffOps.createDocument({ guildId: 'guild', title: 'Test Policy', content: 'Validation', visibilityTier: 5 }, { id: '1', tag: 'Validator' });
   const post = staffOps.createPost({ guildId: 'guild', type: 'schedule', title: 'Test Schedule', content: 'Validation' }, { id: '1', tag: 'Validator' });
-  const watch = staffOps.createWatchRecord({ guildId: 'guild', targetUsername: 'WatchUser', targetRank: 'Supervisor', reason: 'Validation', expectations: 'Improve', startDate: '2026-07-01', reviewDate: '2026-07-08' }, { id: '1', tag: 'Validator' });
   const restricted = staffOps.createRestrictedRecord({ guildId: 'guild', subjectName: 'Restricted User', summary: 'Validation' }, { id: '2', tag: 'Board Validator' });
-  if (!created.caseNumber || created.status !== 'pending_approval' || updated?.status !== 'approved' || !doc.id || !post.id || !watch.recordNumber || !restricted.recordNumber) {
-    fail('Staff Operations store create/approval/document/watch/restricted/post round-trip failed');
+  if (!created.caseNumber || created.status !== 'pending_approval' || updated?.status !== 'approved' || !doc.id || !post.id || !restricted.recordNumber) {
+    fail('Staff Operations store create/approval/document/restricted/post round-trip failed');
   } else {
-    pass('Staff Hub stores pass staff action, watch, restricted, document, and post validation');
+    pass('Staff Hub stores pass staff action, restricted, document, and post validation');
   }
 
   // 5b. Promotion submission ownership and approval/completion round-trip
   const promotions = require(path.join(root, 'src/utils/promotionStore'));
-  let promotion = promotions.create({ guildId: 'guild', candidateId: '3', candidateUsername: 'Candidate', currentRank: 'Leadership Intern', proposedRank: 'Supervisor', proposedTier: 4, reason: 'Ready', evidence: 'Reviewed', strengths: 'Reliable', diligenceConfirmed: true }, { id: '1', tag: 'Corporate Validator' });
-  promotion = promotions.boardDecision(promotion.id, 'approve', 'Board reviewed', { id: '2', tag: 'Board Validator' });
-  promotion = promotions.presidentialDecision(promotion.id, 'approve', 'Final approval', { id: '4', tag: 'Presidential Validator' });
-  promotion = promotions.complete(promotion.id, { discordVerified: true, verifiedTier: 4 }, { id: '1', tag: 'Corporate Validator' });
+  let promotion = await promotions.create({ guildId: 'guild', candidateId: '3', candidateUsername: 'Candidate', currentRank: 'Leadership Intern', proposedRank: 'Supervisor', proposedTier: 4, reason: 'Ready', evidence: 'Reviewed', strengths: 'Reliable', diligenceConfirmed: true }, { id: '1', tag: 'Corporate Validator' });
+  promotion = await promotions.boardDecision(promotion.id, 'approve', 'Board reviewed', { id: '2', tag: 'Board Validator' });
+  promotion = await promotions.presidentialDecision(promotion.id, 'approve', 'Final approval', { id: '4', tag: 'Presidential Validator' });
+  promotion = await promotions.complete(promotion.id, { discordVerified: true, verifiedTier: 4 }, { id: '1', tag: 'Corporate Validator' });
   if (promotion.status !== 'completed' || promotion.completedById !== '1') fail('Promotion submission approval/completion round-trip failed');
   else pass('Promotion submissions preserve Corporate ownership through verified completion');
 

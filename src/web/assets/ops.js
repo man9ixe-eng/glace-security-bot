@@ -213,7 +213,6 @@ function renderDashboard() {
   const pendingPromotions = d.promotions.filter((x) => ['board_review', 'presidential_review', 'returned_to_corporate'].includes(x.status)).length;
   const awaitingCompletion = d.promotions.filter((x) => x.status === 'approved_awaiting_completion').length;
   const openCases = d.cases.filter((x) => !['closed', 'denied', 'reversed'].includes(x.status)).length;
-  const activeWatch = d.watchRecords.filter((x) => ['active', 'improving', 'escalated'].includes(x.status)).length;
 
   const stats = [];
   if (capabilities.viewPosts) stats.push(['Staff Updates', d.posts.length, `${d.feed.length} recent Staff Journey items`, 'role-intern', '✦']);
@@ -221,7 +220,6 @@ function renderDashboard() {
   if (capabilities.viewDocuments) stats.push(['Documents', d.documents.length, 'Resources available to your role', 'role-management', '▤']);
   if (capabilities.viewStaffCases) stats.push(['Staff Actions', openCases, `${d.cases.filter((x) => x.status === 'pending_approval').length} awaiting review`, 'role-management', '◇']);
   if (capabilities.viewPromotions) stats.push(['Promotion Submissions', pendingPromotions, `${awaitingCompletion} awaiting completion`, 'role-corporate', '♛']);
-  if (capabilities.viewWatchRecords) stats.push(['Watch Records', activeWatch, `${d.watchRecords.filter((x) => x.status === 'escalated').length} escalated`, 'role-senior', '◉']);
   if (capabilities.viewRestrictedRecords) stats.push(['Restricted Records', d.restrictedRecords.filter((x) => x.status !== 'archived').length, 'Confidential records available to you', 'role-board', '◆']);
   if (capabilities.viewAudit) stats.push(['Audit Activity', d.audit.length, 'Protected actions in your view', 'role-presidential', '⌁']);
 
@@ -256,11 +254,12 @@ function renderDashboard() {
   }
 
   const approvals = [
-    ...(canViewPromotions ? d.promotions.filter((x) => ['board_review', 'presidential_review', 'approved_awaiting_completion'].includes(x.status)).map((x) => ({
+    ...(canViewPromotions ? d.promotions.filter((x) => ['board_review', 'returned_to_corporate', 'presidential_review', 'approved_awaiting_completion'].includes(x.status)).map((x) => ({
       title: `${x.candidateUsername || x.candidateId}: ${x.currentRank} → ${x.proposedRank}`,
       meta: `${x.submissionNumber} • ${prettify(x.status)}`,
       tier: x.proposedTier,
       tab: 'promotions',
+      promotion: x,
     })) : []),
     ...(canViewCases ? d.cases.filter((x) => x.status === 'pending_approval').map((x) => ({
       title: `${x.caseNumber}: ${x.targetUsername || x.targetId}`,
@@ -271,11 +270,14 @@ function renderDashboard() {
   ].slice(0, 7);
   const approvalPreview = $('#approvalPreview');
   if (approvalPreview && canViewQueue) approvalPreview.innerHTML = approvals.length ? approvals.map((item) => `
-    <button class="activity-item" data-go="${item.tab}" style="width:100%;color:inherit;text-align:left;cursor:pointer">
-      <div class="activity-icon ${roleClass(item.tier)}">↗</div>
-      <div class="activity-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.meta)}</span></div>
-      <span class="tiny-chip ${roleClass(item.tier)}">Open</span>
-    </button>`).join('') : '<div class="empty-state"><strong>You are all caught up</strong>No items are waiting in the queues available to your role.</div>';
+    <div class="dashboard-queue-item">
+      <button class="activity-item" data-go="${item.tab}" style="width:100%;color:inherit;text-align:left;cursor:pointer">
+        <div class="activity-icon ${roleClass(item.tier)}">↗</div>
+        <div class="activity-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.meta)}</span></div>
+        <span class="tiny-chip ${roleClass(item.tier)}">Open</span>
+      </button>
+      ${item.promotion ? `<div class="dashboard-queue-actions">${promotionActions(item.promotion)}</div>` : ''}
+    </div>`).join('') : '<div class="empty-state"><strong>You are all caught up</strong>No items are waiting in the queues available to your role.</div>';
 
   const availableTools = [
     ['⌂', 'Dashboard', true],
@@ -284,7 +286,6 @@ function renderDashboard() {
     ['▤', 'Documentation', capabilities.viewDocuments],
     ['◇', 'Staff Actions', capabilities.viewStaffCases],
     ['♛', 'Promotion Submissions', capabilities.viewPromotions],
-    ['◉', 'Watch Records', capabilities.viewWatchRecords],
     ['◆', 'Restricted Records', capabilities.viewRestrictedRecords],
     ['⌁', 'Audit Log', capabilities.viewAudit],
   ].filter(([, , allowed]) => allowed);
@@ -302,7 +303,6 @@ function renderDashboard() {
   if (quickActions) quickActions.innerHTML = [
     ['promotions', 'submitPromotion', '♛', 'Submit Promotion'],
     ['cases', 'createRoutineCase', '◇', 'Staff Action'],
-    ['watch', 'manageWatchRecords', '◉', 'Watch Record'],
     ['restricted', 'manageRestrictedRecords', '◆', 'Restricted Record'],
     ['posts', 'publishUpdate', '✦', 'Post Update'],
     ['loas', 'viewLoas', '◔', 'View LOAs'],
@@ -324,7 +324,10 @@ function promotionActions(item) {
     actions.push(`<button class="btn small ghost" data-promotion-action="board:return" data-id="${escapeHtml(item.id)}">Return</button>`);
     actions.push(`<button class="btn small danger" data-promotion-action="board:deny" data-id="${escapeHtml(item.id)}">Deny</button>`);
   }
-  if (item.status === 'presidential_review' && c.approvePromotionPresidential && String(item.submittedById) !== String(viewer.id)) {
+  if (['board_review', 'returned_to_corporate'].includes(item.status) && c.approvePromotionPresidential) {
+    actions.push(`<button class="btn small gold presidential-override-btn" data-promotion-action="presidential:override" data-id="${escapeHtml(item.id)}">Approve Now · Skip Board</button>`);
+  }
+  if (item.status === 'presidential_review' && c.approvePromotionPresidential) {
     actions.push(`<button class="btn small gold" data-promotion-action="presidential:approve" data-id="${escapeHtml(item.id)}">Presidential Approve</button>`);
     actions.push(`<button class="btn small ghost" data-promotion-action="presidential:return" data-id="${escapeHtml(item.id)}">Return</button>`);
     actions.push(`<button class="btn small danger" data-promotion-action="presidential:deny" data-id="${escapeHtml(item.id)}">Deny</button>`);
@@ -343,6 +346,13 @@ function promotionActions(item) {
 
 function renderPromotions() {
   const list = state.data.promotions;
+  const storageBadge = $('#promotionStorageBadge');
+  if (storageBadge) {
+    const permanent = state.data.promotionStorage === 'supabase';
+    storageBadge.textContent = permanent ? 'Permanent Supabase storage' : 'Temporary local storage';
+    storageBadge.classList.toggle('ready', permanent);
+    storageBadge.classList.toggle('warning', !permanent);
+  }
   $('#promotionList').innerHTML = list.length ? list.map((item) => {
     const done = promotionStepCount(item.status);
     const approvals = (item.presidentialApprovals || []).map((x) => x.tag).join(', ') || 'None yet';
@@ -363,7 +373,7 @@ function renderPromotions() {
         <span>Completion owner: ${escapeHtml(item.assignedCompletionTag || item.submittedByTag || 'Unknown')}</span>
         ${item.completionDeadline ? `<span>Deadline: ${formatDate(item.completionDeadline)}</span>` : ''}
       </div>
-      ${item.boardDecisionReason ? `<div class="record-body"><strong>Board note</strong>\n${escapeHtml(item.boardDecisionReason)}</div>` : ''}
+      ${item.boardDecisionReason ? `<div class="record-body"><strong>${item.overrideUsed ? 'Presidential override note' : 'Board note'}</strong>\n${escapeHtml(item.boardDecisionReason)}</div>` : ''}
       ${item.presidentialDecisionReason ? `<div class="record-body"><strong>Presidential note</strong>\n${escapeHtml(item.presidentialDecisionReason)}</div>` : ''}
       <div class="record-actions">${promotionActions(item)}</div>
     </article>`;
@@ -384,10 +394,6 @@ function renderCases() {
     }
     return `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.caseNumber)} — ${escapeHtml(item.targetUsername || item.targetId)}</h3><div class="meta">${escapeHtml(prettify(item.actionType))} • ${escapeHtml(item.targetRank || 'Rank not recorded')} • ${formatDate(item.createdAt)}</div></div>${statusChip(item.status)}</div><div class="record-body">${escapeHtml(item.reason)}</div><div class="record-details"><span>Issued by ${escapeHtml(item.createdByTag || 'Unknown')}</span>${item.length ? `<span>Length: ${escapeHtml(item.length)}</span>` : ''}${item.staffWarningCount !== null ? `<span>Warnings: ${escapeHtml(item.staffWarningCount)}</span>` : ''}${item.evidence ? `<span>Evidence: ${escapeHtml(item.evidence)}</span>` : ''}</div>${item.decisionReason ? `<div class="record-body"><strong>Decision</strong>\n${escapeHtml(item.decisionReason)}</div>` : ''}<div class="record-actions">${actions.join('')}</div></article>`;
   }).join('') : '<div class="empty-state"><strong>No staff actions</strong>Approved and pending staff actions will be stored here.</div>';
-}
-
-function renderWatch() {
-  $('#watchList').innerHTML = state.data.watchRecords.length ? state.data.watchRecords.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.recordNumber)} — ${escapeHtml(item.targetUsername || item.targetId)}</h3><div class="meta">${escapeHtml(item.targetRank || 'Rank not recorded')} • Review ${formatDate(item.reviewDate, true)}</div></div>${statusChip(item.status)}</div><div class="record-body"><strong>Reason</strong>\n${escapeHtml(item.reason)}</div><div class="record-body"><strong>Expected improvement</strong>\n${escapeHtml(item.expectations || 'Not recorded')}</div>${item.outcome ? `<div class="record-body"><strong>Outcome</strong>\n${escapeHtml(item.outcome)}</div>` : ''}<div class="record-details"><span>Reviewer: ${escapeHtml(item.reviewerTag || 'Unknown')}</span><span>Created: ${formatDate(item.createdAt)}</span></div><div class="record-actions">${isPreviewing() ? '<span class="preview-lock-note">Preview only</span>' : `<button class="btn small ghost" data-watch-update="${escapeHtml(item.id)}">Update Status</button>`}</div></article>`).join('') : '<div class="empty-state"><strong>No watch records</strong>Private monitoring records created by Corporate will appear here.</div>';
 }
 
 function renderRestricted() {
@@ -418,7 +424,6 @@ function renderAll() {
   renderDashboard();
   if (capabilities.viewPromotions) renderPromotions();
   if (capabilities.viewStaffCases) renderCases();
-  if (capabilities.viewWatchRecords) renderWatch();
   if (capabilities.viewRestrictedRecords) renderRestricted();
   if (capabilities.viewDocuments) renderDocuments();
   if (capabilities.viewPosts) renderPosts();
@@ -458,11 +463,15 @@ async function submitDecision() {
   if (config.requireReason !== false && !reason) return notify('A decision reason is required.', 'error');
   try {
     if (config.kind === 'promotion') {
-      await api(`/ops/api/promotions/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify({ action: config.stage === 'board' ? 'board_decision' : 'presidential_decision', decision: config.action, reason }) });
+      const action = config.action === 'override'
+        ? 'presidential_override'
+        : (config.stage === 'board' ? 'board_decision' : 'presidential_decision');
+      const payload = action === 'presidential_override'
+        ? { action, reason }
+        : { action, decision: config.action, reason };
+      await api(`/ops/api/promotions/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
     } else if (config.kind === 'case') {
       await api(`/ops/api/cases/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify({ status: config.action, decisionReason: reason }) });
-    } else if (config.kind === 'watch') {
-      await api(`/ops/api/watch/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify({ status: $('#decisionStatus').value, outcome: reason }) });
     } else if (config.kind === 'restricted') {
       await api(`/ops/api/restricted/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify({ status: $('#decisionStatus').value, resolution: reason }) });
     }
@@ -536,7 +545,7 @@ function bindEvents() {
     notify('Returned to your real Presidential access.');
   });
   document.addEventListener('click', async (event) => {
-    const mutationTarget = event.target.closest('[data-promotion-action], [data-promotion-edit], [data-promotion-complete], [data-promotion-reassign], [data-case-action], [data-watch-update], [data-restricted-update]');
+    const mutationTarget = event.target.closest('[data-promotion-action], [data-promotion-edit], [data-promotion-complete], [data-promotion-reassign], [data-case-action], [data-restricted-update]');
     if (mutationTarget && isPreviewing()) {
       event.preventDefault();
       notify('Exit Preview mode before changing records.', 'error');
@@ -548,7 +557,17 @@ function bindEvents() {
     const promoAction = event.target.closest('[data-promotion-action]');
     if (promoAction) {
       const [stage, action] = promoAction.dataset.promotionAction.split(':');
-      openDecision({ kind: 'promotion', stage, action, id: promoAction.dataset.id, title: `${prettify(stage)}: ${prettify(action)} Promotion`, copy: action === 'approve' ? 'Record any approval note. A short note is still required for accountability.' : 'Explain why this submission is being returned or denied.' });
+      const isOverride = action === 'override';
+      openDecision({
+        kind: 'promotion',
+        stage,
+        action,
+        id: promoAction.dataset.id,
+        title: isOverride ? 'Presidential Approval Override' : `${prettify(stage)}: ${prettify(action)} Promotion`,
+        copy: isOverride
+          ? 'This skips Corporate Board review and records your Presidential approval immediately. Explain why the override is appropriate.'
+          : (action === 'approve' ? 'Record any approval note. A short note is still required for accountability.' : 'Explain why this submission is being returned or denied.'),
+      });
     }
     const promoEdit = event.target.closest('[data-promotion-edit]');
     if (promoEdit) editPromotion(promoEdit.dataset.promotionEdit);
@@ -559,12 +578,6 @@ function bindEvents() {
 
     const caseAction = event.target.closest('[data-case-action]');
     if (caseAction) openDecision({ kind: 'case', id: caseAction.dataset.id, action: caseAction.dataset.caseAction, title: `${prettify(caseAction.dataset.caseAction)} Staff Action` });
-    const watchUpdate = event.target.closest('[data-watch-update]');
-    if (watchUpdate) {
-      $('#decisionStatusWrap').hidden = false;
-      $('#decisionStatus').innerHTML = ['active','improving','escalated','cleared','expired','archived'].map((x) => `<option value="${x}">${prettify(x)}</option>`).join('');
-      openDecision({ kind: 'watch', id: watchUpdate.dataset.watchUpdate, title: 'Update Watch Record', copy: 'Choose the new status and record the outcome or review note.' });
-    }
     const restrictedUpdate = event.target.closest('[data-restricted-update]');
     if (restrictedUpdate) {
       $('#decisionStatusWrap').hidden = false;
@@ -590,7 +603,7 @@ function bindEvents() {
       }
       resetPromotionForm();
       await refresh();
-      notify('Promotion submission saved and routed to Corporate Board.');
+      notify('Promotion submission saved. Board and Presidential reviewers can act from the queue.');
     } catch (error) { notify(error.message, 'error'); }
   });
   $('#promotionReset')?.addEventListener('click', resetPromotionForm);
@@ -599,11 +612,6 @@ function bindEvents() {
     event.preventDefault();
     if (blockPreviewSubmit(event)) return;
     try { await api('/ops/api/cases', { method: 'POST', body: JSON.stringify(formDataObject(event.currentTarget)) }); event.currentTarget.reset(); await refresh(); notify('Staff action saved.'); } catch (error) { notify(error.message, 'error'); }
-  });
-  $('#watchForm')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (blockPreviewSubmit(event)) return;
-    try { await api('/ops/api/watch', { method: 'POST', body: JSON.stringify(formDataObject(event.currentTarget)) }); event.currentTarget.reset(); await refresh(); notify('Watch record created.'); } catch (error) { notify(error.message, 'error'); }
   });
   $('#restrictedForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();

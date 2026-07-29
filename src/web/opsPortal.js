@@ -244,7 +244,7 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.4.0"></head><body class="public-portal">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.5.0"></head><body class="public-portal">
   <main class="login-shell resort-login">
     <section class="login-hero resort-hero">
       <div class="logo-lockup resort-logo"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -283,7 +283,7 @@ function publicLoginPage(req) {
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.4.0"><script defer src="/ops/assets/ops.js?v=2.4.0"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.5.0"><script defer src="/ops/assets/ops.js?v=2.5.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
       <div class="logo-lockup"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -293,7 +293,6 @@ function portalPage() {
         <button class="active" data-tab="dashboard" data-title="Staff Hub Dashboard" data-subtitle="A bright, role-aware view of the tools available to your current Glace tier."><span class="nav-icon">⌂</span><span>Dashboard</span></button>
         <button data-tab="promotions" data-capability="viewPromotions" data-title="Promotion Submissions" data-subtitle="Corporate owns the submission from due diligence through verified completion."><span class="nav-icon">♛</span><span>Promotions</span></button>
         <button data-tab="cases" data-capability="viewStaffCases" data-title="Staff Actions" data-subtitle="Permanent coaching, warning, suspension, demotion, and termination records."><span class="nav-icon">◇</span><span>Staff Actions</span></button>
-        <button data-tab="watch" data-capability="viewWatchRecords" data-title="Watch Records" data-subtitle="Private monitoring records, expectations, review dates, and outcomes."><span class="nav-icon">◉</span><span>Watch Records</span></button>
         <button data-tab="restricted" data-capability="viewRestrictedRecords" data-title="Restricted Records" data-subtitle="Confidential Board-level investigations and leadership decisions."><span class="nav-icon">◆</span><span>Restricted</span></button>
         <button data-tab="documents" data-capability="viewDocuments" data-title="Documentation" data-subtitle="Policies and internal resources filtered to your access tier."><span class="nav-icon">▤</span><span>Documents</span></button>
         <button data-tab="posts" data-capability="viewPosts" data-title="Schedules & Updates" data-subtitle="Website records paired with clean Discord announcements."><span class="nav-icon">✦</span><span>Updates</span></button>
@@ -314,7 +313,7 @@ function portalPage() {
             <article id="approvalPanel" class="panel queue-panel"><div class="panel-head"><div><span class="panel-kicker">Your action center</span><h2 id="approvalPanelTitle">Items Requiring Attention</h2></div><button id="approvalOpenButton" class="panel-link" data-go="promotions">Open</button></div><div id="approvalPreview" class="activity-list"></div></article>
             <div class="panel-stack dashboard-side"><article class="panel quick-panel"><div class="panel-head"><div><span class="panel-kicker">Available to you</span><h2>Quick Actions</h2></div></div><div id="quickActions" class="quick-grid"></div></article><article class="panel access-panel"><div class="panel-head"><div><span class="panel-kicker">Your current workspace</span><h2 id="workspaceTitle">What You Can Access</h2></div></div><div id="rankOverview" class="workspace-access-list"></div></article></div>
             <article class="panel journey-panel"><div class="panel-head"><div><span class="panel-kicker">Recent Glace moments</span><h2>Staff Journey & Updates</h2></div><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list journey-grid"></div></article>
-            <article class="panel workflow-panel" data-capability="viewPromotions"><div class="panel-head"><div><span class="panel-kicker">Your promotion workspace</span><h2>Submission Workflow</h2></div></div><div class="workflow-steps"><span>1</span><p><b>Corporate completes due diligence</b> before submitting.</p><span>2</span><p><b>Corporate Board reviews</b> the completed submission.</p><span>3</span><p><b>Presidential provides final approval</b>.</p><span>4</span><p><b>The assigned Corporate member carries it out</b> and confirms completion.</p></div></article>
+            <article class="panel workflow-panel" data-capability="viewPromotions"><div class="panel-head"><div><span class="panel-kicker">Your promotion workspace</span><h2>Submission Workflow</h2></div></div><div class="workflow-steps"><span>1</span><p><b>Corporate completes due diligence</b> before submitting.</p><span>2</span><p><b>Corporate Board reviews</b> the completed submission, unless Presidential uses a documented override.</p><span>3</span><p><b>Presidential provides final approval</b> or may approve directly when an override is needed.</p><span>4</span><p><b>The assigned Corporate member carries it out</b> and confirms completion.</p></div></article>
           </div>
         </section>
 
@@ -335,13 +334,11 @@ function portalPage() {
                 <div class="full" style="display:flex;gap:9px"><button id="promotionSubmit" class="btn primary" type="submit">Submit for Board Review</button><button id="promotionReset" class="btn ghost" type="button">Reset</button></div>
               </form>
             </article>
-            <article class="list-card"><div class="toolbar"><div><h2>Promotion Queue</h2><p>Approval and completion are tracked separately.</p></div></div><div id="promotionList" class="record-list"></div></article>
+            <article class="list-card"><div class="toolbar"><div><h2>Promotion Queue</h2><p>Approval and completion are tracked separately.</p></div><span id="promotionStorageBadge" class="storage-badge"></span></div><div id="promotionList" class="record-list"></div></article>
           </div>
         </section>
 
         <section id="section-cases" class="section"><div class="workspace"><article class="form-card" data-capability="createRoutineCase"><h2>New Staff Action</h2><p>Routine actions save immediately. Serious actions remain pending until Corporate Board decides.</p><form id="caseForm" class="form-grid"><div class="field"><label>Discord ID</label><input name="targetId"></div><div class="field"><label>Username</label><input name="targetUsername" required></div><div class="field"><label>Current Rank</label><input name="targetRank" required></div><div class="field"><label>Action Type</label><select name="actionType"><option value="staff_note">Staff Note</option><option value="coaching">Coaching</option><option value="staff_warning">Staff Warning</option><option value="suspension">Suspension</option><option value="demotion">Demotion</option><option value="termination">Termination</option><option value="appeal">Appeal</option></select></div><div class="field"><label>Warning Count</label><input name="staffWarningCount" type="number" min="0"></div><div class="field"><label>Length</label><input name="length" placeholder="Example: 7 days"></div><div class="field"><label>Start Date</label><input name="startDate" type="date"></div><div class="field"><label>End Date</label><input name="endDate" type="date"></div><div class="field full"><label>Reason</label><textarea name="reason" required></textarea></div><div class="field full"><label>Evidence / Message / Trello Link</label><input name="evidence"></div><button class="btn primary full" type="submit">Save Staff Action</button></form></article><article class="list-card"><h2>Staff Action Records</h2><p>Permanent punishment and coaching history.</p><div id="caseList" class="record-list"></div></article></div></section>
-
-        <section id="section-watch" class="section"><div class="workspace"><article class="form-card" data-capability="manageWatchRecords"><h2>New Watch Record</h2><p>Watch records never post publicly in Discord.</p><form id="watchForm" class="form-grid"><div class="field"><label>Discord ID</label><input name="targetId"></div><div class="field"><label>Username</label><input name="targetUsername" required></div><div class="field full"><label>Current Rank</label><input name="targetRank" required></div><div class="field full"><label>Reason for Monitoring</label><textarea name="reason" required></textarea></div><div class="field full"><label>Expected Improvements</label><textarea name="expectations" required></textarea></div><div class="field"><label>Start Date</label><input name="startDate" type="date" required></div><div class="field"><label>Review Date</label><input name="reviewDate" type="date" required></div><button class="btn green full" type="submit">Create Watch Record</button></form></article><article class="list-card"><h2>Watch Records</h2><p>Active, improving, escalated, cleared, and archived monitoring history.</p><div id="watchList" class="record-list"></div></article></div></section>
 
         <section id="section-restricted" class="section"><div class="workspace"><article class="form-card" data-capability="manageRestrictedRecords"><h2>New Restricted Record</h2><p>For major investigations, executive complaints, severe misconduct, and do-not-rehire documentation. Access and changes are audited.</p><form id="restrictedForm" class="form-grid"><div class="field"><label>Subject Discord ID</label><input name="subjectId"></div><div class="field"><label>Subject Name</label><input name="subjectName" required></div><div class="field full"><label>Category</label><select name="category"><option>Major Investigation</option><option>Executive Complaint</option><option>Severe Misconduct</option><option>Leadership Decision</option><option>Do Not Rehire</option><option>Other Confidential</option></select></div><div class="field full"><label>Confidential Summary</label><textarea name="summary" required></textarea></div><div class="field full"><label>Evidence / Protected Links</label><textarea name="evidence"></textarea></div><button class="btn orange full" type="submit">Create Restricted Record</button></form></article><article class="list-card"><h2>Restricted Records</h2><p>Visible only to Corporate Board and Presidential access.</p><div id="restrictedList" class="record-list"></div></article></div></section>
 
@@ -380,7 +377,7 @@ function buildFeed({ posts, loas, completedPromotions }) {
 
 async function bootstrap(session) {
   const capabilities = viewerCapabilities(session.tier);
-  const allPromotions = promotionStore.list({ guildId: session.guildId, limit: 500 });
+  const allPromotions = await promotionStore.list({ guildId: session.guildId, limit: 500 });
   const documents = capabilities.viewDocuments
     ? staffOps.listDocuments({ guildId: session.guildId }).filter((doc) => session.tier >= Number(doc.visibilityTier || TIERS.MANAGEMENT))
     : [];
@@ -389,7 +386,7 @@ async function bootstrap(session) {
   const loaHistory = capabilities.viewLoas ? listLoaHistory(session.guildId, 100) : [];
   const audit = capabilities.viewAudit ? [
     ...staffOps.listAudit({ limit: 200 }),
-    ...promotionStore.listAudit({ limit: 200 }),
+    ...await promotionStore.listAudit({ limit: 200, guildId: session.guildId }),
     ...listCommandAudit({ limit: 200, guildId: session.guildId }).map((entry) => ({
       id: entry.id,
       action: `/${entry.command || 'unknown'} • ${entry.status || 'executed'}`,
@@ -415,7 +412,6 @@ async function bootstrap(session) {
     capabilityMinimums: WEBSITE_CAPABILITIES,
     promotions: capabilities.viewPromotions ? allPromotions : [],
     cases: capabilities.viewStaffCases ? staffOps.listCases({ guildId: session.guildId }) : [],
-    watchRecords: capabilities.viewWatchRecords ? staffOps.listWatchRecords({ guildId: session.guildId }) : [],
     restrictedRecords: capabilities.viewRestrictedRecords ? staffOps.listRestrictedRecords({ guildId: session.guildId }) : [],
     documents,
     posts,
@@ -423,6 +419,7 @@ async function bootstrap(session) {
     loas,
     loaHistory,
     feed: buildFeed({ posts, loas, completedPromotions: allPromotions.filter((entry) => entry.status === 'completed') }),
+    promotionStorage: promotionStore.storageMode(),
     csrf: session.csrf,
   };
 }
@@ -478,7 +475,7 @@ async function publishPromotionAnnouncement(client, entry) {
     .setFooter({ text: `Glace Hotels • ${entry.submissionNumber}` })
     .setTimestamp(new Date());
   const message = await channel.send({ content: entry.candidateId ? `<@${entry.candidateId}>` : undefined, embeds: [embed], allowedMentions: { users: entry.candidateId ? [entry.candidateId] : [] } });
-  promotionStore.setAnnouncementMessage(entry.id, message.id);
+  await promotionStore.setAnnouncementMessage(entry.id, message.id);
   return { messageId: message.id, warning: null };
 }
 
@@ -513,7 +510,7 @@ async function handlePromotionApi(req, res, url, client, method) {
     }
     const hierarchy = await canActOnWebsiteTarget(client, session, body.candidateId, { allowEqual: true });
     if (!hierarchy.ok) return sendJson(res, 403, { ok: false, error: hierarchy.error }) || true;
-    const entry = promotionStore.create({ ...body, guildId: session.guildId }, { id: session.user.id, tag: session.memberDisplayName });
+    const entry = await promotionStore.create({ ...body, guildId: session.guildId }, { id: session.user.id, tag: session.memberDisplayName });
     await sendOperationsLog(client, hierarchy.guild, {
       title: `Promotion Submission ${entry.submissionNumber}`,
       fields: [
@@ -531,7 +528,7 @@ async function handlePromotionApi(req, res, url, client, method) {
   if (!match || method !== 'PATCH') return false;
   const body = await readJsonBody(req);
   const id = decodeURIComponent(match[1]);
-  const current = promotionStore.get(id);
+  const current = await promotionStore.get(id);
   if (!current) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
 
   if (body.action === 'board_decision') {
@@ -539,7 +536,28 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     if (String(current.submittedById) === String(session.user.id)) return sendJson(res, 403, { ok: false, error: 'You cannot provide Board approval for a promotion you submitted.' }) || true;
-    const entry = promotionStore.boardDecision(id, body.decision, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const entry = await promotionStore.boardDecision(id, body.decision, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    sendJson(res, 200, { ok: true, entry });
+    return true;
+  }
+
+  if (body.action === 'presidential_override') {
+    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.approvePromotionPresidential);
+    if (!session || !requireCsrf(req, res, session)) return true;
+    if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
+    if (!String(body.reason || '').trim()) return sendJson(res, 400, { ok: false, error: 'A Presidential override reason is required for the audit record.' }) || true;
+    const entry = await promotionStore.presidentialOverride(id, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const { guild } = await resolveGuildMember(client, session.user.id);
+    await sendOperationsLog(client, guild, {
+      title: `${entry.submissionNumber} Presidential Override`,
+      fields: [
+        { name: 'Candidate', value: entry.candidateUsername || entry.candidateId },
+        { name: 'Promotion', value: `${entry.currentRank} → ${entry.proposedRank}` },
+        { name: 'Override By', value: session.memberDisplayName || session.user.username },
+        { name: 'Status', value: entry.status.replaceAll('_', ' ') },
+        { name: 'Reason', value: String(body.reason).slice(0, 1024) },
+      ],
+    });
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -548,8 +566,7 @@ async function handlePromotionApi(req, res, url, client, method) {
     const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.approvePromotionPresidential);
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
-    if (String(current.submittedById) === String(session.user.id)) return sendJson(res, 403, { ok: false, error: 'You cannot provide final approval for a promotion you submitted.' }) || true;
-    const entry = promotionStore.presidentialDecision(id, body.decision, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const entry = await promotionStore.presidentialDecision(id, body.decision, body.reason, { id: session.user.id, tag: session.memberDisplayName });
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -559,7 +576,7 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     if (!body.diligenceConfirmed) return sendJson(res, 400, { ok: false, error: 'Reconfirm due diligence before resubmitting.' }) || true;
-    const entry = promotionStore.resubmit(id, body, { id: session.user.id, tag: session.memberDisplayName });
+    const entry = await promotionStore.resubmit(id, body, { id: session.user.id, tag: session.memberDisplayName });
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -573,7 +590,7 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (!assigneeId || !assigneeTag || !String(body.reason || '').trim()) return sendJson(res, 400, { ok: false, error: 'Assignee ID, display name, and reassignment reason are required.' }) || true;
     const { member } = await resolveGuildMember(client, assigneeId);
     if (!member || getTier(member) < TIERS.CORPORATE) return sendJson(res, 400, { ok: false, error: 'The new completion owner must currently be Corporate or higher in Glace.' }) || true;
-    const entry = promotionStore.reassign(id, { id: assigneeId, tag: assigneeTag }, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const entry = await promotionStore.reassign(id, { id: assigneeId, tag: assigneeTag }, body.reason, { id: session.user.id, tag: session.memberDisplayName });
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -584,7 +601,7 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     const verification = await verifyPromotionCompletion(client, current);
     if (!verification.ok) return sendJson(res, 409, { ok: false, error: verification.error }) || true;
-    const entry = promotionStore.complete(id, verification, { id: session.user.id, tag: session.memberDisplayName });
+    const entry = await promotionStore.complete(id, verification, { id: session.user.id, tag: session.memberDisplayName });
     const announcement = await publishPromotionAnnouncement(client, entry);
     const { guild } = await resolveGuildMember(client, session.user.id);
     await sendOperationsLog(client, guild, {
@@ -643,26 +660,6 @@ async function handleApi(req, res, url, client) {
     return sendJson(res, 200, { ok: true, entry }) || true;
   }
 
-  if (url.pathname === '/ops/api/watch' && method === 'POST') {
-    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.manageWatchRecords);
-    if (!session || !requireCsrf(req, res, session)) return true;
-    const body = await readJsonBody(req);
-    if (!String(body.targetUsername || body.targetId || '').trim() || !String(body.reason || '').trim() || !String(body.expectations || '').trim()) return sendJson(res, 400, { ok: false, error: 'Target, reason, and expected improvements are required.' }) || true;
-    const hierarchy = await canActOnWebsiteTarget(client, session, body.targetId);
-    if (!hierarchy.ok) return sendJson(res, 403, { ok: false, error: hierarchy.error }) || true;
-    const entry = staffOps.createWatchRecord({ ...body, guildId: session.guildId }, { id: session.user.id, tag: session.memberDisplayName });
-    return sendJson(res, 201, { ok: true, entry }) || true;
-  }
-  const watchMatch = url.pathname.match(/^\/ops\/api\/watch\/([^/]+)$/);
-  if (watchMatch && method === 'PATCH') {
-    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.manageWatchRecords);
-    if (!session || !requireCsrf(req, res, session)) return true;
-    const body = await readJsonBody(req);
-    const current = staffOps.getWatchRecord(decodeURIComponent(watchMatch[1]), session.guildId);
-    if (!current) return sendJson(res, 404, { ok: false, error: 'Watch record not found.' }) || true;
-    const entry = staffOps.updateWatchRecord(current.id, body, { id: session.user.id, tag: session.memberDisplayName });
-    return sendJson(res, 200, { ok: true, entry }) || true;
-  }
 
   if (url.pathname === '/ops/api/restricted' && method === 'POST') {
     const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.manageRestrictedRecords);

@@ -125,8 +125,6 @@ const WEBSITE_CAPABILITIES = Object.freeze({
   submitPromotion: TIERS.CORPORATE,
   completePromotion: TIERS.CORPORATE,
   createRoutineCase: TIERS.CORPORATE,
-  viewWatchRecords: TIERS.CORPORATE,
-  manageWatchRecords: TIERS.CORPORATE,
   publishSchedule: TIERS.CORPORATE,
   publishUpdate: TIERS.CORPORATE,
   manageDocuments: TIERS.CORPORATE,
