@@ -1,6 +1,6 @@
 'use strict';
 
-const state = { data: null, csrf: null, activeTab: 'dashboard', decision: null, promotionMode: 'create', previewTier: null, viewCapabilities: null };
+const state = { data: null, csrf: null, activeTab: 'dashboard', decision: null, promotionMode: 'create', staffRequestResubmit: null, previewTier: null, viewCapabilities: null, initialTab: new URLSearchParams(location.search).get('tab') };
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
@@ -213,9 +213,17 @@ function renderDashboard() {
   const pendingPromotions = d.promotions.filter((x) => ['board_review', 'presidential_review', 'returned_to_corporate'].includes(x.status)).length;
   const awaitingCompletion = d.promotions.filter((x) => x.status === 'approved_awaiting_completion').length;
   const openCases = d.cases.filter((x) => !['closed', 'denied', 'reversed'].includes(x.status)).length;
+  const myPendingRequests = (d.staffRequests || []).filter((x) => String(x.requesterId) === String(d.viewer.id) && x.status.startsWith('pending_')).length;
+  const requestQueue = effectiveTier() >= 8
+    ? (d.staffRequests || []).filter((x) => x.status === 'pending_presidential')
+    : effectiveTier() >= 6
+      ? (d.staffRequests || []).filter((x) => x.status === 'pending_corporate')
+      : [];
 
   const stats = [];
-  if (capabilities.viewPosts) stats.push(['Staff Updates', d.posts.length, `${d.feed.length} recent Staff Journey items`, 'role-intern', '✦']);
+  if (capabilities.viewPosts) stats.push(['Staff Updates', d.posts.length, `${d.feed.length} recent staff items`, 'role-intern', '✦']);
+  if (capabilities.viewStaffRequests) stats.push(['My Requests', myPendingRequests, `${requestQueue.length} routed to your review level`, 'role-board', '✉']);
+  if (capabilities.viewActivity) stats.push(['Current Activity', d.activity?.self?.current?.source?.total || 0, d.activity?.self?.current?.met ? 'Current quota met' : 'Current quota in progress', 'role-management', '◫']);
   if (capabilities.viewLoas) stats.push(['Current LOAs', d.loas.length, `${d.loaHistory.length} recent ended records`, 'role-senior', '◔']);
   if (capabilities.viewDocuments) stats.push(['Documents', d.documents.length, 'Resources available to your role', 'role-management', '▤']);
   if (capabilities.viewStaffCases) stats.push(['Staff Actions', openCases, `${d.cases.filter((x) => x.status === 'pending_approval').length} awaiting review`, 'role-management', '◇']);
@@ -233,11 +241,12 @@ function renderDashboard() {
       <div class="activity-icon ${roleClass(entry.tier || 3)}">${escapeHtml(entry.icon || '★')}</div>
       <div class="activity-copy"><strong>${escapeHtml(entry.title)}</strong><span>${escapeHtml(entry.detail || '')}</span></div>
       <span class="activity-time">${escapeHtml(relativeTime(entry.createdAt))}</span>
-    </div>`).join('') : '<div class="empty-state"><strong>No recent updates</strong>Your available Staff Journey and update activity will appear here.</div>';
+    </div>`).join('') : '<div class="empty-state"><strong>No recent updates</strong>Your available staff updates and LOA activity will appear here.</div>';
 
   const canViewPromotions = Boolean(capabilities.viewPromotions);
   const canViewCases = Boolean(capabilities.viewStaffCases);
-  const canViewQueue = canViewPromotions || canViewCases;
+  const canReviewRequests = requestQueue.length > 0 || Boolean(capabilities.reviewStaffRequestsCorporate || capabilities.reviewStaffRequestsPresidential);
+  const canViewQueue = canViewPromotions || canViewCases || canReviewRequests;
   const approvalPanel = $('#approvalPanel');
   const dashboardPanels = $('.dashboard-panels');
   if (approvalPanel) approvalPanel.hidden = !canViewQueue;
@@ -245,12 +254,13 @@ function renderDashboard() {
 
   const approvalTitle = $('#approvalPanelTitle');
   const approvalOpenButton = $('#approvalOpenButton');
-  if (approvalTitle) approvalTitle.textContent = canViewPromotions && canViewCases
+  if (approvalTitle) approvalTitle.textContent = [canViewPromotions, canViewCases, canReviewRequests].filter(Boolean).length > 1
     ? 'Approval & Completion Queue'
-    : canViewPromotions ? 'Promotion Queue' : 'Staff Action Queue';
+    : canViewPromotions ? 'Promotion Queue' : canViewCases ? 'Staff Action Queue' : 'Staff Request Queue';
   if (approvalOpenButton) {
-    approvalOpenButton.dataset.go = canViewPromotions ? 'promotions' : 'cases';
-    approvalOpenButton.textContent = canViewPromotions ? 'Open promotions' : 'Open staff actions';
+    const destination = canViewPromotions ? 'promotions' : canViewCases ? 'cases' : 'requests';
+    approvalOpenButton.dataset.go = destination;
+    approvalOpenButton.textContent = destination === 'promotions' ? 'Open promotions' : destination === 'cases' ? 'Open staff actions' : 'Open requests';
   }
 
   const approvals = [
@@ -267,7 +277,14 @@ function renderDashboard() {
       tier: effectiveTier(),
       tab: 'cases',
     })) : []),
-  ].slice(0, 7);
+    ...requestQueue.map((x) => ({
+      title: `${x.requestNumber}: ${x.requesterTag || x.requesterId}`,
+      meta: `${requestTypeLabel(x.type)} • ${prettify(x.status)}`,
+      tier: x.requesterTier,
+      tab: 'requests',
+      staffRequest: x,
+    })),
+  ].slice(0, 9);
   const approvalPreview = $('#approvalPreview');
   if (approvalPreview && canViewQueue) approvalPreview.innerHTML = approvals.length ? approvals.map((item) => `
     <div class="dashboard-queue-item">
@@ -276,11 +293,14 @@ function renderDashboard() {
         <div class="activity-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.meta)}</span></div>
         <span class="tiny-chip ${roleClass(item.tier)}">Open</span>
       </button>
-      ${item.promotion ? `<div class="dashboard-queue-actions">${promotionActions(item.promotion)}</div>` : ''}
+      ${item.promotion ? `<div class="dashboard-queue-actions">${promotionActions(item.promotion)}</div>` : item.staffRequest ? `<div class="dashboard-queue-actions">${staffRequestActions(item.staffRequest)}</div>` : ''}
     </div>`).join('') : '<div class="empty-state"><strong>You are all caught up</strong>No items are waiting in the queues available to your role.</div>';
 
   const availableTools = [
     ['⌂', 'Dashboard', true],
+    ['✉', 'Staff Request Center', capabilities.viewStaffRequests],
+    ['◫', 'LI+ Activity', capabilities.viewActivity],
+    ['♚', 'Staff List', capabilities.viewStaffDirectory],
     ['★', 'Staff Updates', capabilities.viewPosts],
     ['◔', 'Leave of Absence', capabilities.viewLoas],
     ['▤', 'Documentation', capabilities.viewDocuments],
@@ -301,6 +321,9 @@ function renderDashboard() {
 
   const quickActions = $('#quickActions');
   if (quickActions) quickActions.innerHTML = [
+    ['requests', 'submitStaffRequest', '✉', 'Submit Request'],
+    ['activity', 'viewActivity', '◫', 'View Activity'],
+    ['staff', 'viewStaffDirectory', '♚', 'Staff List'],
     ['promotions', 'submitPromotion', '♛', 'Submit Promotion'],
     ['cases', 'createRoutineCase', '◇', 'Staff Action'],
     ['restricted', 'manageRestrictedRecords', '◆', 'Restricted Record'],
@@ -380,6 +403,136 @@ function renderPromotions() {
   }).join('') : '<div class="empty-state"><strong>No promotion submissions</strong>Corporate submissions will appear here after due diligence is completed.</div>';
 }
 
+
+function requestTypeLabel(type) {
+  return type === 'timezone_change' ? 'Timezone Change' : 'Leave of Absence';
+}
+
+function requestDetails(item) {
+  const data = item.requestData || {};
+  if (item.type === 'timezone_change') {
+    return `<div class="record-details"><span>Current: ${escapeHtml(data.currentTimezone || 'Not provided')}</span><span>Requested: ${escapeHtml(data.requestedTimezone || 'Not provided')}</span></div><div class="record-body"><strong>Reason</strong>\n${escapeHtml(data.reason || 'Not provided')}</div>`;
+  }
+  return `<div class="record-details"><span>Starts: ${escapeHtml(data.startDate || 'Not provided')} (Monday)</span><span>Ends: ${escapeHtml(data.endDate || 'Not provided')} (Sunday)</span><span>Reason: ${escapeHtml(data.reason || 'Not provided')}</span></div>${data.details ? `<div class="record-body"><strong>Additional details</strong>\n${escapeHtml(data.details)}</div>` : ''}`;
+}
+
+function staffRequestActions(item) {
+  if (isPreviewing()) return '<span class="preview-lock-note">Preview only</span>';
+  const c = currentCapabilities();
+  const actions = [];
+  const canReview = (item.status === 'pending_corporate' && c.reviewStaffRequestsCorporate)
+    || (item.status === 'pending_presidential' && c.reviewStaffRequestsPresidential);
+  if (canReview) {
+    actions.push(`<button class="btn small green" data-staff-request-action="approve" data-id="${escapeHtml(item.id)}">Approve</button>`);
+    actions.push(`<button class="btn small ghost" data-staff-request-action="return" data-id="${escapeHtml(item.id)}">Return</button>`);
+    actions.push(`<button class="btn small danger" data-staff-request-action="deny" data-id="${escapeHtml(item.id)}">Deny</button>`);
+  }
+  if (item.status === 'returned' && String(item.requesterId) === String(state.data.viewer.id)) {
+    actions.push(`<button class="btn small primary" data-staff-request-resubmit="${escapeHtml(item.id)}">Revise & Resubmit</button>`);
+  }
+  return actions.join('');
+}
+
+function staffRequestCard(item) {
+  return `<article class="record-card" id="request-${escapeHtml(item.id)}">
+    <div class="record-head"><div class="record-title"><h3>${escapeHtml(item.requestNumber)} — ${escapeHtml(requestTypeLabel(item.type))}</h3><div class="meta">${escapeHtml(item.requesterTag || item.requesterId)} • ${escapeHtml(item.requesterTierLabel || roleName(item.requesterTier))} • ${formatDate(item.submittedAt || item.createdAt)}</div></div>${statusChip(item.status)}</div>
+    ${requestDetails(item)}
+    ${item.decisionNote ? `<div class="record-body"><strong>Decision note</strong>\n${escapeHtml(item.decisionNote)}</div>` : ''}
+    <div class="record-details"><span>Review route: ${item.status === 'pending_presidential' ? 'Presidential' : item.status === 'pending_corporate' ? 'Corporate+' : 'Completed review'}</span>${item.reviewedByTag ? `<span>Reviewed by ${escapeHtml(item.reviewedByTag)}</span>` : ''}</div>
+    <div class="record-actions">${staffRequestActions(item)}</div>
+  </article>`;
+}
+
+function renderStaffRequests() {
+  const all = state.data.staffRequests || [];
+  const mine = all.filter((item) => String(item.requesterId) === String(state.data.viewer.id));
+  const review = effectiveTier() >= 8
+    ? all.filter((item) => item.status === 'pending_presidential')
+    : effectiveTier() >= 6
+      ? all.filter((item) => item.status === 'pending_corporate')
+      : [];
+  const badge = $('#requestStorageBadge');
+  if (badge) {
+    const permanent = state.data.requestStorage === 'supabase';
+    badge.textContent = permanent ? 'Permanent Supabase storage' : 'Temporary local storage';
+    badge.classList.toggle('ready', permanent);
+    badge.classList.toggle('warning', !permanent);
+  }
+  const reviewPanel = $('#staffRequestReviewPanel');
+  const canReview = Boolean(currentCapabilities().reviewStaffRequestsCorporate || currentCapabilities().reviewStaffRequestsPresidential);
+  if (reviewPanel) reviewPanel.hidden = !canReview;
+  const reviewList = $('#staffRequestReviewList');
+  if (reviewList && canReview) reviewList.innerHTML = review.length ? review.map(staffRequestCard).join('') : '<div class="empty-state"><strong>No requests waiting</strong>There are no requests routed to your review level.</div>';
+  const myList = $('#myRequestList');
+  if (myList) myList.innerHTML = mine.length ? mine.map(staffRequestCard).join('') : '<div class="empty-state"><strong>No requests submitted</strong>Your LOA and timezone requests will appear here.</div>';
+}
+
+function activityMetric(label, value, note = '') {
+  return `<article class="activity-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>${note ? `<small>${escapeHtml(note)}</small>` : ''}</article>`;
+}
+
+function renderActivity() {
+  const self = state.data.activity?.self;
+  const summary = $('#myActivitySummary');
+  const breakdown = $('#activityBreakdown');
+  const directory = $('#activityDirectory');
+  if (!self) {
+    if (summary) summary.innerHTML = '<div class="empty-state"><strong>Activity profile unavailable</strong>Your current Discord rank does not match an activity quota profile.</div>';
+    if (breakdown) breakdown.innerHTML = '';
+    if (directory) directory.innerHTML = '';
+    return;
+  }
+  const current = self.current || {};
+  const last = self.last || {};
+  if (summary) summary.innerHTML = [
+    activityMetric('Current total', current.source?.total || 0, current.rangeLabel || ''),
+    activityMetric('Quota status', current.met ? 'Met' : 'In progress', self.quotaProfile?.label || ''),
+    activityMetric('Last week', last.source?.total || 0, last.met ? 'Quota met' : 'Quota not met'),
+  ].join('');
+  const src = current.source || {};
+  const metrics = [
+    ['Interviews', src.interview || 0], ['Trainings', src.training || 0], ['Mass shifts', src.shift || 0],
+    ['Hosted', src.hostedTotal || 0], ['Co-hosted', src.cohostTotal || 0], ['Overseer', src.overseerTotal || 0],
+  ];
+  if (breakdown) breakdown.innerHTML = metrics.map(([label, value]) => activityMetric(label, value)).join('');
+  if (directory) {
+    const rows = state.data.activity?.directory || [];
+    directory.innerHTML = rows.length ? rows.map((item) => `<article class="record-card activity-directory-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.displayName || item.username)}</h3><div class="meta">${escapeHtml(item.tierLabel)} • ${escapeHtml(item.quotaProfile?.label || 'Activity profile')}</div></div><span class="status-chip ${item.current?.met ? 'status-approved' : 'status-pending_corporate'}">${item.current?.met ? 'Quota Met' : 'In Progress'}</span></div><div class="record-details"><span>Total: ${escapeHtml(item.current?.source?.total || 0)}</span><span>Interview: ${escapeHtml(item.current?.source?.interview || 0)}</span><span>Training: ${escapeHtml(item.current?.source?.training || 0)}</span><span>Shift: ${escapeHtml(item.current?.source?.shift || 0)}</span></div></article>`).join('') : '<div class="empty-state"><strong>No tracked LI+ activity</strong>Activity appears after the bot can read the configured Discord session logs.</div>';
+  }
+}
+
+function renderStaffDirectory() {
+  const directory = state.data.staffDirectory || { configured: false, members: [] };
+  const status = $('#staffDirectoryStatus');
+  const list = $('#staffDirectory');
+  if (!directory.configured) {
+    if (status) status.innerHTML = '<strong>Roblox group not connected.</strong> Add ROBLOX_GROUP_ID in Render to load the community staff list.';
+    if (list) list.innerHTML = '';
+    return;
+  }
+  if (directory.error) {
+    if (status) status.innerHTML = `<strong>Staff list could not load.</strong> ${escapeHtml(directory.error)}`;
+    if (list) list.innerHTML = '';
+    return;
+  }
+  if (status) status.innerHTML = `<strong>${escapeHtml((directory.members || []).length)} current Intern+ staff</strong> synced from Roblox community ${escapeHtml(directory.groupId || '')}.`;
+  if (list) list.innerHTML = (directory.members || []).length ? directory.members.map((item) => `<article class="staff-directory-card ${roleClass(item.tier)}"><div class="staff-directory-badge">${item.tier === 8 ? '♛' : '★'}</div><div><h3>${escapeHtml(item.robloxDisplayName || item.robloxUsername)}</h3><p>@${escapeHtml(item.robloxUsername)} • ${escapeHtml(item.rankName)}</p><span>${escapeHtml(item.tierLabel)}${item.linked ? ` • Discord: ${escapeHtml(item.discordDisplayName || item.discordUserId)}` : ' • Discord not matched'}</span>${item.timezone ? `<small>Timezone: ${escapeHtml(item.timezone)}</small>` : ''}</div></article>`).join('') : '<div class="empty-state"><strong>No Intern+ Roblox members found</strong>Check the group rank names and ROBLOX_GROUP_ID.</div>';
+}
+
+function loadReturnedStaffRequest(id) {
+  const item = (state.data.staffRequests || []).find((entry) => entry.id === id);
+  if (!item || item.status !== 'returned') return;
+  state.staffRequestResubmit = { id: item.id, type: item.type };
+  const data = item.requestData || {};
+  const form = item.type === 'loa' ? $('#loaRequestForm') : $('#timezoneRequestForm');
+  if (!form) return;
+  Object.entries(data).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; });
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) submit.textContent = `Resubmit ${item.requestNumber}`;
+  showTab('requests');
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function renderCases() {
   const c = currentCapabilities();
   $('#caseList').innerHTML = state.data.cases.length ? state.data.cases.map((item) => {
@@ -422,6 +575,9 @@ function renderAll() {
   renderViewer();
   const capabilities = currentCapabilities();
   renderDashboard();
+  if (capabilities.viewStaffRequests) renderStaffRequests();
+  if (capabilities.viewActivity) renderActivity();
+  if (capabilities.viewStaffDirectory) renderStaffDirectory();
   if (capabilities.viewPromotions) renderPromotions();
   if (capabilities.viewStaffCases) renderCases();
   if (capabilities.viewRestrictedRecords) renderRestricted();
@@ -429,7 +585,8 @@ function renderAll() {
   if (capabilities.viewPosts) renderPosts();
   if (capabilities.viewLoas) renderLoas();
   if (capabilities.viewAudit) renderAudit();
-  showTab(location.hash.slice(1) || state.activeTab);
+  showTab(state.initialTab || location.hash.slice(1) || state.activeTab);
+  state.initialTab = null;
   applyPreviewLock();
 }
 
@@ -470,6 +627,8 @@ async function submitDecision() {
         ? { action, reason }
         : { action, decision: config.action, reason };
       await api(`/ops/api/promotions/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+    } else if (config.kind === 'staffRequest') {
+      await api(`/ops/api/staff-requests/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify({ action: config.action, note: reason }) });
     } else if (config.kind === 'case') {
       await api(`/ops/api/cases/${encodeURIComponent(config.id)}`, { method: 'PATCH', body: JSON.stringify({ status: config.action, decisionReason: reason }) });
     } else if (config.kind === 'restricted') {
@@ -512,7 +671,7 @@ async function completePromotion(id) {
   try {
     const result = await api(`/ops/api/promotions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'complete' }) });
     await refresh();
-    notify(result.warning || 'Promotion verified, completed, and archived in Staff Journey.');
+    notify(result.warning || 'Promotion verified and completed. Staff Journey announcements remain manual.');
   } catch (error) { notify(error.message, 'error'); }
 }
 
@@ -545,7 +704,7 @@ function bindEvents() {
     notify('Returned to your real Presidential access.');
   });
   document.addEventListener('click', async (event) => {
-    const mutationTarget = event.target.closest('[data-promotion-action], [data-promotion-edit], [data-promotion-complete], [data-promotion-reassign], [data-case-action], [data-restricted-update]');
+    const mutationTarget = event.target.closest('[data-promotion-action], [data-promotion-edit], [data-promotion-complete], [data-promotion-reassign], [data-staff-request-action], [data-staff-request-resubmit], [data-case-action], [data-restricted-update]');
     if (mutationTarget && isPreviewing()) {
       event.preventDefault();
       notify('Exit Preview mode before changing records.', 'error');
@@ -557,17 +716,24 @@ function bindEvents() {
     const promoAction = event.target.closest('[data-promotion-action]');
     if (promoAction) {
       const [stage, action] = promoAction.dataset.promotionAction.split(':');
-      const isOverride = action === 'override';
-      openDecision({
-        kind: 'promotion',
-        stage,
-        action,
-        id: promoAction.dataset.id,
-        title: isOverride ? 'Presidential Approval Override' : `${prettify(stage)}: ${prettify(action)} Promotion`,
-        copy: isOverride
-          ? 'This skips Corporate Board review and records your Presidential approval immediately. Explain why the override is appropriate.'
-          : (action === 'approve' ? 'Record any approval note. A short note is still required for accountability.' : 'Explain why this submission is being returned or denied.'),
-      });
+      const id = promoAction.dataset.id;
+      if (action === 'approve') {
+        try {
+          const payload = { action: stage === 'board' ? 'board_decision' : 'presidential_decision', decision: 'approve', reason: '' };
+          await api(`/ops/api/promotions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+          await refresh();
+          notify(`${stage === 'board' ? 'Board' : 'Presidential'} approval recorded.`);
+        } catch (error) { notify(error.message, 'error'); }
+      } else {
+        const isOverride = action === 'override';
+        openDecision({
+          kind: 'promotion', stage, action, id,
+          title: isOverride ? 'Presidential Approval Override' : `${prettify(stage)}: ${prettify(action)} Promotion`,
+          copy: isOverride
+            ? 'This skips Corporate Board review and records your Presidential approval immediately. Explain why the override is appropriate.'
+            : 'Explain why this submission is being returned or denied.',
+        });
+      }
     }
     const promoEdit = event.target.closest('[data-promotion-edit]');
     if (promoEdit) editPromotion(promoEdit.dataset.promotionEdit);
@@ -575,6 +741,27 @@ function bindEvents() {
     if (promoComplete) completePromotion(promoComplete.dataset.promotionComplete);
     const promoReassign = event.target.closest('[data-promotion-reassign]');
     if (promoReassign) openReassign(promoReassign.dataset.promotionReassign);
+
+    const staffRequestAction = event.target.closest('[data-staff-request-action]');
+    if (staffRequestAction) {
+      const action = staffRequestAction.dataset.staffRequestAction;
+      const id = staffRequestAction.dataset.id;
+      if (action === 'approve') {
+        try {
+          await api(`/ops/api/staff-requests/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'approve', note: '' }) });
+          await refresh();
+          notify('Staff request approved and applied.');
+        } catch (error) { notify(error.message, 'error'); }
+      } else {
+        openDecision({
+          kind: 'staffRequest', id, action,
+          title: `${prettify(action)} Staff Request`,
+          copy: 'Explain why this request is being returned or denied.',
+        });
+      }
+    }
+    const staffRequestResubmit = event.target.closest('[data-staff-request-resubmit]');
+    if (staffRequestResubmit) loadReturnedStaffRequest(staffRequestResubmit.dataset.staffRequestResubmit);
 
     const caseAction = event.target.closest('[data-case-action]');
     if (caseAction) openDecision({ kind: 'case', id: caseAction.dataset.id, action: caseAction.dataset.caseAction, title: `${prettify(caseAction.dataset.caseAction)} Staff Action` });
@@ -603,10 +790,58 @@ function bindEvents() {
       }
       resetPromotionForm();
       await refresh();
-      notify('Promotion submission saved. Board and Presidential reviewers can act from the queue.');
+      notify('Promotion submitted and routed to the correct Discord approval channel.');
     } catch (error) { notify(error.message, 'error'); }
   });
   $('#promotionReset')?.addEventListener('click', resetPromotionForm);
+
+  $('#loaRequestForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (blockPreviewSubmit(event)) return;
+    const requestData = formDataObject(event.currentTarget);
+    try {
+      if (state.staffRequestResubmit?.type === 'loa') {
+        await api(`/ops/api/staff-requests/${encodeURIComponent(state.staffRequestResubmit.id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'resubmit', requestData }) });
+      } else {
+        await api('/ops/api/staff-requests', { method: 'POST', body: JSON.stringify({ type: 'loa', requestData }) });
+      }
+      state.staffRequestResubmit = null;
+      event.currentTarget.reset();
+      event.currentTarget.querySelector('button[type="submit"]').textContent = 'Submit LOA Request';
+      await refresh();
+      notify('LOA request submitted and routed to the correct review channel.');
+    } catch (error) { notify(error.message, 'error'); }
+  });
+  $('#timezoneRequestForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (blockPreviewSubmit(event)) return;
+    const requestData = formDataObject(event.currentTarget);
+    try {
+      if (state.staffRequestResubmit?.type === 'timezone_change') {
+        await api(`/ops/api/staff-requests/${encodeURIComponent(state.staffRequestResubmit.id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'resubmit', requestData }) });
+      } else {
+        await api('/ops/api/staff-requests', { method: 'POST', body: JSON.stringify({ type: 'timezone_change', requestData }) });
+      }
+      state.staffRequestResubmit = null;
+      event.currentTarget.reset();
+      event.currentTarget.querySelector('button[type="submit"]').textContent = 'Submit Timezone Request';
+      await refresh();
+      notify('Timezone request submitted and routed to the correct review channel.');
+    } catch (error) { notify(error.message, 'error'); }
+  });
+  $('#postRequestPanel')?.addEventListener('click', async () => {
+    if (isPreviewing()) return notify('Exit Preview mode before posting the Discord panel.', 'error');
+    try { await api('/ops/api/staff-requests/panel', { method: 'POST', body: JSON.stringify({}) }); notify('The staff request panel was posted in Discord.'); }
+    catch (error) { notify(error.message, 'error'); }
+  });
+  $('#refreshStaffDirectory')?.addEventListener('click', async () => {
+    try {
+      const result = await api('/ops/api/staff-directory/refresh', { method: 'POST', body: JSON.stringify({}) });
+      state.data.staffDirectory = result.directory;
+      renderStaffDirectory();
+      notify('Roblox staff list refreshed.');
+    } catch (error) { notify(error.message, 'error'); }
+  });
 
   $('#caseForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();

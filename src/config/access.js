@@ -116,6 +116,10 @@ const WEBSITE_CAPABILITIES = Object.freeze({
   viewDashboard: TIERS.INTERN,
   viewPosts: TIERS.INTERN,
   viewLoas: TIERS.INTERN,
+  viewStaffRequests: TIERS.INTERN,
+  submitStaffRequest: TIERS.INTERN,
+  viewActivity: TIERS.INTERN,
+  viewStaffDirectory: TIERS.INTERN,
   viewDocuments: TIERS.MANAGEMENT,
   viewStaffCases: TIERS.SENIOR_MANAGEMENT,
   createNotes: TIERS.SENIOR_MANAGEMENT,
@@ -127,6 +131,8 @@ const WEBSITE_CAPABILITIES = Object.freeze({
   createRoutineCase: TIERS.CORPORATE,
   publishSchedule: TIERS.CORPORATE,
   publishUpdate: TIERS.CORPORATE,
+  reviewStaffRequestsCorporate: TIERS.CORPORATE,
+  viewAllActivity: TIERS.CORPORATE,
   manageDocuments: TIERS.CORPORATE,
 
   // Corporate Board is the approval and restricted-record layer.
@@ -139,6 +145,8 @@ const WEBSITE_CAPABILITIES = Object.freeze({
   // Presidential provides the final promotion decision and system control.
   approvePromotionPresidential: TIERS.PRESIDENTIAL,
   manageConfiguration: TIERS.PRESIDENTIAL,
+  reviewStaffRequestsPresidential: TIERS.PRESIDENTIAL,
+  postStaffRequestPanel: TIERS.PRESIDENTIAL,
 });
 
 module.exports = {

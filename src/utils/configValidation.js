@@ -69,10 +69,21 @@ function getConfigurationReport() {
   if (!hasSessionLog) sessionMissing.push('SESSION_LOG_CHANNEL_ID or SESSION_ATTENDEES_CHANNEL_ID');
   report.sessionChannels = makeState(sessionMissing);
 
-  report.portalStaffJourney = makeState(
-    has('STAFF_JOURNEY_CHANNEL_ID') || has('STAFF_UPDATES_CHANNEL_ID') || has('STAFF_POSTS_CHANNEL_ID')
-      ? []
-      : ['STAFF_JOURNEY_CHANNEL_ID or STAFF_UPDATES_CHANNEL_ID'],
+  report.staffRequestDatabase = report.promotionDatabase;
+
+  report.staffRequestChannels = makeState([
+    ...(!has('STAFF_REQUEST_PANEL_CHANNEL_ID') ? ['STAFF_REQUEST_PANEL_CHANNEL_ID'] : []),
+    ...(!(has('STAFF_REQUEST_CORPORATE_REVIEW_CHANNEL_ID') || has('CORPORATE_REQUEST_REVIEW_CHANNEL_ID')) ? ['STAFF_REQUEST_CORPORATE_REVIEW_CHANNEL_ID'] : []),
+    ...(!(has('STAFF_REQUEST_PRESIDENTIAL_REVIEW_CHANNEL_ID') || has('PRESIDENTIAL_REQUEST_REVIEW_CHANNEL_ID')) ? ['STAFF_REQUEST_PRESIDENTIAL_REVIEW_CHANNEL_ID'] : []),
+  ]);
+
+  report.promotionReviewChannels = makeState([
+    ...(!(has('PROMOTION_BOARD_REVIEW_CHANNEL_ID') || has('CORPORATE_BOARD_PROMOTION_CHANNEL_ID')) ? ['PROMOTION_BOARD_REVIEW_CHANNEL_ID'] : []),
+    ...(!(has('PROMOTION_PRESIDENTIAL_REVIEW_CHANNEL_ID') || has('PRESIDENTIAL_PROMOTION_REVIEW_CHANNEL_ID')) ? ['PROMOTION_PRESIDENTIAL_REVIEW_CHANNEL_ID'] : []),
+  ]);
+
+  report.robloxStaffDirectory = makeState(
+    has('ROBLOX_GROUP_ID') || has('ROBLOX_COMMUNITY_ID') ? [] : ['ROBLOX_GROUP_ID'],
   );
 
   return report;

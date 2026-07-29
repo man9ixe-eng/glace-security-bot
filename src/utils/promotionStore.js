@@ -5,7 +5,7 @@ const { resolveDataPath, readJsonFile, atomicWriteJson } = require('./dataPaths'
 const { TIERS } = require('../config/access');
 
 const STORE_PATH = resolveDataPath('promotionSubmissions.json', process.env.PROMOTION_STORE_PATH);
-const EMPTY = { schemaVersion: 2, counters: {}, submissions: [], audit: [] };
+const EMPTY = { schemaVersion: 3, counters: {}, submissions: [], audit: [] };
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim();
 const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_KEY);
@@ -25,7 +25,7 @@ function completionDeadline() {
 function readLocal() {
   const raw = readJsonFile(STORE_PATH, EMPTY);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     counters: raw?.counters && typeof raw.counters === 'object' ? raw.counters : {},
     submissions: Array.isArray(raw?.submissions) ? raw.submissions : [],
     audit: Array.isArray(raw?.audit) ? raw.audit : [],
@@ -195,7 +195,7 @@ async function create(input, actor) {
     reason: clean(input.reason, 5000), evidence: clean(input.evidence, 5000),
     strengths: clean(input.strengths, 3000), concerns: clean(input.concerns, 3000),
     diligenceConfirmed: Boolean(input.diligenceConfirmed),
-    status: 'board_review',
+    status: ['board_review', 'presidential_review'].includes(String(input.initialStatus)) ? String(input.initialStatus) : 'board_review',
     submittedById: a.id, submittedByTag: a.tag, assignedCompletionId: a.id, assignedCompletionTag: a.tag,
     submittedAt: when, createdAt: when, updatedAt: when,
     boardDecision: null, boardDecisionById: null, boardDecisionByTag: null, boardDecisionReason: null, boardDecidedAt: null,
@@ -205,6 +205,11 @@ async function create(input, actor) {
     completedById: null, completedByTag: null, completedAt: null,
     discordVerified: false, verifiedTier: null, announcementMessageId: null,
     returnStage: null,
+    boardAutoSkipped: Boolean(input.boardAutoSkipped),
+    boardAutoSkipReason: clean(input.boardAutoSkipReason, 1000) || null,
+    boardReviewChannelId: null, boardReviewMessageId: null,
+    presidentialReviewChannelId: null, presidentialReviewMessageId: null,
+    approvalLogMessageId: null,
   };
   if (USE_SUPABASE) {
     await insertRemoteEntry(entry);
@@ -329,6 +334,23 @@ async function complete(submissionId, verification, actor) {
   }, (entry) => ({ verifiedTier: entry.verifiedTier }));
 }
 
+
+async function setDiscordRouting(submissionId, changes = {}) {
+  const safe = {
+    boardReviewChannelId: clean(changes.boardReviewChannelId, 40),
+    boardReviewMessageId: clean(changes.boardReviewMessageId, 40),
+    presidentialReviewChannelId: clean(changes.presidentialReviewChannelId, 40),
+    presidentialReviewMessageId: clean(changes.presidentialReviewMessageId, 40),
+    approvalLogMessageId: clean(changes.approvalLogMessageId, 40),
+  };
+  return mutate(submissionId, { id: 'system', tag: 'Glace Promotion Router' }, 'promotion_discord_routing_updated', (entry) => {
+    for (const [key, value] of Object.entries(safe)) {
+      if (value) entry[key] = value;
+    }
+    entry.updatedAt = nowIso();
+  }, () => safe);
+}
+
 async function setAnnouncementMessage(submissionId, messageId) {
   return mutate(submissionId, { id: 'system', tag: 'Glace Portal' }, 'promotion_announcement_linked', (entry) => {
     entry.announcementMessageId = clean(messageId, 40); entry.updatedAt = nowIso();
@@ -363,6 +385,7 @@ module.exports = {
   reassign,
   complete,
   setAnnouncementMessage,
+  setDiscordRouting,
   listAudit,
   storageMode,
   isSupabaseEnabled,

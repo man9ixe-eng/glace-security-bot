@@ -19,6 +19,8 @@ const { enforceCommandAccess, denyAccess } = require('./utils/commandAccess');
 const { auditCommand } = require('./utils/operationsAudit');
 const { getConfigurationReport, logConfigurationReport } = require('./utils/configValidation');
 const { handleOpsWebRequest } = require('./web/opsPortal');
+const { handleStaffRequestInteraction } = require('./utils/staffRequestSystem');
+const { handlePromotionInteraction } = require('./utils/promotionDiscord');
 
 let banAppeals = null;
 try {
@@ -223,6 +225,9 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (banAppeals?.handleBanAppealInteraction && await banAppeals.handleBanAppealInteraction(interaction)) return;
+
+    if ((interaction.isButton() || interaction.isModalSubmit()) && await handleStaffRequestInteraction(interaction)) return;
+    if ((interaction.isButton() || interaction.isModalSubmit()) && await handlePromotionInteraction(interaction)) return;
 
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
       const id = interaction.customId || '';

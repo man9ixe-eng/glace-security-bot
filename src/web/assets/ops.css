@@ -1689,3 +1689,103 @@ body::before {
 }
 .storage-badge.ready { color: #0b6f46; background: #e8fff4; border: 1px solid #9de2c3; }
 .storage-badge.warning { color: #9a5200; background: #fff4dc; border: 1px solid #efcd8f; }
+
+/* =========================================================
+   V2.6 — STAFF REQUESTS, ACTIVITY & ROBLOX DIRECTORY
+   ========================================================= */
+.request-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  margin-bottom:18px;
+  padding:24px 26px;
+  background:linear-gradient(120deg,#fff,#fff7e8 56%,#eef6ff);
+}
+.request-header p { max-width:760px;margin:7px 0 0;color:#65758b;line-height:1.55; }
+.request-workspace { align-items:start; }
+.request-workspace .form-card { min-width:0; }
+
+.activity-summary-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px;
+  margin-bottom:18px;
+}
+.activity-breakdown {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:13px;
+  margin-top:16px;
+}
+.activity-metric {
+  min-width:0;
+  padding:20px;
+  border:1px solid rgba(189,122,8,.15);
+  border-radius:20px;
+  background:linear-gradient(145deg,#fff,#fff9ef);
+  box-shadow:0 10px 23px rgba(91,68,38,.06);
+}
+.activity-metric span { display:block;color:#6a7890;font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.04em; }
+.activity-metric strong { display:block;margin-top:10px;color:#102d58;font-size:31px;line-height:1;font-weight:950;overflow-wrap:anywhere; }
+.activity-metric small { display:block;margin-top:9px;color:#7a8494;font-size:12px;line-height:1.4; }
+.activity-directory-card { border-left:5px solid var(--tier-accent); }
+
+.directory-status {
+  margin:16px 0;
+  padding:14px 16px;
+  border-radius:16px;
+  color:#3d526e;
+  background:#f5f9ff;
+  border:1px solid rgba(36,103,183,.14);
+  line-height:1.5;
+}
+.directory-status strong { color:#12345f; }
+.staff-directory-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:15px;
+}
+.staff-directory-card {
+  position:relative;
+  display:grid;
+  grid-template-columns:54px minmax(0,1fr);
+  gap:14px;
+  min-width:0;
+  padding:18px;
+  border:1px solid color-mix(in srgb,currentColor 20%,transparent);
+  border-radius:21px;
+  color:var(--tier-accent);
+  background:linear-gradient(145deg,#fff,color-mix(in srgb,currentColor 7%,#fff));
+  box-shadow:0 12px 27px rgba(64,61,54,.07);
+}
+.staff-directory-badge {
+  width:52px;height:52px;display:grid;place-items:center;border-radius:18px;
+  color:#fff;background:currentColor;box-shadow:0 10px 20px color-mix(in srgb,currentColor 24%,transparent);
+  font-size:23px;
+}
+.staff-directory-card h3 { margin:1px 0 5px;color:#102d58;font-size:16px;overflow-wrap:anywhere; }
+.staff-directory-card p { margin:0;color:#66758b;font-size:12px;line-height:1.45;overflow-wrap:anywhere; }
+.staff-directory-card span,.staff-directory-card small { display:block;margin-top:8px;color:#5e6d82;font-size:11px;line-height:1.45;overflow-wrap:anywhere; }
+.staff-directory-card.tier-3 { --tier-accent:#e54aa8; }
+.staff-directory-card.tier-4 { --tier-accent:#8755d9; }
+.staff-directory-card.tier-5 { --tier-accent:#2a9b65; }
+.staff-directory-card.tier-6 { --tier-accent:#dc4747; }
+.staff-directory-card.tier-7 { --tier-accent:#dc8b24; }
+.staff-directory-card.tier-8 { --tier-accent:#c69222; }
+
+/* Keep every dashboard card readable above decorative layers. */
+.stat-card { overflow:hidden; }
+.stat-card::before,.stat-card::after { position:absolute !important; }
+.stat-card .stat-top,.stat-card .stat-value,.stat-card .stat-meta { opacity:1 !important;visibility:visible !important; }
+
+@media (max-width:1250px) {
+  .staff-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:900px) {
+  .request-header { align-items:flex-start;flex-direction:column; }
+  .activity-summary-grid,.activity-breakdown { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:680px) {
+  .activity-summary-grid,.activity-breakdown,.staff-directory-grid { grid-template-columns:1fr; }
+}

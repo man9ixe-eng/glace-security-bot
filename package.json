@@ -1,7 +1,7 @@
 {
   "name": "glace-security-bot",
-  "version": "2.5.0",
-  "description": "Glace Hotels security bot and bright resort-themed Staff Hub with Supabase-backed promotion approvals",
+  "version": "2.6.0",
+  "description": "Glace Hotels Discord bot and bright Staff Hub with promotion approvals, staff requests, activity tracking, and Roblox staff directory",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

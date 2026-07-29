@@ -267,6 +267,10 @@ function isMonday(date) {
   return date instanceof Date && date.getUTCDay() === 1;
 }
 
+function isSunday(date) {
+  return date instanceof Date && date.getUTCDay() === 0;
+}
+
 function compareDateOnly(a, b) {
   const left = parseLoaDate(a, 'Start Date');
   const right = parseLoaDate(b, 'End Date');
@@ -343,6 +347,9 @@ function validateAddLoaOptions(options = {}) {
   if (end.date.getTime() < start.date.getTime()) {
     return { ok: false, message: '❌ **End Date** cannot be before the start date.' };
   }
+  if (!isSunday(end.date)) {
+    return { ok: false, message: '❌ **End Date** must be a **Sunday**.' };
+  }
 
   const reviewerUsername = String(options.reviewerUsername || '').trim();
   if (!reviewerUsername) {
@@ -383,6 +390,9 @@ function validateExtendLoaOptions(options = {}, existing = null) {
   if (!end.ok) return end;
   if (String(options.newEndDate || '').trim() !== end.value) {
     return { ok: false, message: '❌ **New Planned End Date** must be in this exact format: **MM/DD/YYYY**.' };
+  }
+  if (!isSunday(end.date)) {
+    return { ok: false, message: '❌ **New Planned End Date** must be a **Sunday**.' };
   }
 
   if (existing?.officialStartDate) {

@@ -16,6 +16,14 @@ const { TIERS, WEBSITE_CAPABILITIES } = require('../config/access');
 const { listActiveLoas, listLoaHistory } = require('../utils/loaStore');
 const staffOps = require('../utils/staffOpsStore');
 const promotionStore = require('../utils/promotionStore');
+const staffRequestStore = require('../utils/staffRequestStore');
+const staffRequestSystem = require('../utils/staffRequestSystem');
+const {
+  getUserActivity, getQuotaProfileForMember, getWeekRange, summarizeActivity,
+  hasMetQuota, formatRangeLabel, getQuotaSource,
+} = require('../utils/activityTracker');
+const { listRobloxStaff, alignWithDiscord } = require('../utils/robloxStaffDirectory');
+const { hasCurrentBoardMembers, routeNewPromotion, syncPromotionDiscord, postStageMessage } = require('../utils/promotionDiscord');
 const { sendOperationsLog } = require('../utils/operationsLog');
 const { listAudit: listCommandAudit } = require('../utils/operationsAudit');
 
@@ -244,7 +252,7 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.5.0"></head><body class="public-portal">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.6.0"></head><body class="public-portal">
   <main class="login-shell resort-login">
     <section class="login-hero resort-hero">
       <div class="logo-lockup resort-logo"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -283,7 +291,7 @@ function publicLoginPage(req) {
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.5.0"><script defer src="/ops/assets/ops.js?v=2.5.0"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.6.0"><script defer src="/ops/assets/ops.js?v=2.6.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
       <div class="logo-lockup"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -291,6 +299,9 @@ function portalPage() {
       <div class="sidebar-section">Workspace</div>
       <nav class="nav">
         <button class="active" data-tab="dashboard" data-title="Staff Hub Dashboard" data-subtitle="A bright, role-aware view of the tools available to your current Glace tier."><span class="nav-icon">⌂</span><span>Dashboard</span></button>
+        <button data-tab="requests" data-capability="viewStaffRequests" data-title="Staff Request Center" data-subtitle="Submit LOA and timezone requests, follow their status, and review requests routed to your team."><span class="nav-icon">✉</span><span>Requests</span></button>
+        <button data-tab="activity" data-capability="viewActivity" data-title="LI+ Activity" data-subtitle="Live quota activity pulled from the existing Discord session tracking system."><span class="nav-icon">◫</span><span>Activity</span></button>
+        <button data-tab="staff" data-capability="viewStaffDirectory" data-title="Glace Staff Directory" data-subtitle="Current Intern+ staff aligned from the Roblox community ranks into Glace teams."><span class="nav-icon">♚</span><span>Staff List</span></button>
         <button data-tab="promotions" data-capability="viewPromotions" data-title="Promotion Submissions" data-subtitle="Corporate owns the submission from due diligence through verified completion."><span class="nav-icon">♛</span><span>Promotions</span></button>
         <button data-tab="cases" data-capability="viewStaffCases" data-title="Staff Actions" data-subtitle="Permanent coaching, warning, suspension, demotion, and termination records."><span class="nav-icon">◇</span><span>Staff Actions</span></button>
         <button data-tab="restricted" data-capability="viewRestrictedRecords" data-title="Restricted Records" data-subtitle="Confidential Board-level investigations and leadership decisions."><span class="nav-icon">◆</span><span>Restricted</span></button>
@@ -312,9 +323,29 @@ function portalPage() {
           <div class="panel-grid dashboard-panels">
             <article id="approvalPanel" class="panel queue-panel"><div class="panel-head"><div><span class="panel-kicker">Your action center</span><h2 id="approvalPanelTitle">Items Requiring Attention</h2></div><button id="approvalOpenButton" class="panel-link" data-go="promotions">Open</button></div><div id="approvalPreview" class="activity-list"></div></article>
             <div class="panel-stack dashboard-side"><article class="panel quick-panel"><div class="panel-head"><div><span class="panel-kicker">Available to you</span><h2>Quick Actions</h2></div></div><div id="quickActions" class="quick-grid"></div></article><article class="panel access-panel"><div class="panel-head"><div><span class="panel-kicker">Your current workspace</span><h2 id="workspaceTitle">What You Can Access</h2></div></div><div id="rankOverview" class="workspace-access-list"></div></article></div>
-            <article class="panel journey-panel"><div class="panel-head"><div><span class="panel-kicker">Recent Glace moments</span><h2>Staff Journey & Updates</h2></div><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list journey-grid"></div></article>
+            <article class="panel journey-panel"><div class="panel-head"><div><span class="panel-kicker">Recent staff communications</span><h2>Staff Updates</h2></div><button class="panel-link" data-go="posts">View updates</button></div><div id="journeyFeed" class="activity-list journey-grid"></div></article>
             <article class="panel workflow-panel" data-capability="viewPromotions"><div class="panel-head"><div><span class="panel-kicker">Your promotion workspace</span><h2>Submission Workflow</h2></div></div><div class="workflow-steps"><span>1</span><p><b>Corporate completes due diligence</b> before submitting.</p><span>2</span><p><b>Corporate Board reviews</b> the completed submission, unless Presidential uses a documented override.</p><span>3</span><p><b>Presidential provides final approval</b> or may approve directly when an override is needed.</p><span>4</span><p><b>The assigned Corporate member carries it out</b> and confirms completion.</p></div></article>
           </div>
+        </section>
+
+        <section id="section-requests" class="section">
+          <div class="request-header panel"><div><span class="panel-kicker">Self-service for current Interns+</span><h2>Staff Request Center</h2><p>Submit your own request. Leadership reviews it; staff do not need to ask someone else to enter it manually.</p></div><button id="postRequestPanel" class="btn gold" type="button" data-capability="postStaffRequestPanel">Post Discord Request Panel</button></div>
+          <div class="workspace request-workspace">
+            <article class="form-card" data-capability="submitStaffRequest"><h2>Request Leave of Absence</h2><p>Start dates must be Monday. End dates must be Sunday.</p><form id="loaRequestForm" class="form-grid"><div class="field"><label>Start Date (Monday)</label><input name="startDate" placeholder="MM/DD/YYYY" required></div><div class="field"><label>End Date (Sunday)</label><input name="endDate" placeholder="MM/DD/YYYY" required></div><div class="field full"><label>Reason</label><select name="reason" required><option value="Personal">Personal</option><option value="School/Work">School/Work</option><option value="Sick">Sick</option><option value="Mental Health">Mental Health</option><option value="Vacation">Vacation</option><option value="Other">Other</option></select></div><div class="field full"><label>Additional Details</label><textarea name="details" placeholder="Required when selecting Other"></textarea></div><button class="btn primary full" type="submit">Submit LOA Request</button></form></article>
+            <article class="form-card" data-capability="submitStaffRequest"><h2>Request Timezone Change</h2><p>Use the timezone displayed on your Glace records and the timezone you need it changed to.</p><form id="timezoneRequestForm" class="form-grid"><div class="field"><label>Current Timezone</label><input name="currentTimezone" required placeholder="Example: EST"></div><div class="field"><label>Requested Timezone</label><input name="requestedTimezone" required placeholder="Example: CST"></div><div class="field full"><label>Reason</label><textarea name="reason" required></textarea></div><button class="btn gold full" type="submit">Submit Timezone Request</button></form></article>
+          </div>
+          <article id="staffRequestReviewPanel" class="list-card" data-capability="reviewStaffRequestsCorporate"><div class="toolbar"><div><h2>Requests Routed to Your Team</h2><p>Corporate+ reviews Intern through Senior Management. Presidential reviews Corporate+.</p></div><span id="requestStorageBadge" class="storage-badge"></span></div><div id="staffRequestReviewList" class="record-list"></div></article>
+          <article class="list-card" style="margin-top:16px"><h2>My Requests</h2><p>You will also receive Discord DMs when a request changes.</p><div id="myRequestList" class="record-list"></div></article>
+        </section>
+
+        <section id="section-activity" class="section">
+          <div id="myActivitySummary" class="activity-summary-grid"></div>
+          <article class="list-card"><div class="toolbar"><div><h2>Current Activity</h2><p>Live data is pulled from the bot's existing Discord session-log tracker.</p></div><span id="activitySourceBadge" class="storage-badge ready">Discord session logs</span></div><div id="activityBreakdown" class="activity-breakdown"></div></article>
+          <article class="list-card" style="margin-top:16px" data-capability="viewAllActivity"><h2>LI+ Activity Directory</h2><p>Current-week quota progress for active Leadership Intern+ Discord members.</p><div id="activityDirectory" class="record-list"></div></article>
+        </section>
+
+        <section id="section-staff" class="section">
+          <article class="list-card"><div class="toolbar"><div><h2>Roblox Community Staff List</h2><p>Current Intern+ community ranks aligned into the Glace team hierarchy.</p></div><button id="refreshStaffDirectory" class="btn small ghost" type="button">Refresh</button></div><div id="staffDirectoryStatus" class="directory-status"></div><div id="staffDirectory" class="staff-directory-grid"></div></article>
         </section>
 
         <section id="section-promotions" class="section">
@@ -334,7 +365,7 @@ function portalPage() {
                 <div class="full" style="display:flex;gap:9px"><button id="promotionSubmit" class="btn primary" type="submit">Submit for Board Review</button><button id="promotionReset" class="btn ghost" type="button">Reset</button></div>
               </form>
             </article>
-            <article class="list-card"><div class="toolbar"><div><h2>Promotion Queue</h2><p>Approval and completion are tracked separately.</p></div><span id="promotionStorageBadge" class="storage-badge"></span></div><div id="promotionList" class="record-list"></div></article>
+            <article class="list-card"><div class="toolbar"><div><h2>Promotion Queue</h2><p>Approval and completion are tracked separately. Public Staff Journey announcements remain manual.</p></div><span id="promotionStorageBadge" class="storage-badge"></span></div><div id="promotionList" class="record-list"></div></article>
           </div>
         </section>
 
@@ -361,11 +392,8 @@ function viewerCapabilities(tier) {
   return Object.fromEntries(Object.entries(WEBSITE_CAPABILITIES).map(([key, required]) => [key, tier >= required]));
 }
 
-function buildFeed({ posts, loas, completedPromotions }) {
+function buildFeed({ posts, loas }) {
   const feed = [];
-  for (const item of completedPromotions.slice(0, 20)) {
-    feed.push({ icon: '♛', tier: item.proposedTier, title: 'Promotion completed', detail: `${item.candidateUsername || item.candidateId} → ${item.proposedRank}`, createdAt: item.completedAt || item.updatedAt });
-  }
   for (const item of posts.slice(0, 20)) {
     feed.push({ icon: item.type === 'schedule' ? '▤' : '✦', tier: item.type === 'schedule' ? TIERS.MANAGEMENT : TIERS.INTERN, title: item.title, detail: `${item.type === 'schedule' ? 'Schedule' : 'Staff update'} by ${item.createdByTag || 'Unknown'}`, createdAt: item.createdAt });
   }
@@ -375,18 +403,106 @@ function buildFeed({ posts, loas, completedPromotions }) {
   return feed.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 30);
 }
 
-async function bootstrap(session) {
+async function activitySnapshot(client, member, guildId) {
+  const profile = getQuotaProfileForMember(member);
+  if (!profile) return null;
+  const currentRange = getWeekRange(0);
+  const lastRange = getWeekRange(-1);
+  const activity = await getUserActivity(client, member.id, { guildId });
+  const currentSummary = summarizeActivity(activity, currentRange);
+  const lastSummary = summarizeActivity(activity, lastRange);
+  const currentSource = getQuotaSource(currentSummary, profile);
+  const lastSource = getQuotaSource(lastSummary, profile);
+  return {
+    userId: member.id,
+    displayName: member.displayName || member.user?.globalName || member.user?.username,
+    username: member.user?.username || '',
+    tier: getTier(member),
+    tierLabel: getTierLabel(getTier(member)),
+    quotaProfile: {
+      key: profile.key,
+      label: profile.label,
+      quota: profile.quota || {},
+      visibleRoleKeys: profile.visibleRoleKeys || [],
+    },
+    current: {
+      rangeLabel: formatRangeLabel(currentRange),
+      met: hasMetQuota(currentSummary, profile),
+      source: currentSource,
+      hosted: currentSummary.hosted || {},
+      support: currentSummary.support || {},
+    },
+    last: {
+      rangeLabel: formatRangeLabel(lastRange),
+      met: hasMetQuota(lastSummary, profile),
+      source: lastSource,
+      hosted: lastSummary.hosted || {},
+      support: lastSummary.support || {},
+    },
+  };
+}
+
+async function buildPortalActivity(client, session, capabilities) {
+  if (!capabilities.viewActivity) return { self: null, directory: [] };
+  const { guild, member } = await resolveGuildMember(client, session.user.id);
+  if (!guild || !member) return { self: null, directory: [] };
+  const self = await activitySnapshot(client, member, session.guildId);
+  if (!capabilities.viewAllActivity) return { self, directory: [] };
+  const members = await guild.members.fetch().catch(() => guild.members.cache);
+  const tracked = [...members.values()]
+    .filter((item) => !item.user?.bot && getTier(item) >= TIERS.INTERN)
+    .sort((a, b) => getTier(b) - getTier(a) || a.displayName.localeCompare(b.displayName))
+    .slice(0, 250);
+  const directory = [];
+  for (const item of tracked) {
+    const snapshot = await activitySnapshot(client, item, session.guildId);
+    if (snapshot) directory.push(snapshot);
+  }
+  return { self, directory };
+}
+
+async function buildRobloxDirectory(client, session, capabilities) {
+  if (!capabilities.viewStaffDirectory) return { configured: false, members: [], roles: [], error: null };
+  const result = await listRobloxStaff();
+  if (!result.configured || result.error) return result;
+  const { guild } = await resolveGuildMember(client, session.user.id);
+  const members = guild ? await guild.members.fetch().catch(() => guild.members.cache) : new Map();
+  const profiles = await staffRequestStore.listProfiles(session.guildId).catch(() => []);
+  return { ...result, members: alignWithDiscord(result.members, [...members.values()], profiles) };
+}
+
+function visibleStaffRequests(all, session) {
+  if (session.tier >= TIERS.PRESIDENTIAL) return all;
+  if (session.tier >= TIERS.CORPORATE) {
+    return all.filter((item) => Number(item.requesterTier) < TIERS.CORPORATE || String(item.requesterId) === String(session.user.id));
+  }
+  return all.filter((item) => String(item.requesterId) === String(session.user.id));
+}
+
+async function bootstrap(session, client) {
   const capabilities = viewerCapabilities(session.tier);
-  const allPromotions = await promotionStore.list({ guildId: session.guildId, limit: 500 });
+  const [allPromotions, allStaffRequests, activity, staffDirectory] = await Promise.all([
+    promotionStore.list({ guildId: session.guildId, limit: 500 }),
+    staffRequestStore.list({ guildId: session.guildId, limit: 500 }),
+    buildPortalActivity(client, session, capabilities),
+    buildRobloxDirectory(client, session, capabilities),
+  ]);
   const documents = capabilities.viewDocuments
     ? staffOps.listDocuments({ guildId: session.guildId }).filter((doc) => session.tier >= Number(doc.visibilityTier || TIERS.MANAGEMENT))
     : [];
   const posts = capabilities.viewPosts ? staffOps.listPosts({ guildId: session.guildId }) : [];
   const loas = capabilities.viewLoas ? listActiveLoas(session.guildId) : [];
   const loaHistory = capabilities.viewLoas ? listLoaHistory(session.guildId, 100) : [];
+  const visibleRequests = visibleStaffRequests(allStaffRequests, session);
+  const reviewRequests = session.tier >= TIERS.PRESIDENTIAL
+    ? allStaffRequests.filter((item) => item.status === 'pending_presidential')
+    : session.tier >= TIERS.CORPORATE
+      ? allStaffRequests.filter((item) => item.status === 'pending_corporate')
+      : [];
   const audit = capabilities.viewAudit ? [
     ...staffOps.listAudit({ limit: 200 }),
     ...await promotionStore.listAudit({ limit: 200, guildId: session.guildId }),
+    ...await staffRequestStore.listAudit({ limit: 200, guildId: session.guildId }),
     ...listCommandAudit({ limit: 200, guildId: session.guildId }).map((entry) => ({
       id: entry.id,
       action: `/${entry.command || 'unknown'} • ${entry.status || 'executed'}`,
@@ -411,6 +527,11 @@ async function bootstrap(session) {
     capabilities,
     capabilityMinimums: WEBSITE_CAPABILITIES,
     promotions: capabilities.viewPromotions ? allPromotions : [],
+    staffRequests: capabilities.viewStaffRequests ? visibleRequests : [],
+    reviewStaffRequests: reviewRequests,
+    requestStorage: staffRequestStore.storageMode(),
+    activity,
+    staffDirectory,
     cases: capabilities.viewStaffCases ? staffOps.listCases({ guildId: session.guildId }) : [],
     restrictedRecords: capabilities.viewRestrictedRecords ? staffOps.listRestrictedRecords({ guildId: session.guildId }) : [],
     documents,
@@ -418,7 +539,7 @@ async function bootstrap(session) {
     audit,
     loas,
     loaHistory,
-    feed: buildFeed({ posts, loas, completedPromotions: allPromotions.filter((entry) => entry.status === 'completed') }),
+    feed: buildFeed({ posts, loas }),
     promotionStorage: promotionStore.storageMode(),
     csrf: session.csrf,
   };
@@ -452,33 +573,6 @@ async function publishDiscordPost(client, session, input) {
   return { posted: true, channelId: channel.id, messageId: message.id, warning: null };
 }
 
-function promotionColor(tier) {
-  return ({ 3: 0xec4899, 4: 0x8b5cf6, 5: 0x22c55e, 6: 0xef4444, 7: 0xf59e0b, 8: 0xfacc15 })[Number(tier)] || 0x5cb8ff;
-}
-
-async function publishPromotionAnnouncement(client, entry) {
-  const channelId = process.env.STAFF_JOURNEY_CHANNEL_ID || process.env.STAFF_UPDATES_CHANNEL_ID || process.env.STAFF_POSTS_CHANNEL_ID;
-  if (!channelId) return { messageId: null, warning: 'Promotion completed, but STAFF_JOURNEY_CHANNEL_ID is not configured.' };
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.()) return { messageId: null, warning: 'Promotion completed, but the Staff Journey channel could not be found.' };
-  const board = entry.boardDecisionByTag || 'Corporate Board';
-  const presidential = (entry.presidentialApprovals || []).map((approval) => approval.tag).join(', ') || 'Presidential Team';
-  const embed = new EmbedBuilder()
-    .setTitle('★ Staff Journey • Promotion')
-    .setDescription(`Please congratulate **${entry.candidateUsername || `<@${entry.candidateId}>`}** on their promotion to **${entry.proposedRank}**!`)
-    .addFields(
-      { name: 'Promotion Owner', value: entry.completedByTag || entry.submittedByTag || 'Corporate Team', inline: true },
-      { name: 'Board Approval', value: board, inline: true },
-      { name: 'Presidential Approval', value: presidential, inline: false },
-    )
-    .setColor(promotionColor(entry.proposedTier))
-    .setFooter({ text: `Glace Hotels • ${entry.submissionNumber}` })
-    .setTimestamp(new Date());
-  const message = await channel.send({ content: entry.candidateId ? `<@${entry.candidateId}>` : undefined, embeds: [embed], allowedMentions: { users: entry.candidateId ? [entry.candidateId] : [] } });
-  await promotionStore.setAnnouncementMessage(entry.id, message.id);
-  return { messageId: message.id, warning: null };
-}
-
 async function verifyPromotionCompletion(client, entry) {
   const guildId = entry.guildId || process.env.GUILD_ID || process.env.MAIN_GUILD_ID;
   const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
@@ -510,17 +604,27 @@ async function handlePromotionApi(req, res, url, client, method) {
     }
     const hierarchy = await canActOnWebsiteTarget(client, session, body.candidateId, { allowEqual: true });
     if (!hierarchy.ok) return sendJson(res, 403, { ok: false, error: hierarchy.error }) || true;
-    const entry = await promotionStore.create({ ...body, guildId: session.guildId }, { id: session.user.id, tag: session.memberDisplayName });
-    await sendOperationsLog(client, hierarchy.guild, {
+    const resolved = hierarchy.guild ? { guild: hierarchy.guild } : await resolveGuildMember(client, session.user.id);
+    const boardAvailable = await hasCurrentBoardMembers(resolved.guild);
+    let entry = await promotionStore.create({
+      ...body,
+      guildId: session.guildId,
+      initialStatus: boardAvailable ? 'board_review' : 'presidential_review',
+      boardAutoSkipped: !boardAvailable,
+      boardAutoSkipReason: boardAvailable ? '' : 'No current Corporate Board members were detected when this request was submitted.',
+    }, { id: session.user.id, tag: session.memberDisplayName });
+    try { entry = await routeNewPromotion(client, resolved.guild, entry); }
+    catch (error) { console.error('[PROMOTION ROUTING] Submission routing failed:', error); }
+    await sendOperationsLog(client, resolved.guild, {
       title: `Promotion Submission ${entry.submissionNumber}`,
       fields: [
         { name: 'Candidate', value: `${entry.candidateUsername} (${entry.candidateId})` },
         { name: 'Promotion', value: `${entry.currentRank} → ${entry.proposedRank}` },
         { name: 'Corporate Owner', value: entry.submittedByTag },
-        { name: 'Status', value: 'Corporate Board Review' },
+        { name: 'Status', value: boardAvailable ? 'Corporate Board Review' : 'Presidential Review — Board unavailable' },
       ],
     });
-    sendJson(res, 201, { ok: true, entry });
+    sendJson(res, 201, { ok: true, entry, warning: boardAvailable ? null : 'No current Corporate Board members were detected, so this was routed directly to Presidential review.' });
     return true;
   }
 
@@ -536,7 +640,9 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     if (String(current.submittedById) === String(session.user.id)) return sendJson(res, 403, { ok: false, error: 'You cannot provide Board approval for a promotion you submitted.' }) || true;
-    const entry = await promotionStore.boardDecision(id, body.decision, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const actor = { id: session.user.id, tag: session.memberDisplayName };
+    let entry = await promotionStore.boardDecision(id, body.decision, body.reason, actor);
+    entry = await syncPromotionDiscord(client, entry, `board_${body.decision}`, actor);
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -546,7 +652,9 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     if (!String(body.reason || '').trim()) return sendJson(res, 400, { ok: false, error: 'A Presidential override reason is required for the audit record.' }) || true;
-    const entry = await promotionStore.presidentialOverride(id, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const actor = { id: session.user.id, tag: session.memberDisplayName };
+    let entry = await promotionStore.presidentialOverride(id, body.reason, actor);
+    entry = await syncPromotionDiscord(client, entry, 'presidential_override', actor);
     const { guild } = await resolveGuildMember(client, session.user.id);
     await sendOperationsLog(client, guild, {
       title: `${entry.submissionNumber} Presidential Override`,
@@ -566,7 +674,9 @@ async function handlePromotionApi(req, res, url, client, method) {
     const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.approvePromotionPresidential);
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
-    const entry = await promotionStore.presidentialDecision(id, body.decision, body.reason, { id: session.user.id, tag: session.memberDisplayName });
+    const actor = { id: session.user.id, tag: session.memberDisplayName };
+    let entry = await promotionStore.presidentialDecision(id, body.decision, body.reason, actor);
+    entry = await syncPromotionDiscord(client, entry, `presidential_${body.decision}`, actor);
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -576,7 +686,10 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (!session || !requireCsrf(req, res, session)) return true;
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     if (!body.diligenceConfirmed) return sendJson(res, 400, { ok: false, error: 'Reconfirm due diligence before resubmitting.' }) || true;
-    const entry = await promotionStore.resubmit(id, body, { id: session.user.id, tag: session.memberDisplayName });
+    let entry = await promotionStore.resubmit(id, body, { id: session.user.id, tag: session.memberDisplayName });
+    try {
+      entry = await postStageMessage(client, entry, entry.status === 'presidential_review' ? 'presidential' : 'board');
+    } catch (error) { console.error('[PROMOTION ROUTING] Resubmission routing failed:', error); }
     sendJson(res, 200, { ok: true, entry });
     return true;
   }
@@ -601,8 +714,9 @@ async function handlePromotionApi(req, res, url, client, method) {
     if (String(current.guildId) !== String(session.guildId)) return sendJson(res, 404, { ok: false, error: 'Promotion submission not found.' }) || true;
     const verification = await verifyPromotionCompletion(client, current);
     if (!verification.ok) return sendJson(res, 409, { ok: false, error: verification.error }) || true;
-    const entry = await promotionStore.complete(id, verification, { id: session.user.id, tag: session.memberDisplayName });
-    const announcement = await publishPromotionAnnouncement(client, entry);
+    const actor = { id: session.user.id, tag: session.memberDisplayName };
+    let entry = await promotionStore.complete(id, verification, actor);
+    entry = await syncPromotionDiscord(client, entry, 'completed', actor);
     const { guild } = await resolveGuildMember(client, session.user.id);
     await sendOperationsLog(client, guild, {
       title: `${entry.submissionNumber} Completed`,
@@ -613,7 +727,7 @@ async function handlePromotionApi(req, res, url, client, method) {
         { name: 'Discord Verification', value: `Matched ${verification.matchedRole}` },
       ],
     });
-    sendJson(res, 200, { ok: true, entry, warning: announcement.warning });
+    sendJson(res, 200, { ok: true, entry, warning: 'Completion verified. Staff Journey posting is manual and was not sent.' });
     return true;
   }
 
@@ -621,17 +735,76 @@ async function handlePromotionApi(req, res, url, client, method) {
   return true;
 }
 
+async function websiteInteraction(client, session) {
+  const { guild, member, error } = await resolveGuildMember(client, session.user.id);
+  if (!guild || !member) throw new Error(error || 'Your current Glace membership could not be verified.');
+  return { client, guild, guildId: guild.id, member, user: member.user };
+}
+
 async function handleApi(req, res, url, client) {
   const method = String(req.method || 'GET').toUpperCase();
   if (url.pathname === '/ops/api/bootstrap' && method === 'GET') {
     const session = await requireFreshSession(req, res, client);
     if (!session) return true;
-    return sendJson(res, 200, { ok: true, data: await bootstrap(session) }) || true;
+    return sendJson(res, 200, { ok: true, data: await bootstrap(session, client) }) || true;
   }
 
   if (url.pathname.startsWith('/ops/api/promotions')) {
     const handled = await handlePromotionApi(req, res, url, client, method);
     if (handled) return true;
+  }
+
+  if (url.pathname === '/ops/api/staff-requests/panel' && method === 'POST') {
+    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.postStaffRequestPanel);
+    if (!session || !requireCsrf(req, res, session)) return true;
+    const result = await staffRequestSystem.postRequestPanel(client, process.env.STAFF_REQUEST_PANEL_CHANNEL_ID);
+    return sendJson(res, 201, { ok: true, result }) || true;
+  }
+
+  if (url.pathname === '/ops/api/staff-requests' && method === 'POST') {
+    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.submitStaffRequest);
+    if (!session || !requireCsrf(req, res, session)) return true;
+    const body = await readJsonBody(req);
+    if (!['loa', 'timezone_change'].includes(String(body.type))) return sendJson(res, 400, { ok: false, error: 'Request type must be LOA or timezone change.' }) || true;
+    const interaction = await websiteInteraction(client, session);
+    const entry = await staffRequestSystem.createFromDiscord(interaction, body.type, body.requestData || {});
+    return sendJson(res, 201, { ok: true, entry }) || true;
+  }
+
+  const staffRequestMatch = url.pathname.match(/^\/ops\/api\/staff-requests\/([^/]+)$/);
+  if (staffRequestMatch && method === 'PATCH') {
+    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.viewStaffRequests);
+    if (!session || !requireCsrf(req, res, session)) return true;
+    const body = await readJsonBody(req);
+    const requestId = decodeURIComponent(staffRequestMatch[1]);
+    const current = await staffRequestStore.get(requestId, session.guildId);
+    if (!current) return sendJson(res, 404, { ok: false, error: 'Staff request not found.' }) || true;
+    const interaction = await websiteInteraction(client, session);
+    if (['approve', 'return', 'deny'].includes(String(body.action))) {
+      const entry = await staffRequestSystem.decideRequest(interaction, current, body.action, body.note || '');
+      return sendJson(res, 200, { ok: true, entry }) || true;
+    }
+    if (body.action === 'resubmit') {
+      if (String(current.requesterId) !== String(session.user.id)) return sendJson(res, 403, { ok: false, error: 'Only the original requester can resubmit this request.' }) || true;
+      const validation = current.type === 'loa'
+        ? staffRequestSystem.validateLoaData(body.requestData || {})
+        : staffRequestSystem.validateTimezoneData(body.requestData || {});
+      if (!validation.ok) return sendJson(res, 400, { ok: false, error: validation.error }) || true;
+      let entry = await staffRequestStore.resubmit(current.id, validation.data, { id: session.user.id, tag: session.memberDisplayName }, staffRequestSystem.requestStatusForTier(session.tier));
+      entry = await staffRequestSystem.routeRequestToDiscord(client, entry);
+      return sendJson(res, 200, { ok: true, entry }) || true;
+    }
+    return sendJson(res, 400, { ok: false, error: 'Unknown staff request action.' }) || true;
+  }
+
+  if (url.pathname === '/ops/api/staff-directory/refresh' && method === 'POST') {
+    const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.viewStaffDirectory);
+    if (!session || !requireCsrf(req, res, session)) return true;
+    const result = await listRobloxStaff({ force: true });
+    const { guild } = await resolveGuildMember(client, session.user.id);
+    const members = guild ? await guild.members.fetch().catch(() => guild.members.cache) : new Map();
+    const profiles = await staffRequestStore.listProfiles(session.guildId).catch(() => []);
+    return sendJson(res, 200, { ok: true, directory: { ...result, members: alignWithDiscord(result.members, [...members.values()], profiles) } }) || true;
   }
 
   if (url.pathname === '/ops/api/cases' && method === 'POST') {
