@@ -232,7 +232,7 @@ function renderDashboard() {
   const journeyFeed = $('#journeyFeed');
   if (journeyFeed) journeyFeed.innerHTML = feed.length ? feed.map((entry) => `
     <div class="activity-item">
-      <div class="activity-icon ${roleClass(entry.tier || 3)}">${escapeHtml(entry.icon || '❄')}</div>
+      <div class="activity-icon ${roleClass(entry.tier || 3)}">${escapeHtml(entry.icon || '★')}</div>
       <div class="activity-copy"><strong>${escapeHtml(entry.title)}</strong><span>${escapeHtml(entry.detail || '')}</span></div>
       <span class="activity-time">${escapeHtml(relativeTime(entry.createdAt))}</span>
     </div>`).join('') : '<div class="empty-state"><strong>No recent updates</strong>Your available Staff Journey and update activity will appear here.</div>';
@@ -279,7 +279,7 @@ function renderDashboard() {
 
   const availableTools = [
     ['⌂', 'Dashboard', true],
-    ['✦', 'Staff Updates', capabilities.viewPosts],
+    ['★', 'Staff Updates', capabilities.viewPosts],
     ['◔', 'Leave of Absence', capabilities.viewLoas],
     ['▤', 'Documentation', capabilities.viewDocuments],
     ['◇', 'Staff Actions', capabilities.viewStaffCases],

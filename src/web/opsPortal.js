@@ -244,33 +244,49 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff7fb"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.3.0"></head><body>
-  <main class="login-shell">
-    <section class="login-hero">
-      <div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
-      <div class="hero-content"><div class="hero-kicker">Your Glace staff home</div><h1 class="hero-title"><span class="gradient">Bright, organized,</span>made for your role.</h1><p class="hero-copy">Sign in to reach the staff tools, updates, resources, and information assigned to your current Glace Hotels role. Your workspace stays simple because anything outside your access is left out completely.</p>
-        <div class="feature-grid public-feature-grid">
-          <article class="feature-tile role-intern"><div class="feature-icon">✦</div><strong>Your Staff Home</strong><p>A personalized starting point built around the role you currently hold.</p></article>
-          <article class="feature-tile role-management"><div class="feature-icon">▤</div><strong>Updates & Resources</strong><p>Find the staff information available to you without digging through channels.</p></article>
-          <article class="feature-tile role-senior"><div class="feature-icon">◔</div><strong>Simple Navigation</strong><p>Only the pages assigned to your access appear after you sign in.</p></article>
-          <article class="feature-tile role-presidential"><div class="feature-icon">✓</div><strong>Discord-Synced Access</strong><p>Your current Glace server role is checked before every protected action.</p></article>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.4.0"></head><body class="public-portal">
+  <main class="login-shell resort-login">
+    <section class="login-hero resort-hero">
+      <div class="logo-lockup resort-logo"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
+      <div class="hero-content resort-hero-content">
+        <div class="motto-block">
+          <h1 class="resort-motto">The future is<br>what <em>YOU</em> create.</h1>
+          <div class="motto-divider"><span></span><b>★</b><span></span></div>
+          <p class="confidential-alert"><strong>** This system is used for CURRENT Interns+ employed at Glace Hotels. Confidential access restricted.</strong></p>
         </div>
-        <div class="access-ladder public-access-note"><h3>One portal. A different workspace for every staff role.</h3><p>The colors and available pages adjust automatically after Discord verifies your account.</p><div class="color-ribbon"><span class="role-intern"></span><span class="role-management"></span><span class="role-senior"></span><span class="role-corporate"></span><span class="role-board"></span><span class="role-presidential"></span></div></div>
+        <section class="tier-showcase" aria-label="Glace Hotels leadership tiers">
+          <div class="tier-showcase-title"><span></span><strong>BUILT FOR EVERY LEVEL OF LEADERSHIP</strong><span></span></div>
+          <div class="tier-card-grid">
+            <article class="tier-info-card presidential-card"><div class="tier-medallion crown-only">♛</div><h2>Presidential</h2><p>Keeps the team together, manages the entirety of the group, and supports the Board and Corporates. Makes the final decisions for the group, and works 70% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card board-card"><div class="tier-medallion">★★★★</div><h2>Corporate Board</h2><p>Manages the Corporate and lower teams to ensure a smooth operation, and makes important decisions for the group. You work 50% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card corporate-card"><div class="tier-medallion">★★★★</div><h2>Corporate</h2><p>Manages the lower teams, and manages staff, promotions, events, and more. You work 30% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card senior-card"><div class="tier-medallion">★★★</div><h2>Senior Management</h2><p>Supports the Management team and ensure communication between the two reaches higher level. In charge of higher level actions, and responsibilities. You work 20% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card management-card"><div class="tier-medallion">★★</div><h2>Management</h2><p>Supports the interns into growing into managements, working towards growth, learning, and leading. You work 10% Behind the scenes.</p><i></i></article>
+            <article class="tier-info-card intern-card"><div class="tier-medallion">★</div><h2>Intern Team</h2><p>Growth, consistency, and working towards completing your internship and being promoted to Supervisor! You work 5% behind the scenes.</p><i></i></article>
+          </div>
+        </section>
       </div>
-      <footer class="login-footer"><span>© 2026 Glace Hotels & Resorts</span><span>Private staff system</span></footer>
+      <footer class="login-footer resort-footer"><span></span><b>THE FUTURE IS WHAT YOU CREATE.</b><span></span></footer>
     </section>
-    <section class="login-panel"><article class="login-card glass"><div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div><h1>Welcome to your Staff Hub.</h1><p class="lead">Continue with Discord to open the workspace assigned to your current Glace Hotels role.</p>
-      ${ready ? '<a class="discord-button" href="/ops/login"><span>◈</span> Sign in with Discord</a>' : '<div class="oauth-error">OAuth setup is incomplete. Add <b>DISCORD_CLIENT_SECRET</b>, confirm <b>CLIENT_ID</b>, and set the redirect URL before opening the portal.</div>'}
-      <div class="access-note"><div class="feature-icon role-senior">✓</div><div><strong>Your workspace is private and role-aware.</strong><span>The portal shows only the pages and information available to your verified Discord role. Hidden tools are not named, previewed, or listed.</span></div></div>
-    </article></section>
+    <section class="login-panel resort-login-panel">
+      <article class="login-card resort-login-card">
+        <div class="welcome-star">★</div>
+        <h1>Welcome back.</h1>
+        <div class="welcome-divider"><span></span><b>★</b><span></span></div>
+        <p class="lead">Sign in securely with your Discord account to access the Glace Hotels Management Portal.</p>
+        ${ready ? '<a class="discord-button" href="/ops/login"><span>◈</span> Sign in with Discord</a>' : '<div class="oauth-error">OAuth setup is incomplete. Add <b>DISCORD_CLIENT_SECRET</b>, confirm <b>CLIENT_ID</b>, and set the redirect URL before opening the portal.</div>'}
+        <div class="protected-line"><span></span><b>Protected. Private. Professional.</b><span></span></div>
+        <div class="access-note privacy-note"><div class="privacy-shield">★</div><div><strong>This system is linked to Discord, and created by Man9ixe, our sign in process does not reveal anything more than your discord username and server roles.</strong></div></div>
+      </article>
+    </section>
   </main></body></html>`;
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff7fb"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.3.0"><script defer src="/ops/assets/ops.js?v=2.3.0"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.4.0"><script defer src="/ops/assets/ops.js?v=2.4.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
-      <div class="logo-lockup"><div class="logo-mark">❄</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
+      <div class="logo-lockup"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
       <div class="sidebar-profile"><div class="profile-line"><div id="profileAvatar"></div><div class="profile-copy"><strong id="profileName">Loading…</strong><span id="profileRole"></span></div></div></div>
       <div class="sidebar-section">Workspace</div>
       <nav class="nav">
@@ -287,10 +303,10 @@ function portalPage() {
       <div class="sidebar-bottom"><a href="/ops/logout"><span>Sign out</span></a></div>
     </aside>
     <main class="app-main">
-      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>Discord-synced management portal</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section…"></div><div class="top-actions"><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">❄</button></div></header>
+      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>The future is what YOU create.</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section…"></div><div class="top-actions"><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">★</button></div></header>
       <div id="loading" class="loading-screen"><div><div class="loading-orb"></div><div id="loadingMessage">Verifying your Glace server rank…</div></div></div>
       <div id="app" hidden class="content">
-        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="page-head"><div class="page-heading-copy"><span id="pageEyebrow" class="page-eyebrow">YOUR STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><aside class="page-tier-card"><span class="access-view-kicker">Access view</span><strong id="pageTierLabel">Loading…</strong><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview another tier</label><select id="previewTier" aria-label="Preview another staff tier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div></aside></div>
+        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="brand-motto-strip"><span class="brand-motto-star">★</span><span class="brand-motto-copy">The future is what <strong>YOU</strong> create.</span><span class="brand-confidential">CURRENT Interns+ · Confidential access restricted</span></div><div class="page-head"><div class="page-heading-copy"><span id="pageEyebrow" class="page-eyebrow">GLACE STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><aside class="page-tier-card"><span class="access-view-kicker">Access view</span><strong id="pageTierLabel">Loading…</strong><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview another tier</label><select id="previewTier" aria-label="Preview another staff tier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div></aside></div>
 
         <section id="section-dashboard" class="section active">
           <div id="dashboardStats" class="dashboard-grid"></div>
@@ -451,7 +467,7 @@ async function publishPromotionAnnouncement(client, entry) {
   const board = entry.boardDecisionByTag || 'Corporate Board';
   const presidential = (entry.presidentialApprovals || []).map((approval) => approval.tag).join(', ') || 'Presidential Team';
   const embed = new EmbedBuilder()
-    .setTitle('❄ Staff Journey • Promotion')
+    .setTitle('★ Staff Journey • Promotion')
     .setDescription(`Please congratulate **${entry.candidateUsername || `<@${entry.candidateId}>`}** on their promotion to **${entry.proposedRank}**!`)
     .addFields(
       { name: 'Promotion Owner', value: entry.completedByTag || entry.submittedByTag || 'Corporate Team', inline: true },
@@ -693,7 +709,7 @@ async function handleApi(req, res, url, client) {
 }
 
 function serveAsset(res, fileName) {
-  const allowed = { 'ops.css': 'text/css; charset=utf-8', 'ops.js': 'application/javascript; charset=utf-8' };
+  const allowed = { 'ops.css': 'text/css; charset=utf-8', 'ops.js': 'application/javascript; charset=utf-8', 'resort-scene.svg': 'image/svg+xml; charset=utf-8' };
   if (!allowed[fileName]) { sendText(res, 404, 'Not found.'); return true; }
   const fullPath = path.join(ASSET_DIR, fileName);
   let content;
@@ -712,6 +728,7 @@ async function handleOpsWebRequest(req, res, client) {
   try {
     if (url.pathname === '/ops/assets/ops.css') return serveAsset(res, 'ops.css');
     if (url.pathname === '/ops/assets/ops.js') return serveAsset(res, 'ops.js');
+    if (url.pathname === '/ops/assets/resort-scene.svg') return serveAsset(res, 'resort-scene.svg');
     if (url.pathname.startsWith('/ops/api/')) return await handleApi(req, res, url, client);
     if (url.pathname === '/ops/login') {
       const { clientId, clientSecret, redirectUri } = getOAuthConfig(req);

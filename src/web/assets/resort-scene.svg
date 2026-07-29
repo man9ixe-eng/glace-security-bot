@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1000" role="img" aria-label="Bright tropical resort scene">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dff2ff"/><stop offset=".55" stop-color="#f8fcff"/><stop offset="1" stop-color="#fff3dc"/></linearGradient>
+    <linearGradient id="pool" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a83ca"/><stop offset="1" stop-color="#88d7e8"/></linearGradient>
+    <linearGradient id="hotel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdf8ef"/><stop offset="1" stop-color="#d7c3a6"/></linearGradient>
+    <linearGradient id="carpet" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4212d"/><stop offset="1" stop-color="#8b0713"/></linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="9"/></filter>
+  </defs>
+  <rect width="1200" height="1000" fill="url(#sky)"/>
+  <circle cx="965" cy="145" r="92" fill="#fff8ca" opacity=".9" filter="url(#soft)"/>
+  <circle cx="965" cy="145" r="52" fill="#fff" opacity=".85"/>
+  <path d="M0 675 C180 615 350 630 540 680 C710 725 935 695 1200 625 L1200 1000 L0 1000Z" fill="url(#pool)"/>
+  <path d="M0 720 C260 670 485 735 720 705 C905 681 1040 646 1200 654" fill="none" stroke="#dfffff" stroke-width="11" opacity=".7"/>
+  <path d="M0 790 C225 760 466 808 680 770 C880 734 1035 709 1200 720" fill="none" stroke="#fff" stroke-width="6" opacity=".55"/>
+  <g transform="translate(700 190)">
+    <rect x="0" y="0" width="460" height="500" rx="14" fill="url(#hotel)" stroke="#b9822c" stroke-width="5"/>
+    <rect x="30" y="36" width="400" height="415" rx="8" fill="#f6f7f4"/>
+    <g fill="#2f5b83" opacity=".85">
+      <rect x="55" y="65" width="90" height="70" rx="4"/><rect x="180" y="65" width="90" height="70" rx="4"/><rect x="305" y="65" width="90" height="70" rx="4"/>
+      <rect x="55" y="175" width="90" height="70" rx="4"/><rect x="180" y="175" width="90" height="70" rx="4"/><rect x="305" y="175" width="90" height="70" rx="4"/>
+      <rect x="55" y="285" width="90" height="70" rx="4"/><rect x="180" y="285" width="90" height="70" rx="4"/><rect x="305" y="285" width="90" height="70" rx="4"/>
+    </g>
+    <g stroke="#c99035" stroke-width="6" fill="none" opacity=".9"><path d="M42 150H418"/><path d="M42 260H418"/><path d="M42 370H418"/></g>
+    <rect x="165" y="392" width="130" height="93" rx="6" fill="#79502c"/>
+    <path d="M130 392H330L294 355H166Z" fill="#b9822c"/>
+  </g>
+  <g transform="translate(85 120)">
+    <path d="M135 700 C125 540 126 405 152 255" stroke="#7e5a2d" stroke-width="22" fill="none" stroke-linecap="round"/>
+    <path d="M148 265 C75 240 35 185 2 112 C78 120 141 168 163 242Z" fill="#2f7b42"/>
+    <path d="M155 245 C198 174 260 134 335 120 C306 197 245 246 169 269Z" fill="#388a49"/>
+    <path d="M150 260 C79 286 18 334 -12 402 C76 386 137 337 166 277Z" fill="#246b38"/>
+    <path d="M164 262 C245 267 315 299 368 360 C272 352 205 323 165 281Z" fill="#3f914b"/>
+    <path d="M151 248 C120 170 122 99 151 30 C195 107 196 177 166 249Z" fill="#4b9b55"/>
+  </g>
+  <g transform="translate(15 770)">
+    <path d="M0 130 C80 40 176 10 260 26 C204 86 132 129 45 154Z" fill="#2f7c43" opacity=".9"/>
+    <path d="M95 190 C145 80 234 33 335 38 C280 123 200 177 102 207Z" fill="#458f4c" opacity=".88"/>
+  </g>
+  <path d="M460 1000 L585 650 L715 650 L868 1000Z" fill="url(#carpet)"/>
+  <path d="M585 650 L715 650" stroke="#eac066" stroke-width="8"/>
+  <g fill="#c28a23" stroke="#fff3b6" stroke-width="4">
+    <circle cx="535" cy="740" r="14"/><rect x="529" y="740" width="12" height="125" rx="6"/><circle cx="791" cy="740" r="14"/><rect x="785" y="740" width="12" height="125" rx="6"/>
+    <circle cx="475" cy="875" r="14"/><rect x="469" y="875" width="12" height="125" rx="6"/><circle cx="855" cy="875" r="14"/><rect x="849" y="875" width="12" height="125" rx="6"/>
+  </g>
+  <path d="M535 750 C615 790 710 790 791 750" fill="none" stroke="#e3bd63" stroke-width="8"/>
+  <path d="M475 885 C595 930 740 930 855 885" fill="none" stroke="#e3bd63" stroke-width="8"/>
+  <g transform="translate(790 720)" opacity=".95"><rect x="0" y="0" width="160" height="42" rx="21" fill="#fff8ea"/><rect x="18" y="42" width="22" height="98" rx="10" fill="#885b2f"/><rect x="120" y="42" width="22" height="98" rx="10" fill="#885b2f"/></g>
+</svg>

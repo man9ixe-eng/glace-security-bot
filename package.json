@@ -1,7 +1,7 @@
 {
   "name": "glace-security-bot",
-  "version": "2.3.0",
-  "description": "Glace Hotels security bot and colorful Discord-synced Staff Hub portal",
+  "version": "2.4.0",
+  "description": "Glace Hotels security bot and bright resort-themed Discord-synced Staff Hub portal",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
