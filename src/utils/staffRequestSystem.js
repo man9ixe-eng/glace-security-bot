@@ -151,8 +151,11 @@ function validateRequestData(type, data) {
 }
 
 function requestStatusFor(type, tier) {
-  if (type === 'resignation') return 'pending_board';
-  return Number(tier) >= TIERS.CORPORATE ? 'pending_presidential' : 'pending_corporate';
+  const numericTier = Number(tier);
+  if (type === 'resignation') {
+    return numericTier >= TIERS.CORPORATE ? 'pending_presidential' : 'pending_board';
+  }
+  return numericTier >= TIERS.CORPORATE ? 'pending_presidential' : 'pending_corporate';
 }
 function requestStatusForTier(tier, type = 'loa') { return requestStatusFor(type, tier); }
 function reviewerLabel(status) {
@@ -335,7 +338,8 @@ function requestPanelEmbed() {
       '',
       '**RESIGNATION**',
       'Username · Former Rank · New Rank · Notes',
-      'Reviewed by Corporate Board.',
+      'Intern Team through Senior Management: reviewed by Corporate Board.',
+      'Corporate and Corporate Board: reviewed by Presidential.',
       '',
       '**USERNAME UPDATE**',
       'Former Username · New Username · Rank',

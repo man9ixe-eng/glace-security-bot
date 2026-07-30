@@ -21,6 +21,7 @@ const { getConfigurationReport, logConfigurationReport } = require('./utils/conf
 const { handleOpsWebRequest } = require('./web/opsPortal');
 const { handleStaffRequestInteraction } = require('./utils/staffRequestSystem');
 const { handlePromotionInteraction } = require('./utils/promotionDiscord');
+const { ensureReviewOnCallPanel, handleReviewOnCallInteraction } = require('./utils/reviewOnCallPanel');
 
 let banAppeals = null;
 try {
@@ -148,6 +149,10 @@ client.once(Events.ClientReady, async (readyClient) => {
   if (banAppeals?.runBanAppealReminderTick) {
     banAppeals.runBanAppealReminderTick(readyClient).catch((error) => console.error('[BAN APPEALS] Ready tick failed:', error));
   }
+  try {
+    const panel = await ensureReviewOnCallPanel(readyClient);
+    if (!panel.ok) console.warn('[REVIEW ON-CALL]', panel.reason);
+  } catch (error) { console.error('[REVIEW ON-CALL] Panel setup failed:', error); }
   console.log(`[READY] Logged in as ${readyClient.user.tag} in ${readyClient.guilds.cache.size} guild(s).`);
 });
 
@@ -226,6 +231,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (banAppeals?.handleBanAppealInteraction && await banAppeals.handleBanAppealInteraction(interaction)) return;
 
+    if (interaction.isButton() && await handleReviewOnCallInteraction(interaction)) return;
     if ((interaction.isButton() || interaction.isModalSubmit()) && await handleStaffRequestInteraction(interaction)) return;
     if ((interaction.isButton() || interaction.isModalSubmit()) && await handlePromotionInteraction(interaction)) return;
 

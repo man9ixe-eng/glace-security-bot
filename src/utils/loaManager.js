@@ -4,7 +4,7 @@
 const axios = require('axios');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const rolesConfig = require('../config/roles');
-const { getLoaRecord, setLoaRecord, clearLoaRecord } = require('./loaStore');
+const { getLoaRecord, setLoaRecord, clearLoaRecord, listActiveLoas } = require('./loaStore');
 
 const LOA_PREFIX = '🔕';
 
@@ -1169,6 +1169,69 @@ async function extendLoa(interaction, target, options = {}) {
   };
 }
 
+const portalLoaCache = new Map();
+
+async function listCurrentLoasForPortal(client, guildId, { force = false } = {}) {
+  const key = String(guildId || '');
+  const cached = portalLoaCache.get(key);
+  if (!force && cached && cached.expiresAt > Date.now()) return cached.records;
+
+  const stored = listActiveLoas(guildId);
+  const channel = await client.channels.fetch(LOA_LOG_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased?.()) {
+    portalLoaCache.set(key, { expiresAt: Date.now() + 30_000, records: stored });
+    return stored;
+  }
+
+  const latestByUser = new Map();
+  let before;
+  for (let page = 0; page < 5; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+    if (!messages?.size) break;
+    const sorted = [...messages.values()].sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+    for (const message of sorted) {
+      const parsed = parseLoaLogMessage(message);
+      if (!parsed?.userId || latestByUser.has(parsed.userId)) continue;
+      latestByUser.set(parsed.userId, { parsed, message });
+    }
+    before = sorted[sorted.length - 1]?.id;
+    if (!before || messages.size < 100) break;
+  }
+
+  const guild = client.guilds.cache.get(String(guildId)) || null;
+  const records = [];
+  for (const [userId, item] of latestByUser) {
+    if (item.parsed.isEnded) continue;
+    const member = guild?.members?.cache?.get(userId) || null;
+    records.push({
+      guildId: String(guildId),
+      userId,
+      originalDisplayName: member ? stripLoaPrefix(member.displayName) : `Discord User ${userId}`,
+      officialStartDate: item.parsed.officialStartDate,
+      officialEndDate: item.parsed.officialEndDate,
+      reviewerUsername: item.parsed.reviewerUsername,
+      reason: item.parsed.reason,
+      loaType: item.parsed.loaType,
+      staffClassLabel: item.parsed.staffClassLabel,
+      extensionsText: item.parsed.extensionsText,
+      logChannelId: channel.id,
+      logMessageId: item.message.id,
+      createdAt: item.message.createdAt?.toISOString?.() || new Date(item.message.createdTimestamp).toISOString(),
+      updatedAt: item.message.editedAt?.toISOString?.() || item.message.createdAt?.toISOString?.() || new Date().toISOString(),
+      source: 'discord_current_loa_log',
+    });
+  }
+
+  const seen = new Set(latestByUser.keys());
+  for (const record of stored) {
+    if (!seen.has(String(record.userId))) records.push(record);
+  }
+
+  records.sort((a, b) => String(a.officialEndDate || '').localeCompare(String(b.officialEndDate || '')));
+  portalLoaCache.set(key, { expiresAt: Date.now() + 60_000, records });
+  return records;
+}
+
 module.exports = {
   addLoa,
   removeLoa,
@@ -1181,4 +1244,5 @@ module.exports = {
   LOA_LOG_CHANNEL_ID,
   LOA_PENDING_EMOJI,
   LOA_ENDED_EMOJI,
+  listCurrentLoasForPortal,
 };

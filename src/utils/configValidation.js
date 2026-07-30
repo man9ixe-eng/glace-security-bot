@@ -87,6 +87,12 @@ function getConfigurationReport() {
     has('ROBLOX_GROUP_ID') || has('ROBLOX_COMMUNITY_ID') ? [] : ['ROBLOX_GROUP_ID'],
   );
 
+  report.reviewOnCallPanel = makeState([
+    ...(!has('CORPORATE_REVIEW_PING_ROLE_ID') ? ['CORPORATE_REVIEW_PING_ROLE_ID'] : []),
+    ...(!(has('CORPORATE_BOARD_REVIEW_PING_ROLE_ID') || has('BOARD_REVIEW_PING_ROLE_ID')) ? ['CORPORATE_BOARD_REVIEW_PING_ROLE_ID'] : []),
+    ...(!has('PRESIDENTIAL_REVIEW_PING_ROLE_ID') ? ['PRESIDENTIAL_REVIEW_PING_ROLE_ID'] : []),
+  ]);
+
   return report;
 }
 

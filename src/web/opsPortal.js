@@ -13,7 +13,8 @@ const {
   getMemberRoleNames,
 } = require('../utils/permissions');
 const { TIERS, WEBSITE_CAPABILITIES } = require('../config/access');
-const { listActiveLoas, listLoaHistory } = require('../utils/loaStore');
+const { listLoaHistory } = require('../utils/loaStore');
+const { listCurrentLoasForPortal } = require('../utils/loaManager');
 const staffOps = require('../utils/staffOpsStore');
 const promotionStore = require('../utils/promotionStore');
 const staffRequestStore = require('../utils/staffRequestStore');
@@ -252,7 +253,7 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.7.0"></head><body class="public-portal">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.8.0"></head><body class="public-portal">
   <main class="login-shell resort-login">
     <section class="login-hero resort-hero">
       <div class="logo-lockup resort-logo"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -291,7 +292,7 @@ function publicLoginPage(req) {
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.7.0"><script defer src="/ops/assets/ops.js?v=2.7.0"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.8.0"><script defer src="/ops/assets/ops.js?v=2.8.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
       <div class="logo-lockup"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -381,7 +382,7 @@ function portalPage() {
 
         <section id="section-posts" class="section"><div class="workspace"><article class="form-card" data-capability="publishUpdate"><h2>Publish Schedule or Update</h2><p>The website stores the permanent version and the bot posts the clean Discord display.</p><form id="postForm" class="form-grid"><div class="field"><label>Post Type</label><select name="type"><option value="update">Staff Update</option><option value="schedule">Staff Schedule</option></select></div><div class="field"><label>Title</label><input name="title" required></div><div class="field full"><label>Content</label><textarea name="content" required style="min-height:190px"></textarea></div><button class="btn pink full" type="submit">Save & Post to Discord</button></form></article><article class="list-card"><h2>Schedules & Updates</h2><p>Inactivity notices, time-zone changes, resignations, schedules, and operational updates.</p><div id="postList" class="record-list"></div></article></div></section>
 
-        <section id="section-loas" class="section"><div class="panel"><div class="panel-head"><h2>Current LOAs</h2></div><div id="loaList" class="record-list"></div></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h2>Ended LOA History</h2></div><div id="loaHistoryList" class="record-list"></div></div></section>
+        <section id="section-loas" class="section"><div class="panel"><div class="panel-head"><div><span class="panel-kicker">LIVE DISCORD SYNC</span><h2>Current LOAs</h2><p>Synced from the active LOA system and current LOA channel.</p></div></div><div id="loaList" class="record-list"></div></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h2>Ended LOA History</h2></div><div id="loaHistoryList" class="record-list"></div></div></section>
         <section id="section-audit" class="section"><article class="list-card"><h2>Protected Audit Trail</h2><p>Website actions and high-impact Discord commands are preserved here.</p><div id="auditList" class="record-list"></div></article></section>
       </div>
     </main>
@@ -498,7 +499,7 @@ async function bootstrap(session, client) {
     ? staffOps.listDocuments({ guildId: session.guildId }).filter((doc) => session.tier >= Number(doc.visibilityTier || TIERS.MANAGEMENT))
     : [];
   const posts = capabilities.viewPosts ? staffOps.listPosts({ guildId: session.guildId }) : [];
-  const loas = capabilities.viewLoas ? listActiveLoas(session.guildId) : [];
+  const loas = capabilities.viewLoas ? await listCurrentLoasForPortal(client, session.guildId) : [];
   const loaHistory = capabilities.viewLoas ? listLoaHistory(session.guildId, 100) : [];
   const visibleRequests = visibleStaffRequests(allStaffRequests, session);
   const reviewRequests = session.tier >= TIERS.PRESIDENTIAL
