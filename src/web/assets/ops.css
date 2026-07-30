@@ -1691,7 +1691,7 @@ body::before {
 .storage-badge.warning { color: #9a5200; background: #fff4dc; border: 1px solid #efcd8f; }
 
 /* =========================================================
-   V2.6 — STAFF REQUESTS, ACTIVITY & ROBLOX DIRECTORY
+   V2.7 — STAFF REQUESTS, ACTIVITY & ROBLOX DIRECTORY
    ========================================================= */
 .request-header {
   display:flex;
@@ -1788,4 +1788,45 @@ body::before {
 }
 @media (max-width:680px) {
   .activity-summary-grid,.activity-breakdown,.staff-directory-grid { grid-template-columns:1fr; }
+}
+
+/* Glace Staff Hub v2.7 — expanded request center */
+.request-policy {
+  margin: 16px 0 18px;
+  padding: 16px 18px;
+  color: #33465f;
+  background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(250,241,222,.92));
+  border-color: rgba(184,126,29,.22);
+}
+.request-workspace {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.request-form-card {
+  min-height: 100%;
+  border-color: rgba(31,77,133,.12);
+  box-shadow: 0 16px 34px rgba(58,72,91,.09);
+}
+.request-form-card h2 { color: #193a64; }
+.btn.purple {
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #9b62df);
+  border-color: transparent;
+}
+.status-pending_board {
+  color: #9a5b0b;
+  background: #fff2d8;
+  border-color: #edc47a;
+}
+.review-claim {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #5e461e;
+  background: #fff7e8;
+  border: 1px solid #ecd39f;
+}
+@media (max-width: 1080px) {
+  .request-workspace { grid-template-columns: 1fr; }
 }

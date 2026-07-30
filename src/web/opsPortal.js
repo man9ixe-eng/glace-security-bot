@@ -252,7 +252,7 @@ async function discordOAuthCallback(req, res, url, client) {
 function publicLoginPage(req) {
   const { clientId, clientSecret } = getOAuthConfig(req);
   const ready = Boolean(clientId && clientSecret);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.6.0"></head><body class="public-portal">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.7.0"></head><body class="public-portal">
   <main class="login-shell resort-login">
     <section class="login-hero resort-hero">
       <div class="logo-lockup resort-logo"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -291,7 +291,7 @@ function publicLoginPage(req) {
 }
 
 function portalPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.6.0"><script defer src="/ops/assets/ops.js?v=2.6.0"></script></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.7.0"><script defer src="/ops/assets/ops.js?v=2.7.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
       <div class="logo-lockup"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
@@ -299,7 +299,7 @@ function portalPage() {
       <div class="sidebar-section">Workspace</div>
       <nav class="nav">
         <button class="active" data-tab="dashboard" data-title="Staff Hub Dashboard" data-subtitle="A bright, role-aware view of the tools available to your current Glace tier."><span class="nav-icon">⌂</span><span>Dashboard</span></button>
-        <button data-tab="requests" data-capability="viewStaffRequests" data-title="Staff Request Center" data-subtitle="Submit LOA and timezone requests, follow their status, and review requests routed to your team."><span class="nav-icon">✉</span><span>Requests</span></button>
+        <button data-tab="requests" data-capability="viewStaffRequests" data-title="Staff Request Center" data-subtitle="Submit resignations, username updates, LOAs, LOA removals, and timezone changes; then follow each review."><span class="nav-icon">✉</span><span>Requests</span></button>
         <button data-tab="activity" data-capability="viewActivity" data-title="LI+ Activity" data-subtitle="Live quota activity pulled from the existing Discord session tracking system."><span class="nav-icon">◫</span><span>Activity</span></button>
         <button data-tab="staff" data-capability="viewStaffDirectory" data-title="Glace Staff Directory" data-subtitle="Current Intern+ staff aligned from the Roblox community ranks into Glace teams."><span class="nav-icon">♚</span><span>Staff List</span></button>
         <button data-tab="promotions" data-capability="viewPromotions" data-title="Promotion Submissions" data-subtitle="Corporate owns the submission from due diligence through verified completion."><span class="nav-icon">♛</span><span>Promotions</span></button>
@@ -329,12 +329,16 @@ function portalPage() {
         </section>
 
         <section id="section-requests" class="section">
-          <div class="request-header panel"><div><span class="panel-kicker">Self-service for current Interns+</span><h2>Staff Request Center</h2><p>Submit your own request. Leadership reviews it; staff do not need to ask someone else to enter it manually.</p></div><button id="postRequestPanel" class="btn gold" type="button" data-capability="postStaffRequestPanel">Post Discord Request Panel</button></div>
+          <div class="request-header panel"><div><span class="panel-kicker">Self-service for current Interns+</span><h2>Staff Request Center</h2><p>Submit your own request. The bot sends it to the correct private review channel and sends status receipts by DM.</p></div><button id="postRequestPanel" class="btn gold" type="button" data-capability="postStaffRequestPanel">Post Discord Request Panel</button></div>
+          <div class="request-policy panel"><strong>Review routing:</strong> Corporate+ reviews Intern through Senior Management requests. Presidential reviews Corporate+ requests. Resignations route to Corporate Board. Only one reviewer may claim and complete each request.</div>
           <div class="workspace request-workspace">
-            <article class="form-card" data-capability="submitStaffRequest"><h2>Request Leave of Absence</h2><p>Start dates must be Monday. End dates must be Sunday.</p><form id="loaRequestForm" class="form-grid"><div class="field"><label>Start Date (Monday)</label><input name="startDate" placeholder="MM/DD/YYYY" required></div><div class="field"><label>End Date (Sunday)</label><input name="endDate" placeholder="MM/DD/YYYY" required></div><div class="field full"><label>Reason</label><select name="reason" required><option value="Personal">Personal</option><option value="School/Work">School/Work</option><option value="Sick">Sick</option><option value="Mental Health">Mental Health</option><option value="Vacation">Vacation</option><option value="Other">Other</option></select></div><div class="field full"><label>Additional Details</label><textarea name="details" placeholder="Required when selecting Other"></textarea></div><button class="btn primary full" type="submit">Submit LOA Request</button></form></article>
-            <article class="form-card" data-capability="submitStaffRequest"><h2>Request Timezone Change</h2><p>Use the timezone displayed on your Glace records and the timezone you need it changed to.</p><form id="timezoneRequestForm" class="form-grid"><div class="field"><label>Current Timezone</label><input name="currentTimezone" required placeholder="Example: EST"></div><div class="field"><label>Requested Timezone</label><input name="requestedTimezone" required placeholder="Example: CST"></div><div class="field full"><label>Reason</label><textarea name="reason" required></textarea></div><button class="btn gold full" type="submit">Submit Timezone Request</button></form></article>
+            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Resignation</h2><p>Corporate Board receives resignation submissions.</p><form id="resignationRequestForm" data-request-type="resignation" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Former Rank</label><input name="formerRank" required></div><div class="field"><label>New Rank</label><input name="newRank" required placeholder="Example: Former Staff"></div><div class="field full"><label>Notes</label><textarea name="notes"></textarea></div><button class="btn danger full" type="submit">Submit Resignation</button></form></article>
+            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Username Update</h2><p>You may submit a new one whenever your username changes.</p><form id="usernameRequestForm" data-request-type="username_update" class="form-grid"><div class="field"><label>Former Username</label><input name="formerUsername" required></div><div class="field"><label>New Username</label><input name="newUsername" required></div><div class="field full"><label>Rank</label><input name="rank" required></div><button class="btn purple full" type="submit">Submit Username Update</button></form></article>
+            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Leave of Absence</h2><p>Must start on Monday and end on Sunday. Returning midweek does not remove that week's quota.</p><form id="loaRequestForm" data-request-type="loa" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Rank</label><input name="rank" required></div><div class="field"><label>Start Date — Monday</label><input name="startDate" placeholder="MM/DD/YYYY" required></div><div class="field"><label>End Date — Sunday</label><input name="endDate" placeholder="MM/DD/YYYY" required></div><div class="field full"><label>Reason</label><textarea name="reason" required></textarea></div><button class="btn primary full" type="submit">Submit LOA Request</button></form></article>
+            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>LOA Removal</h2><p>Submit this when you are ready to come off your current LOA.</p><form id="loaRemovalRequestForm" data-request-type="loa_removal" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Rank</label><input name="rank" required></div><div class="field full"><label>Week(s) on LOA</label><input name="weeksOnLoa" required placeholder="Example: 2 weeks"></div><button class="btn gold full" type="submit">Submit LOA Removal</button></form></article>
+            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Timezone Update</h2><p>You may submit a new one whenever your timezone changes.</p><form id="timezoneRequestForm" data-request-type="timezone_change" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Timezone</label><input name="timezone" required placeholder="Example: EST or America/New_York"></div><button class="btn gold full" type="submit">Submit Timezone Update</button></form></article>
           </div>
-          <article id="staffRequestReviewPanel" class="list-card" data-capability="reviewStaffRequestsCorporate"><div class="toolbar"><div><h2>Requests Routed to Your Team</h2><p>Corporate+ reviews Intern through Senior Management. Presidential reviews Corporate+.</p></div><span id="requestStorageBadge" class="storage-badge"></span></div><div id="staffRequestReviewList" class="record-list"></div></article>
+          <article id="staffRequestReviewPanel" class="list-card" data-capability="reviewStaffRequestsCorporate"><div class="toolbar"><div><h2>Requests Routed to Your Team</h2><p>Buttons are permission checked. The first reviewer is recorded; other reviewers are blocked until the review is released.</p></div><span id="requestStorageBadge" class="storage-badge"></span></div><div id="staffRequestReviewList" class="record-list"></div></article>
           <article class="list-card" style="margin-top:16px"><h2>My Requests</h2><p>You will also receive Discord DMs when a request changes.</p><div id="myRequestList" class="record-list"></div></article>
         </section>
 
@@ -473,6 +477,9 @@ async function buildRobloxDirectory(client, session, capabilities) {
 
 function visibleStaffRequests(all, session) {
   if (session.tier >= TIERS.PRESIDENTIAL) return all;
+  if (session.tier >= TIERS.CORPORATE_BOARD) {
+    return all.filter((item) => item.status === 'pending_board' || Number(item.requesterTier) < TIERS.CORPORATE || String(item.requesterId) === String(session.user.id));
+  }
   if (session.tier >= TIERS.CORPORATE) {
     return all.filter((item) => Number(item.requesterTier) < TIERS.CORPORATE || String(item.requesterId) === String(session.user.id));
   }
@@ -495,10 +502,12 @@ async function bootstrap(session, client) {
   const loaHistory = capabilities.viewLoas ? listLoaHistory(session.guildId, 100) : [];
   const visibleRequests = visibleStaffRequests(allStaffRequests, session);
   const reviewRequests = session.tier >= TIERS.PRESIDENTIAL
-    ? allStaffRequests.filter((item) => item.status === 'pending_presidential')
-    : session.tier >= TIERS.CORPORATE
-      ? allStaffRequests.filter((item) => item.status === 'pending_corporate')
-      : [];
+    ? allStaffRequests.filter((item) => ['pending_presidential', 'pending_board', 'pending_corporate'].includes(item.status))
+    : session.tier >= TIERS.CORPORATE_BOARD
+      ? allStaffRequests.filter((item) => ['pending_board', 'pending_corporate'].includes(item.status))
+      : session.tier >= TIERS.CORPORATE
+        ? allStaffRequests.filter((item) => item.status === 'pending_corporate')
+        : [];
   const audit = capabilities.viewAudit ? [
     ...staffOps.listAudit({ limit: 200 }),
     ...await promotionStore.listAudit({ limit: 200, guildId: session.guildId }),
@@ -765,7 +774,7 @@ async function handleApi(req, res, url, client) {
     const session = await requireFreshSession(req, res, client, WEBSITE_CAPABILITIES.submitStaffRequest);
     if (!session || !requireCsrf(req, res, session)) return true;
     const body = await readJsonBody(req);
-    if (!['loa', 'timezone_change'].includes(String(body.type))) return sendJson(res, 400, { ok: false, error: 'Request type must be LOA or timezone change.' }) || true;
+    if (!staffRequestSystem.REQUEST_TYPES.includes(String(body.type))) return sendJson(res, 400, { ok: false, error: 'That staff request type is not supported.' }) || true;
     const interaction = await websiteInteraction(client, session);
     const entry = await staffRequestSystem.createFromDiscord(interaction, body.type, body.requestData || {});
     return sendJson(res, 201, { ok: true, entry }) || true;
@@ -786,11 +795,9 @@ async function handleApi(req, res, url, client) {
     }
     if (body.action === 'resubmit') {
       if (String(current.requesterId) !== String(session.user.id)) return sendJson(res, 403, { ok: false, error: 'Only the original requester can resubmit this request.' }) || true;
-      const validation = current.type === 'loa'
-        ? staffRequestSystem.validateLoaData(body.requestData || {})
-        : staffRequestSystem.validateTimezoneData(body.requestData || {});
+      const validation = staffRequestSystem.validateRequestData(current.type, body.requestData || {});
       if (!validation.ok) return sendJson(res, 400, { ok: false, error: validation.error }) || true;
-      let entry = await staffRequestStore.resubmit(current.id, validation.data, { id: session.user.id, tag: session.memberDisplayName }, staffRequestSystem.requestStatusForTier(session.tier));
+      let entry = await staffRequestStore.resubmit(current.id, validation.data, { id: session.user.id, tag: session.memberDisplayName }, staffRequestSystem.requestStatusFor(current.type, session.tier));
       entry = await staffRequestSystem.routeRequestToDiscord(client, entry);
       return sendJson(res, 200, { ok: true, entry }) || true;
     }

@@ -405,27 +405,48 @@ function renderPromotions() {
 
 
 function requestTypeLabel(type) {
-  return type === 'timezone_change' ? 'Timezone Change' : 'Leave of Absence';
+  const labels = {
+    resignation: 'Resignation',
+    username_update: 'Username Update',
+    loa: 'Leave of Absence',
+    loa_removal: 'LOA Removal',
+    timezone_change: 'Timezone Change',
+  };
+  return labels[type] || prettify(type);
 }
 
 function requestDetails(item) {
   const data = item.requestData || {};
-  if (item.type === 'timezone_change') {
-    return `<div class="record-details"><span>Current: ${escapeHtml(data.currentTimezone || 'Not provided')}</span><span>Requested: ${escapeHtml(data.requestedTimezone || 'Not provided')}</span></div><div class="record-body"><strong>Reason</strong>\n${escapeHtml(data.reason || 'Not provided')}</div>`;
+  if (item.type === 'resignation') {
+    return `<div class="record-details"><span>Username: ${escapeHtml(data.username || 'Not provided')}</span><span>Former Rank: ${escapeHtml(data.formerRank || 'Not provided')}</span><span>New Rank: ${escapeHtml(data.newRank || 'Not provided')}</span></div>${data.notes ? `<div class="record-body"><strong>Notes</strong>\n${escapeHtml(data.notes)}</div>` : ''}`;
   }
-  return `<div class="record-details"><span>Starts: ${escapeHtml(data.startDate || 'Not provided')} (Monday)</span><span>Ends: ${escapeHtml(data.endDate || 'Not provided')} (Sunday)</span><span>Reason: ${escapeHtml(data.reason || 'Not provided')}</span></div>${data.details ? `<div class="record-body"><strong>Additional details</strong>\n${escapeHtml(data.details)}</div>` : ''}`;
+  if (item.type === 'username_update') {
+    return `<div class="record-details"><span>Former Username: ${escapeHtml(data.formerUsername || 'Not provided')}</span><span>New Username: ${escapeHtml(data.newUsername || 'Not provided')}</span><span>Rank: ${escapeHtml(data.rank || 'Not provided')}</span></div>`;
+  }
+  if (item.type === 'timezone_change') {
+    return `<div class="record-details"><span>Username: ${escapeHtml(data.username || item.requesterTag || 'Not provided')}</span><span>Timezone: ${escapeHtml(data.timezone || data.requestedTimezone || 'Not provided')}</span></div>`;
+  }
+  if (item.type === 'loa_removal') {
+    return `<div class="record-details"><span>Username: ${escapeHtml(data.username || 'Not provided')}</span><span>Rank: ${escapeHtml(data.rank || 'Not provided')}</span><span>Week(s) on LOA: ${escapeHtml(data.weeksOnLoa || 'Not provided')}</span></div>`;
+  }
+  return `<div class="record-details"><span>Username: ${escapeHtml(data.username || item.requesterTag || 'Not provided')}</span><span>Rank: ${escapeHtml(data.rank || item.requesterTierLabel || 'Not provided')}</span><span>Starts: ${escapeHtml(data.startDate || 'Not provided')} (Monday)</span><span>Ends: ${escapeHtml(data.endDate || 'Not provided')} (Sunday)</span></div><div class="record-body"><strong>Reason</strong>\n${escapeHtml(data.reason || 'Not provided')}</div>`;
 }
 
 function staffRequestActions(item) {
   if (isPreviewing()) return '<span class="preview-lock-note">Preview only</span>';
   const c = currentCapabilities();
   const actions = [];
+  const tier = effectiveTier();
   const canReview = (item.status === 'pending_corporate' && c.reviewStaffRequestsCorporate)
+    || (item.status === 'pending_board' && tier >= 7)
     || (item.status === 'pending_presidential' && c.reviewStaffRequestsPresidential);
-  if (canReview) {
+  const claimedByOther = item.reviewClaimedById && String(item.reviewClaimedById) !== String(state.data.viewer.id);
+  if (canReview && !claimedByOther) {
     actions.push(`<button class="btn small green" data-staff-request-action="approve" data-id="${escapeHtml(item.id)}">Approve</button>`);
     actions.push(`<button class="btn small ghost" data-staff-request-action="return" data-id="${escapeHtml(item.id)}">Return</button>`);
     actions.push(`<button class="btn small danger" data-staff-request-action="deny" data-id="${escapeHtml(item.id)}">Deny</button>`);
+  } else if (claimedByOther) {
+    actions.push(`<span class="preview-lock-note">Claimed by ${escapeHtml(item.reviewClaimedByTag || 'another reviewer')}</span>`);
   }
   if (item.status === 'returned' && String(item.requesterId) === String(state.data.viewer.id)) {
     actions.push(`<button class="btn small primary" data-staff-request-resubmit="${escapeHtml(item.id)}">Revise & Resubmit</button>`);
@@ -433,12 +454,20 @@ function staffRequestActions(item) {
   return actions.join('');
 }
 
+function requestRouteLabel(item) {
+  if (item.status === 'pending_presidential') return 'Presidential';
+  if (item.status === 'pending_board') return 'Corporate Board';
+  if (item.status === 'pending_corporate') return 'Corporate+';
+  return 'Completed review';
+}
+
 function staffRequestCard(item) {
   return `<article class="record-card" id="request-${escapeHtml(item.id)}">
     <div class="record-head"><div class="record-title"><h3>${escapeHtml(item.requestNumber)} — ${escapeHtml(requestTypeLabel(item.type))}</h3><div class="meta">${escapeHtml(item.requesterTag || item.requesterId)} • ${escapeHtml(item.requesterTierLabel || roleName(item.requesterTier))} • ${formatDate(item.submittedAt || item.createdAt)}</div></div>${statusChip(item.status)}</div>
     ${requestDetails(item)}
+    ${item.reviewClaimedByTag && item.status.startsWith('pending_') ? `<div class="review-claim"><strong>Current reviewer:</strong> ${escapeHtml(item.reviewClaimedByTag)}</div>` : ''}
     ${item.decisionNote ? `<div class="record-body"><strong>Decision note</strong>\n${escapeHtml(item.decisionNote)}</div>` : ''}
-    <div class="record-details"><span>Review route: ${item.status === 'pending_presidential' ? 'Presidential' : item.status === 'pending_corporate' ? 'Corporate+' : 'Completed review'}</span>${item.reviewedByTag ? `<span>Reviewed by ${escapeHtml(item.reviewedByTag)}</span>` : ''}</div>
+    <div class="record-details"><span>Review route: ${requestRouteLabel(item)}</span>${item.reviewedByTag ? `<span>Reviewed by ${escapeHtml(item.reviewedByTag)}</span>` : ''}</div>
     <div class="record-actions">${staffRequestActions(item)}</div>
   </article>`;
 }
@@ -446,11 +475,14 @@ function staffRequestCard(item) {
 function renderStaffRequests() {
   const all = state.data.staffRequests || [];
   const mine = all.filter((item) => String(item.requesterId) === String(state.data.viewer.id));
-  const review = effectiveTier() >= 8
-    ? all.filter((item) => item.status === 'pending_presidential')
-    : effectiveTier() >= 6
-      ? all.filter((item) => item.status === 'pending_corporate')
-      : [];
+  const tier = effectiveTier();
+  const review = tier >= 8
+    ? all.filter((item) => ['pending_presidential', 'pending_board', 'pending_corporate'].includes(item.status))
+    : tier >= 7
+      ? all.filter((item) => ['pending_board', 'pending_corporate'].includes(item.status))
+      : tier >= 6
+        ? all.filter((item) => item.status === 'pending_corporate')
+        : [];
   const badge = $('#requestStorageBadge');
   if (badge) {
     const permanent = state.data.requestStorage === 'supabase';
@@ -459,12 +491,24 @@ function renderStaffRequests() {
     badge.classList.toggle('warning', !permanent);
   }
   const reviewPanel = $('#staffRequestReviewPanel');
-  const canReview = Boolean(currentCapabilities().reviewStaffRequestsCorporate || currentCapabilities().reviewStaffRequestsPresidential);
+  const canReview = tier >= 6;
   if (reviewPanel) reviewPanel.hidden = !canReview;
   const reviewList = $('#staffRequestReviewList');
   if (reviewList && canReview) reviewList.innerHTML = review.length ? review.map(staffRequestCard).join('') : '<div class="empty-state"><strong>No requests waiting</strong>There are no requests routed to your review level.</div>';
   const myList = $('#myRequestList');
-  if (myList) myList.innerHTML = mine.length ? mine.map(staffRequestCard).join('') : '<div class="empty-state"><strong>No requests submitted</strong>Your LOA and timezone requests will appear here.</div>';
+  if (myList) myList.innerHTML = mine.length ? mine.map(staffRequestCard).join('') : '<div class="empty-state"><strong>No requests submitted</strong>Your staff requests will appear here.</div>';
+}
+
+function prefillRequestForms() {
+  if (!state.data?.viewer) return;
+  const username = state.data.viewer.displayName || state.data.viewer.username || '';
+  const rank = state.data.viewer.tierLabel || roleName(state.data.viewer.tier);
+  $$('form[data-request-type]').forEach((form) => {
+    if (form.elements.username && !form.elements.username.value) form.elements.username.value = username;
+    if (form.elements.formerUsername && !form.elements.formerUsername.value) form.elements.formerUsername.value = username;
+    if (form.elements.rank && !form.elements.rank.value) form.elements.rank.value = rank;
+    if (form.elements.formerRank && !form.elements.formerRank.value) form.elements.formerRank.value = rank;
+  });
 }
 
 function activityMetric(label, value, note = '') {
@@ -523,10 +567,16 @@ function loadReturnedStaffRequest(id) {
   const item = (state.data.staffRequests || []).find((entry) => entry.id === id);
   if (!item || item.status !== 'returned') return;
   state.staffRequestResubmit = { id: item.id, type: item.type };
-  const data = item.requestData || {};
-  const form = item.type === 'loa' ? $('#loaRequestForm') : $('#timezoneRequestForm');
+  const formIds = {
+    resignation: '#resignationRequestForm',
+    username_update: '#usernameRequestForm',
+    loa: '#loaRequestForm',
+    loa_removal: '#loaRemovalRequestForm',
+    timezone_change: '#timezoneRequestForm',
+  };
+  const form = $(formIds[item.type]);
   if (!form) return;
-  Object.entries(data).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; });
+  Object.entries(item.requestData || {}).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; });
   const submit = form.querySelector('button[type="submit"]');
   if (submit) submit.textContent = `Resubmit ${item.requestNumber}`;
   showTab('requests');
@@ -575,7 +625,7 @@ function renderAll() {
   renderViewer();
   const capabilities = currentCapabilities();
   renderDashboard();
-  if (capabilities.viewStaffRequests) renderStaffRequests();
+  if (capabilities.viewStaffRequests) { renderStaffRequests(); prefillRequestForms(); }
   if (capabilities.viewActivity) renderActivity();
   if (capabilities.viewStaffDirectory) renderStaffDirectory();
   if (capabilities.viewPromotions) renderPromotions();
@@ -795,40 +845,32 @@ function bindEvents() {
   });
   $('#promotionReset')?.addEventListener('click', resetPromotionForm);
 
-  $('#loaRequestForm')?.addEventListener('submit', async (event) => {
+  const requestFormLabels = {
+    resignation: 'Submit Resignation',
+    username_update: 'Submit Username Update',
+    loa: 'Submit LOA Request',
+    loa_removal: 'Submit LOA Removal',
+    timezone_change: 'Submit Timezone Update',
+  };
+  $$('form[data-request-type]').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (blockPreviewSubmit(event)) return;
+    const type = event.currentTarget.dataset.requestType;
     const requestData = formDataObject(event.currentTarget);
     try {
-      if (state.staffRequestResubmit?.type === 'loa') {
+      if (state.staffRequestResubmit?.type === type) {
         await api(`/ops/api/staff-requests/${encodeURIComponent(state.staffRequestResubmit.id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'resubmit', requestData }) });
       } else {
-        await api('/ops/api/staff-requests', { method: 'POST', body: JSON.stringify({ type: 'loa', requestData }) });
+        await api('/ops/api/staff-requests', { method: 'POST', body: JSON.stringify({ type, requestData }) });
       }
       state.staffRequestResubmit = null;
       event.currentTarget.reset();
-      event.currentTarget.querySelector('button[type="submit"]').textContent = 'Submit LOA Request';
+      const submit = event.currentTarget.querySelector('button[type="submit"]');
+      if (submit) submit.textContent = requestFormLabels[type] || 'Submit Request';
       await refresh();
-      notify('LOA request submitted and routed to the correct review channel.');
+      notify(`${requestTypeLabel(type)} submitted and routed to the correct review channel.`);
     } catch (error) { notify(error.message, 'error'); }
-  });
-  $('#timezoneRequestForm')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (blockPreviewSubmit(event)) return;
-    const requestData = formDataObject(event.currentTarget);
-    try {
-      if (state.staffRequestResubmit?.type === 'timezone_change') {
-        await api(`/ops/api/staff-requests/${encodeURIComponent(state.staffRequestResubmit.id)}`, { method: 'PATCH', body: JSON.stringify({ action: 'resubmit', requestData }) });
-      } else {
-        await api('/ops/api/staff-requests', { method: 'POST', body: JSON.stringify({ type: 'timezone_change', requestData }) });
-      }
-      state.staffRequestResubmit = null;
-      event.currentTarget.reset();
-      event.currentTarget.querySelector('button[type="submit"]').textContent = 'Submit Timezone Request';
-      await refresh();
-      notify('Timezone request submitted and routed to the correct review channel.');
-    } catch (error) { notify(error.message, 'error'); }
-  });
+  }));
   $('#postRequestPanel')?.addEventListener('click', async () => {
     if (isPreviewing()) return notify('Exit Preview mode before posting the Discord panel.', 'error');
     try { await api('/ops/api/staff-requests/panel', { method: 'POST', body: JSON.stringify({}) }); notify('The staff request panel was posted in Discord.'); }

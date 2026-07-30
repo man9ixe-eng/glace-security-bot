@@ -82,7 +82,7 @@ async function nextRemoteNumber() {
   const result = await supabaseRequest('post', 'rpc/next_glace_staff_request_number', { data: {} });
   if (typeof result === 'string' && result.trim()) return result.trim();
   if (Array.isArray(result) && result[0]) return String(result[0]);
-  throw new Error('Staff request database did not return a request number. Run the included v2.6 Supabase SQL.');
+  throw new Error('Staff request database did not return a request number. Run the included Supabase SQL.');
 }
 async function insertRemote(entry) {
   const rows = await supabaseRequest('post', REQUEST_TABLE, {
@@ -165,6 +165,7 @@ async function create(input, actor) {
     submittedAt: when, createdAt: when, updatedAt: when,
     reviewedById: null, reviewedByTag: null, reviewedAt: null, decisionNote: null,
     reviewChannelId: null, reviewMessageId: null,
+    reviewClaimedById: null, reviewClaimedByTag: null, reviewClaimedAt: null,
     appliedAt: null, appliedResult: null,
   };
   if (USE_SUPABASE) {
@@ -203,14 +204,47 @@ async function setReviewMessage(requestId, channelId, messageId) {
     entry.updatedAt = nowIso();
   }, () => ({ channelId: clean(channelId, 40), messageId: clean(messageId, 40) }));
 }
+async function claimReview(requestId, actor) {
+  return mutate(requestId, actor, 'staff_request_review_claimed', (entry) => {
+    if (!['pending_corporate', 'pending_board', 'pending_presidential'].includes(entry.status)) {
+      throw new Error('This request is no longer awaiting review.');
+    }
+    const a = actorData(actor);
+    if (entry.reviewClaimedById && String(entry.reviewClaimedById) !== String(a.id)) {
+      throw new Error(`This request is already being reviewed by ${entry.reviewClaimedByTag || 'another reviewer'}.`);
+    }
+    entry.reviewClaimedById = a.id;
+    entry.reviewClaimedByTag = a.tag;
+    entry.reviewClaimedAt = entry.reviewClaimedAt || nowIso();
+    entry.updatedAt = nowIso();
+  }, (entry) => ({ reviewerId: entry.reviewClaimedById, reviewerTag: entry.reviewClaimedByTag }));
+}
+
+async function releaseReview(requestId, actor) {
+  return mutate(requestId, actor, 'staff_request_review_released', (entry) => {
+    const a = actorData(actor);
+    if (!entry.reviewClaimedById) return;
+    if (String(entry.reviewClaimedById) !== String(a.id)) {
+      throw new Error('Only the reviewer who claimed this request may release it.');
+    }
+    entry.reviewClaimedById = null;
+    entry.reviewClaimedByTag = null;
+    entry.reviewClaimedAt = null;
+    entry.updatedAt = nowIso();
+  });
+}
+
 async function decide(requestId, decision, note, actor, appliedResult = null) {
   const safeDecision = clean(decision, 30);
   const safeNote = clean(note, 3000);
   return mutate(requestId, actor, `staff_request_${safeDecision}`, (entry) => {
-    if (!['pending_corporate', 'pending_presidential', 'returned'].includes(entry.status)) {
+    if (!['pending_corporate', 'pending_board', 'pending_presidential', 'returned'].includes(entry.status)) {
       throw new Error('This request is no longer awaiting review.');
     }
     const a = actorData(actor);
+    if (entry.reviewClaimedById && String(entry.reviewClaimedById) !== String(a.id)) {
+      throw new Error(`This request is already being reviewed by ${entry.reviewClaimedByTag || 'another reviewer'}.`);
+    }
     const when = nowIso();
     if (safeDecision === 'approve') entry.status = 'approved';
     else if (safeDecision === 'return') entry.status = 'returned';
@@ -218,6 +252,7 @@ async function decide(requestId, decision, note, actor, appliedResult = null) {
     else throw new Error('Invalid staff request decision.');
     entry.reviewedById = a.id; entry.reviewedByTag = a.tag; entry.reviewedAt = when;
     entry.decisionNote = safeNote; entry.updatedAt = when;
+    entry.reviewClaimedById = null; entry.reviewClaimedByTag = null; entry.reviewClaimedAt = null;
     if (safeDecision === 'approve') {
       entry.appliedAt = when;
       entry.appliedResult = appliedResult && typeof appliedResult === 'object' ? appliedResult : null;
@@ -231,6 +266,7 @@ async function resubmit(requestId, requestData, actor, nextStatus) {
     entry.requestData = requestData && typeof requestData === 'object' ? requestData : entry.requestData;
     entry.status = clean(nextStatus, 50) || (entry.requesterTier >= 6 ? 'pending_presidential' : 'pending_corporate');
     entry.reviewedById = null; entry.reviewedByTag = null; entry.reviewedAt = null; entry.decisionNote = null;
+    entry.reviewClaimedById = null; entry.reviewClaimedByTag = null; entry.reviewClaimedAt = null;
     entry.updatedAt = nowIso();
   });
 }
@@ -270,6 +306,6 @@ async function listProfiles(guildId) {
 function storageMode() { return USE_SUPABASE ? 'supabase' : 'local-json'; }
 
 module.exports = {
-  STORE_PATH, list, get, create, setReviewMessage, decide, resubmit, listAudit,
+  STORE_PATH, list, get, create, setReviewMessage, claimReview, releaseReview, decide, resubmit, listAudit,
   upsertProfile, listProfiles, storageMode, isSupabaseEnabled: () => USE_SUPABASE,
 };
