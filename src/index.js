@@ -140,6 +140,39 @@ if (fs.existsSync(commandsPathRoot)) {
   }
 }
 
+async function ensureRuntimeSlashCommands(readyClient) {
+  const guildId = String(process.env.GUILD_ID || '').trim();
+  const guild = guildId
+    ? (readyClient.guilds.cache.get(guildId) || await readyClient.guilds.fetch(guildId).catch(() => null))
+    : null;
+  if (!guild) {
+    console.warn('[COMMAND SYNC] GUILD_ID was not available; new session commands were not synced.');
+    return;
+  }
+
+  const commandNames = ['addsession', 'editcard', 'manualjuniorlog'];
+
+  try {
+    const existing = await guild.commands.fetch();
+    for (const commandName of commandNames) {
+      const command = readyClient.commands.get(commandName);
+      if (!command?.data) continue;
+
+      const payload = command.data.toJSON();
+      const current = existing.find((entry) => entry.name === payload.name);
+      if (current) {
+        await guild.commands.edit(current.id, payload);
+        console.log(`[COMMAND SYNC] Updated /${commandName}.`);
+      } else {
+        await guild.commands.create(payload);
+        console.log(`[COMMAND SYNC] Created /${commandName}.`);
+      }
+    }
+  } catch (error) {
+    console.error('[COMMAND SYNC] Could not sync new session commands:', error);
+  }
+}
+
 // ===========================
 // READY / AUTOMATION
 // ===========================
@@ -149,6 +182,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   if (banAppeals?.runBanAppealReminderTick) {
     banAppeals.runBanAppealReminderTick(readyClient).catch((error) => console.error('[BAN APPEALS] Ready tick failed:', error));
   }
+  try { await ensureRuntimeSlashCommands(readyClient); } catch (error) { console.error('[COMMAND SYNC] Ready sync failed:', error); }
   try {
     const panel = await ensureReviewOnCallPanel(readyClient);
     if (!panel.ok) console.warn('[REVIEW ON-CALL]', panel.reason);
@@ -230,6 +264,11 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (banAppeals?.handleBanAppealInteraction && await banAppeals.handleBanAppealInteraction(interaction)) return;
+
+    if (interaction.isModalSubmit() && String(interaction.customId || '').startsWith('manualjuniorlog:')) {
+      const manualJuniorLog = interaction.client.commands.get('manualjuniorlog');
+      if (manualJuniorLog?.handleModalSubmit && await manualJuniorLog.handleModalSubmit(interaction)) return;
+    }
 
     if (interaction.isButton() && await handleReviewOnCallInteraction(interaction)) return;
     if ((interaction.isButton() || interaction.isModalSubmit()) && await handleStaffRequestInteraction(interaction)) return;

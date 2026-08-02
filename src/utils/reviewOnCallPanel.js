@@ -5,7 +5,7 @@ const { getTier } = require('./permissions');
 const { TIERS } = require('../config/access');
 
 const DEFAULT_CHANNEL_ID = '1474299478675558565';
-const PANEL_FOOTER = 'Glace Hotels • Review On-Call Roles';
+const PANEL_FOOTER = 'Glace Hotels • On-Call Roles';
 
 function channelId() {
   return String(
@@ -15,36 +15,54 @@ function channelId() {
   ).trim();
 }
 
+function firstConfigured(...values) {
+  return String(values.find((value) => String(value || '').trim()) || '').trim();
+}
+
 function configuredRoles() {
   return {
-    corporate: String(process.env.CORPORATE_REVIEW_PING_ROLE_ID || '').trim(),
-    board: String(
-      process.env.CORPORATE_BOARD_REVIEW_PING_ROLE_ID
-      || process.env.BOARD_REVIEW_PING_ROLE_ID
-      || '',
-    ).trim(),
-    presidential: String(process.env.PRESIDENTIAL_REVIEW_PING_ROLE_ID || '').trim(),
+    intern: firstConfigured(
+      process.env.INTERN_REVIEW_PING_ROLE_ID,
+      process.env.INTERN_TEAM_REVIEW_PING_ROLE_ID,
+    ),
+    management: firstConfigured(
+      process.env.MANAGEMENT_REVIEW_PING_ROLE_ID,
+      process.env.MANAGER_REVIEW_PING_ROLE_ID,
+    ),
+    senior: firstConfigured(
+      process.env.SENIOR_MANAGEMENT_REVIEW_PING_ROLE_ID,
+      process.env.SENIOR_REVIEW_PING_ROLE_ID,
+    ),
+    corporate: firstConfigured(process.env.CORPORATE_REVIEW_PING_ROLE_ID),
+    board: firstConfigured(
+      process.env.CORPORATE_BOARD_REVIEW_PING_ROLE_ID,
+      process.env.BOARD_REVIEW_PING_ROLE_ID,
+    ),
+    presidential: firstConfigured(process.env.PRESIDENTIAL_REVIEW_PING_ROLE_ID),
   };
 }
 
 function roleForTier(tier) {
   const roles = configuredRoles();
-  if (tier >= TIERS.PRESIDENTIAL) return { id: roles.presidential, label: 'Presidential Review' };
-  if (tier >= TIERS.CORPORATE_BOARD) return { id: roles.board, label: 'Corporate Board Review' };
-  if (tier >= TIERS.CORPORATE) return { id: roles.corporate, label: 'Corporate Review' };
+  if (tier >= TIERS.PRESIDENTIAL) return { id: roles.presidential, label: 'Presidential' };
+  if (tier >= TIERS.CORPORATE_BOARD) return { id: roles.board, label: 'Corporate Board' };
+  if (tier >= TIERS.CORPORATE) return { id: roles.corporate, label: 'Corporate' };
+  if (tier >= TIERS.SENIOR_MANAGEMENT) return { id: roles.senior, label: 'Senior Management' };
+  if (tier >= TIERS.MANAGEMENT) return { id: roles.management, label: 'Management' };
+  if (tier >= TIERS.INTERN) return { id: roles.intern, label: 'Intern Team' };
   return null;
 }
 
 function panelPayload() {
   const embed = new EmbedBuilder()
-    .setTitle('★ Review Team On-Call')
+    .setTitle('★ Staff On-Call Roles')
     .setDescription([
-      'Use this panel when you are available to review staff requests, promotions, LOAs, and profile changes.',
+      'Use this panel to control whether you receive ticket and review pings.',
       '',
-      '**On Call** adds the review ping role for your current Glace tier.',
-      '**Off Call** removes your review ping roles so you are not pinged while unavailable.',
+      '**On Call** gives you the on-call role that matches your current Glace tier.',
+      '**Off Call** removes your on-call role until you are available again.',
       '',
-      'Corporate, Corporate Board, and Presidential members only.',
+      'Available to all current Intern Team+ staff.',
     ].join('\n'))
     .setColor(0x2368b3)
     .setFooter({ text: PANEL_FOOTER });
@@ -65,17 +83,17 @@ function panelPayload() {
 
 async function ensureReviewOnCallPanel(client) {
   const wanted = channelId();
-  if (!wanted) return { ok: false, reason: 'No review on-call channel configured.' };
+  if (!wanted) return { ok: false, reason: 'No on-call channel configured.' };
 
   const channel = await client.channels.fetch(wanted).catch(() => null);
   if (!channel?.isTextBased?.()) {
-    return { ok: false, reason: 'Review on-call channel not found.' };
+    return { ok: false, reason: 'On-call channel not found.' };
   }
 
   const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   const existing = recent?.find(
     (message) => message.author?.id === client.user?.id
-      && message.embeds?.[0]?.footer?.text === PANEL_FOOTER,
+      && ['Glace Hotels • Review On-Call Roles', PANEL_FOOTER].includes(message.embeds?.[0]?.footer?.text),
   );
 
   if (existing) {
@@ -106,7 +124,7 @@ async function handleReviewOnCallInteraction(interaction) {
 
   if (!selected) {
     await interaction.editReply(
-      '❌ Only current Corporate, Corporate Board, and Presidential members may join the review on-call list.',
+      '❌ Only current Intern Team+ staff may use the on-call panel.',
     );
     return true;
   }
@@ -115,7 +133,9 @@ async function handleReviewOnCallInteraction(interaction) {
   const allRoleIds = [...new Set(Object.values(roles).filter(Boolean))];
 
   if (!selected.id) {
-    await interaction.editReply(`❌ The ${selected.label} ping role is not configured in Render.`);
+    await interaction.editReply(
+      `❌ The on-call role for **${selected.label}** is not configured in Render yet.`,
+    );
     return true;
   }
 
@@ -125,13 +145,13 @@ async function handleReviewOnCallInteraction(interaction) {
         (id) => id !== selected.id && interaction.member.roles.cache.has(id),
       );
       if (stale.length) {
-        await interaction.member.roles.remove(stale, 'Glace review on-call tier sync');
+        await interaction.member.roles.remove(stale, 'Glace on-call tier sync');
       }
       if (!interaction.member.roles.cache.has(selected.id)) {
         await interaction.member.roles.add(selected.id, 'Member selected Go On Call');
       }
       await interaction.editReply(
-        `✅ You are now **On Call** for **${selected.label}**. You will receive its review pings.`,
+        `✅ You are now **On Call** as **${selected.label}** and will receive its ticket/review pings.`,
       );
       return true;
     }
@@ -142,12 +162,12 @@ async function handleReviewOnCallInteraction(interaction) {
     }
     await interaction.editReply(
       removable.length
-        ? '✅ You are now **Off Call**. Your review ping role was removed.'
+        ? '✅ You are now **Off Call**. Your on-call role was removed.'
         : '✅ You are already **Off Call**.',
     );
   } catch (error) {
     await interaction.editReply(
-      `❌ I could not update the review role. Make sure the bot has **Manage Roles** and is above the review ping roles. (${error.message})`,
+      `❌ I could not update your on-call role. Make sure the bot has **Manage Roles** and is above every on-call role. (${error.message})`,
     );
   }
 

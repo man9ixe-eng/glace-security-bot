@@ -474,9 +474,58 @@ async function moveToCompletedList(cardId) {
   return true;
 }
 
+
+/** Load a Trello card with the fields needed by /editcard. */
+async function getSessionCard(cardInput) {
+  const cardId = await resolveCardId(cardInput);
+  if (!cardId) return { ok: false, cardId: null, card: null };
+
+  const result = await trelloRequest(`/cards/${encodeURIComponent(cardId)}`, "GET", {
+    fields: "id,name,desc,due,dueComplete,idList,idLabels,shortLink,shortUrl,url,closed",
+  });
+
+  return {
+    ok: Boolean(result.ok && result.data?.id),
+    cardId,
+    card: result.data || null,
+    status: result.status,
+  };
+}
+
+/** Update the editable session fields and re-sort its current list. */
+async function updateSessionCard({ cardId, name, dueISO }) {
+  if (!cardId) return { ok: false };
+  const params = {};
+  if (name !== undefined) params.name = String(name).trim();
+  if (dueISO !== undefined) params.due = dueISO;
+  if (Object.keys(params).length === 0) return { ok: true, skipped: true };
+
+  const result = await trelloRequest(`/cards/${encodeURIComponent(cardId)}`, "PUT", params);
+  if (!result.ok) return { ok: false, status: result.status, data: result.data };
+
+  const listId = result.data?.idList || null;
+  if (listId) await sortListByDue(listId);
+  return { ok: true, card: result.data || null, listId };
+}
+
+/** Add an optional human comment to a Trello card. */
+async function addCardComment(cardId, text) {
+  const comment = String(text || "").trim();
+  if (!cardId || !comment) return { ok: true, skipped: true };
+  const result = await trelloRequest(
+    `/cards/${encodeURIComponent(cardId)}/actions/comments`,
+    "POST",
+    { text: comment },
+  );
+  return { ok: result.ok, status: result.status, data: result.data };
+}
+
 module.exports = {
   trelloRequest,
   resolveCardId,
+  getSessionCard,
+  updateSessionCard,
+  addCardComment,
   listSessionCards,
   getSessionTypeFromCard,
   createSessionCard,

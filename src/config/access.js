@@ -69,6 +69,8 @@ const COMMAND_MIN_TIER = Object.freeze({
 
   // Session operations
   addsession: TIERS.MANAGEMENT,
+  editcard: TIERS.MANAGEMENT,
+  manualjuniorlog: TIERS.CORPORATE,
   sessionqueue: TIERS.MANAGEMENT,
   sessionattendees: TIERS.MANAGEMENT,
   logsession: TIERS.CORPORATE,

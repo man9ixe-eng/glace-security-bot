@@ -228,10 +228,34 @@ function firstRegex(text, patterns) {
   return null;
 }
 
+function parseLoggedSessionTimestamp(value) {
+  const text = cleanValue(value);
+  if (!text) return null;
+
+  const discordTimestamp = String(value || '').match(/<t:(\d{9,12})(?::[A-Za-z])?>/i);
+  if (discordTimestamp) {
+    const milliseconds = Number(discordTimestamp[1]) * 1000;
+    if (Number.isFinite(milliseconds)) return milliseconds;
+  }
+
+  if (/^\d{13}$/.test(text)) {
+    const milliseconds = Number(text);
+    if (Number.isFinite(milliseconds)) return milliseconds;
+  }
+  if (/^\d{10}$/.test(text)) {
+    const milliseconds = Number(text) * 1000;
+    if (Number.isFinite(milliseconds)) return milliseconds;
+  }
+
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function parseMinutes(value) {
   const text = String(value || '');
 
   const direct = firstRegex(text, [
+    /^\s*(\d{1,4})\s*$/,
     /(?:minutes?|mins?)\s*(?:spent\s*)?(?:in\s*)?(?:the\s*)?(?:tc|training\s*center)\s*[:#\-–]\s*(\d{1,4})/i,
     /(?:time\s*(?:spent)?\s*(?:in)?\s*(?:the)?\s*(?:tc|training\s*center)|tc\s*time|time|minutes?|mins?)\s*[:#\-–]\s*(\d{1,4})/i,
     /(\d{1,4})\s*(?:minutes?|mins?)\b/i,
@@ -275,6 +299,12 @@ function parseRobloxActivityLogMessage(message) {
     'tc time',
     'time spent',
   ]);
+  const sessionTimestampField = getEmbedFieldValue(message, [
+    'session timestamp',
+    'session time',
+    'session date',
+    'logged session time',
+  ]);
 
   const robloxUsername = usernameField || firstRegex(text, [
     /(?:roblox\s*)?username\s*[:#\-–]\s*([^\n|]+)/i,
@@ -308,7 +338,8 @@ function parseRobloxActivityLogMessage(message) {
   if (!looksTrainingRelated) return null;
   if (!robloxUsername && !robloxId) return null;
 
-  const timestamp = Number(message.createdTimestamp || Date.now());
+  const timestamp = parseLoggedSessionTimestamp(sessionTimestampField)
+    || Number(message.createdTimestamp || Date.now());
   const sourceMessageId = String(message.id || `${timestamp}-${robloxId || robloxUsername}`);
   const safeUsername = robloxUsername ? cleanValue(robloxUsername).replace(/^@+/, '') : null;
   const safeId = robloxId ? String(robloxId).replace(/\D/g, '') : null;
@@ -641,6 +672,7 @@ module.exports = {
   isJuniorStaffRole,
   isJuniorStaffRecord,
   parseRobloxActivityLogMessage,
+  resolveJuniorLogChannel,
   backfillJuniorActivityFromLogChannel,
   handleJuniorActivityLogMessage,
   getRecordsForPlayer,

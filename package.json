@@ -1,7 +1,7 @@
 {
   "name": "glace-security-bot",
-  "version": "2.8.0",
-  "description": "Glace Hotels Discord bot and bright Staff Hub with promotion approvals, staff requests, live LOA sync, reviewer on-call roles, activity tracking, and Roblox staff directory",
+  "version": "2.10.0",
+  "description": "Glace Hotels Discord bot and Staff Hub with source-timezone Trello titles, Eastern due-date conversion, manual Junior Staff log recovery, staff requests, live LOA sync, activity tracking, and Intern+ on-call roles",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
