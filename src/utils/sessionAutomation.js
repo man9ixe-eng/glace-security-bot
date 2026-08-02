@@ -1,5 +1,5 @@
 // src/utils/sessionAutomation.js
-// Creates 30-minute session notices and clears them when /logsession or /cancelsession runs.
+// /sessionqueue is the only session-notice system. This module only clears legacy notices.
 
 const { listSessionCards } = require('./trelloClient');
 const { SESSION_CONFIG } = require('../config/sessionAnnouncements');
@@ -39,67 +39,10 @@ function getNoticeConfig(type) {
 }
 
 async function runSessionAutomation(client) {
-  if (!client) return;
-
-  let cards = [];
-  try {
-    cards = await listSessionCards();
-  } catch (err) {
-    console.error('[SESSIONS] Failed to load cards for notices:', err);
-    return;
-  }
-
-  const now = Date.now();
-
-  for (const card of cards) {
-    const sessionType = normalizeSessionType(card.sessionType);
-    const config = getNoticeConfig(sessionType);
-    if (!config?.channelId) continue;
-    if (!card?.id || !card?.due || card.dueComplete) continue;
-    if (String(card.listName || '').toLowerCase().includes('completed')) continue;
-
-    const dueMs = new Date(card.due).getTime();
-    if (!Number.isFinite(dueMs)) continue;
-
-    const diffMs = dueMs - now;
-    if (diffMs <= 0 || diffMs > 30 * 60 * 1000) continue;
-
-    if (getSessionPost(card.id)) continue;
-
-    try {
-      const channel = await client.channels.fetch(config.channelId).catch(() => null);
-      if (!channel || !channel.isTextBased?.()) continue;
-
-      const unix = Math.floor(dueMs / 1000);
-      const trelloUrl = card.shortUrl || card.url || `https://trello.com/c/${card.id}`;
-      const ping = config.pingRoleId ? `<@&${config.pingRoleId}>` : '';
-      const gameLink = GAME_LINKS[sessionType] || '';
-
-      const content = [
-        ping,
-        `A **${typeName(sessionType)}** session is starting in **30 minutes**!`,
-        '',
-        `**Name:** ${card.name || typeName(sessionType)}`,
-        `**Starts at:** <t:${unix}:T> (<t:${unix}:R>)`,
-        gameLink ? `**Game link:** ${gameLink}` : null,
-        `**Trello card:** ${trelloUrl}`,
-      ]
-        .filter((line) => line !== null && line !== undefined)
-        .join('\n');
-
-      const msg = await channel.send({
-        content,
-        allowedMentions: {
-          roles: config.pingRoleId ? [config.pingRoleId] : [],
-        },
-      });
-
-      setSessionPost(card.id, channel.id, msg.id);
-      console.log('[SESSIONS] Created session notice for card', card.id);
-    } catch (err) {
-      console.error('[SESSIONS] Failed to send session notice:', err);
-    }
-  }
+  // Session queue notices are managed only through /sessionqueue.
+  // Keeping this function as a no-op preserves compatibility with the existing
+  // scheduler without posting a second 30-minute reminder.
+  return { ok: true, disabled: true, reason: 'managed_by_sessionqueue' };
 }
 
 /**

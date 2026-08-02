@@ -267,6 +267,73 @@ function parseMinutes(value) {
   return Math.round(n);
 }
 
+
+function getRawEmbedFieldValue(message, names) {
+  const wanted = names.map((name) => String(name).toLowerCase());
+  const values = [];
+  for (const embed of message?.embeds || []) {
+    for (const field of embed.fields || []) {
+      const fieldName = String(field.name || '').toLowerCase();
+      if (wanted.some((name) => fieldName.includes(name))) values.push(String(field.value || ''));
+    }
+  }
+  return values.length ? values.join('\n') : null;
+}
+
+function parseManualJuniorActivityRecords(message) {
+  const attendeesField = getRawEmbedFieldValue(message, [
+    'manual junior staff entries',
+    'junior staff attendees',
+  ]);
+  if (!attendeesField) return [];
+
+  const sessionTimestampField = getEmbedFieldValue(message, [
+    'session timestamp',
+    'session time',
+    'session date',
+  ]);
+  const timestamp = parseLoggedSessionTimestamp(sessionTimestampField)
+    || Number(message.createdTimestamp || Date.now());
+  const sourceMessageId = String(message.id || `manual-${timestamp}`);
+  const footerText = (message.embeds || []).map((embed) => embed.footer?.text || '').join(' ');
+  const cardMatch = footerText.match(/\bCard\s+([A-Za-z0-9]+)/i);
+  const cardId = cardMatch?.[1] || 'unknown-card';
+  const records = [];
+
+  for (const rawLine of String(attendeesField).split(/\r?\n/)) {
+    const line = rawLine.replace(/^\s*[•*-]\s*/, '').trim();
+    if (!line) continue;
+    const parts = line.split('|').map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+
+    const username = cleanValue(parts[0]).replace(/^@+/, '');
+    const maybeId = String(parts[1] || '').replace(/\D/g, '');
+    const robloxId = /^\d{3,20}$/.test(maybeId) ? maybeId : null;
+    const roleStart = robloxId || /^(?:n\/?a|none|unknown|not provided)$/i.test(parts[1]) ? 2 : 1;
+    const role = normalizeRole(parts.slice(roleStart).join(' '));
+    if (!username || !isJuniorStaffRole(role)) continue;
+
+    const identity = robloxId || normalizeLookup(username);
+    records.push({
+      id: `${sourceMessageId}:${cardId}:${identity}`,
+      sourceMessageId,
+      sourceChannelId: message.channelId || null,
+      guildId: message.guildId || null,
+      robloxUsername: username,
+      robloxId,
+      role,
+      minutesInTC: 0,
+      sessionType: 'training',
+      sessionCardId: cardId,
+      timestamp,
+      createdAt: new Date(timestamp).toISOString(),
+      manualRecovery: true,
+    });
+  }
+
+  return records;
+}
+
 function parseRobloxActivityLogMessage(message) {
   if (!message) return null;
 
@@ -357,6 +424,13 @@ function parseRobloxActivityLogMessage(message) {
     timestamp,
     createdAt: new Date(timestamp).toISOString(),
   };
+}
+
+function parseRobloxActivityLogRecords(message) {
+  const manualRecords = parseManualJuniorActivityRecords(message);
+  if (manualRecords.length) return manualRecords;
+  const record = parseRobloxActivityLogMessage(message);
+  return record ? [record] : [];
 }
 
 function upsertRecord(record) {
@@ -451,11 +525,12 @@ async function backfillJuniorActivityFromLogChannel(client, options = {}) {
 
     for (const message of batch.values()) {
       scanned += 1;
-      const record = parseRobloxActivityLogMessage(message);
-      if (!record) continue;
-      const wasAdded = upsertRecord(record);
-      if (wasAdded) added += 1;
-      else updated += 1;
+      const records = parseRobloxActivityLogRecords(message);
+      for (const record of records) {
+        const wasAdded = upsertRecord(record);
+        if (wasAdded) added += 1;
+        else updated += 1;
+      }
     }
 
     before = batch.last()?.id;
@@ -470,23 +545,26 @@ async function backfillJuniorActivityFromLogChannel(client, options = {}) {
   return { ok: true, channelId: channel.id, added, updated, scanned };
 }
 
+async function ingestJuniorActivityLogMessage(message) {
+  if (!message?.guild || !message.channelId) return false;
+
+  const records = parseRobloxActivityLogRecords(message);
+  if (!records.length) return false;
+  records.forEach((record) => upsertRecord(record));
+
+  const meta = readMeta();
+  meta.lastLiveRecordAt = Date.now();
+  meta.knownLogChannelId = message.channelId;
+  writeMeta(meta);
+  return true;
+}
+
 async function handleJuniorActivityLogMessage(message) {
   if (!message?.guild || !message.channelId) return false;
 
   const channel = await resolveJuniorLogChannel(message.client, message.guild).catch(() => null);
   if (!channel || channel.id !== message.channelId) return false;
-
-  const record = parseRobloxActivityLogMessage(message);
-  if (!record) return false;
-
-  upsertRecord(record);
-
-  const meta = readMeta();
-  meta.lastLiveRecordAt = Date.now();
-  meta.knownLogChannelId = channel.id;
-  writeMeta(meta);
-
-  return true;
+  return ingestJuniorActivityLogMessage(message);
 }
 
 function getRecordsForPlayer(playerQuery, range = null) {
@@ -672,6 +750,9 @@ module.exports = {
   isJuniorStaffRole,
   isJuniorStaffRecord,
   parseRobloxActivityLogMessage,
+  parseRobloxActivityLogRecords,
+  parseManualJuniorActivityRecords,
+  ingestJuniorActivityLogMessage,
   resolveJuniorLogChannel,
   backfillJuniorActivityFromLogChannel,
   handleJuniorActivityLogMessage,

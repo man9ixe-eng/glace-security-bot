@@ -16,6 +16,13 @@ function sanitizeHostName(input) {
   return cleaned || 'Host';
 }
 
+
+function clockDisplayWithSeconds(clockDisplay) {
+  const match = String(clockDisplay || '').trim().match(/^(\d{1,2}):(\d{2})\s+(AM|PM)$/i);
+  if (!match) return String(clockDisplay || '').trim();
+  return `${match[1]}:${match[2]}:00 ${match[3].toUpperCase()}`;
+}
+
 function sessionTypeDisplay(sessionType) {
   if (sessionType === 'interview') return 'INTERVIEW';
   if (sessionType === 'training') return 'TRAINING';
@@ -88,7 +95,6 @@ module.exports = {
     await interaction.deferReply();
 
     try {
-      const eastern = parsed.eastern;
       const cardName = `[${sessionTypeBracket(sessionType)}] ${parsed.source.timeDisplay} - ${hostName}`;
       const cardDesc = '** PLEASE JOIN 5-10 MINUTES BEFORE START **';
       const result = await createSessionCard({
@@ -104,16 +110,15 @@ module.exports = {
         );
       }
 
-      const unixSeconds = Math.floor(parsed.utcMs / 1000);
       return interaction.editReply({
         content: [
-          `✅ **${sessionTypeDisplay(sessionType)} ADDED**`,
+          `✅ **${sessionTypeDisplay(sessionType)} ADDED** ✅`,
+          '',
+          `Thank you, <@${interaction.user.id}> ! Your session information is below:`,
           '',
           `• Host: ${hostName}`,
-          `• Card title time: ${parsed.source.timeDisplay}`,
-          `• Trello due date (Eastern account): ${eastern.dateDisplay}`,
-          `• Trello due time (Eastern account): ${eastern.timeDisplay}`,
-          `• Discord time: <t:${unixSeconds}:F>`,
+          `• Date: ${parsed.source.dateDisplay}`,
+          `• Time: ${clockDisplayWithSeconds(parsed.source.clockDisplay)}`,
           '',
           `Card Link: ${result.url || '(no link returned)'}`,
         ].join('\n'),

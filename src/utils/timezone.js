@@ -11,8 +11,9 @@
 const EASTERN_TIME_ZONE = 'America/New_York';
 const TRELLO_EASTERN_LABEL = 'EST';
 
-// Explicit abbreviations represent the offset they actually name.
-// Generic aliases such as ET/CT/MT/PT remain seasonal IANA zones.
+// Glace staff commonly use US abbreviations such as EST/CST/MST/PST year-round.
+// Treat those labels as the matching local timezone so daylight-saving time is applied
+// to the Trello due date while the card title keeps the exact label they entered.
 const FIXED_OFFSET_MINUTES = Object.freeze({
   UTC: 0,
   GMT: 0,
@@ -52,14 +53,6 @@ const FIXED_OFFSET_MINUTES = Object.freeze({
   HST: -600,
   AKST: -540,
   AKDT: -480,
-  EST: -300,
-  EDT: -240,
-  CST: -360,
-  CDT: -300,
-  MST: -420,
-  MDT: -360,
-  PST: -480,
-  PDT: -420,
   AST: -240,
   ADT: -180,
   NST: -210,
@@ -79,12 +72,20 @@ const FIXED_OFFSET_MINUTES = Object.freeze({
 });
 
 const IANA_ALIASES = Object.freeze({
+  EST: EASTERN_TIME_ZONE,
+  EDT: EASTERN_TIME_ZONE,
   ET: EASTERN_TIME_ZONE,
   EASTERN: EASTERN_TIME_ZONE,
+  CST: 'America/Chicago',
+  CDT: 'America/Chicago',
   CT: 'America/Chicago',
   CENTRAL: 'America/Chicago',
+  MST: 'America/Denver',
+  MDT: 'America/Denver',
   MT: 'America/Denver',
   MOUNTAIN: 'America/Denver',
+  PST: 'America/Los_Angeles',
+  PDT: 'America/Los_Angeles',
   PT: 'America/Los_Angeles',
   PACIFIC: 'America/Los_Angeles',
   UK: 'Europe/London',
@@ -130,15 +131,15 @@ function resolveTimeZone(zoneInput) {
   }
 
   const upper = raw.toUpperCase().replace(/[.\s-]/g, '_');
+  if (Object.prototype.hasOwnProperty.call(IANA_ALIASES, upper)) {
+    return { kind: 'iana', timeZone: IANA_ALIASES[upper], inputLabel: upper };
+  }
   if (Object.prototype.hasOwnProperty.call(FIXED_OFFSET_MINUTES, upper)) {
     return {
       kind: 'fixed',
       offsetMinutes: FIXED_OFFSET_MINUTES[upper],
       inputLabel: upper,
     };
-  }
-  if (Object.prototype.hasOwnProperty.call(IANA_ALIASES, upper)) {
-    return { kind: 'iana', timeZone: IANA_ALIASES[upper], inputLabel: upper };
   }
   if (isValidIanaTimeZone(raw)) {
     return { kind: 'iana', timeZone: raw, inputLabel: raw };
