@@ -362,12 +362,9 @@ module.exports = {
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(true)
       .setMaxLength(4000)
-      .setPlaceholder([
-        'One person per line:',
-        'RobloxUsername | RobloxID | Security Helper',
-        'AnotherUsername | N/A | Front Desk Helper',
-        'ThirdUsername | 123456789 | Custodian Helper',
-      ].join('\n'));
+      // Discord limits modal input placeholders to 100 characters.
+      // Keep this intentionally short; the full format help is returned on validation errors.
+      .setPlaceholder('Username | Roblox ID/N/A | Role\nExampleUser | N/A | Security Helper');
 
     modal.addComponents(new ActionRowBuilder().addComponents(attendeesInput));
     return interaction.showModal(modal);

@@ -1,7 +1,7 @@
 {
   "name": "glace-security-bot",
-  "version": "2.12.0",
-  "description": "Glace Hotels Discord bot and Staff Hub with seasonal Eastern Trello due dates, source-timezone card titles, role-based manual Junior Staff session recovery, staff requests, live LOA sync, activity tracking, and Intern+ on-call roles",
+  "version": "2.13.0",
+  "description": "Glace Hotels Discord bot and Staff Hub with fixed Trello-linked Junior Staff recovery modal, seasonal Eastern Trello due dates, source-timezone card titles, staff requests, live LOA sync, activity tracking, and Intern+ on-call roles",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
