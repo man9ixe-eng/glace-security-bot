@@ -22,6 +22,14 @@ const { handleOpsWebRequest } = require('./web/opsPortal');
 const { handleStaffRequestInteraction } = require('./utils/staffRequestSystem');
 const { handlePromotionInteraction } = require('./utils/promotionDiscord');
 const { ensureReviewOnCallPanel, handleReviewOnCallInteraction } = require('./utils/reviewOnCallPanel');
+const {
+  syncStaffRoles,
+  ensureGlaceFamily,
+  scheduleGlaceFamily,
+  cancelFamilyTimer,
+  reconcileAllGuilds,
+  clearRoleSyncTimers,
+} = require('./utils/roleSync');
 
 let banAppeals = null;
 try {
@@ -184,6 +192,9 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   try { await ensureRuntimeSlashCommands(readyClient); } catch (error) { console.error('[COMMAND SYNC] Ready sync failed:', error); }
   try {
+    await reconcileAllGuilds(readyClient, { includeFamilyScheduling: true });
+  } catch (error) { console.error('[ROLE SYNC] Ready reconciliation failed:', error); }
+  try {
     const panel = await ensureReviewOnCallPanel(readyClient);
     if (!panel.ok) console.warn('[REVIEW ON-CALL]', panel.reason);
   } catch (error) { console.error('[REVIEW ON-CALL] Panel setup failed:', error); }
@@ -216,12 +227,47 @@ intervals.push(setInterval(async () => {
   catch (error) { console.error('[ACTIVITY] Weekly maintenance failed:', error); }
 }, 60 * 60_000));
 
+const ROLE_RECONCILE_INTERVAL_MS = Math.max(5 * 60_000, Number(process.env.ROLE_RECONCILE_INTERVAL_MS || 15 * 60_000));
+intervals.push(setInterval(async () => {
+  try { await reconcileAllGuilds(client, { includeFamilyScheduling: true }); }
+  catch (error) { console.error('[ROLE SYNC] Periodic reconciliation failed:', error); }
+}, ROLE_RECONCILE_INTERVAL_MS));
+
 if (banAppeals?.runBanAppealReminderTick) {
   intervals.push(setInterval(async () => {
     try { await banAppeals.runBanAppealReminderTick(client); }
     catch (error) { console.error('[BAN APPEALS] Reminder tick failed:', error); }
   }, 10 * 60_000));
 }
+
+// ===========================
+// MEMBER / ROLE AUTOMATION
+// ===========================
+client.on(Events.GuildMemberAdd, async (member) => {
+  try {
+    await syncStaffRoles(member, { reason: 'Glace automatic role sync after member join' });
+  } catch (error) { console.error('[ROLE SYNC] Join staff-role sync failed:', error); }
+
+  try {
+    const familyResult = await ensureGlaceFamily(member);
+    if (!familyResult.eligible) scheduleGlaceFamily(member);
+  } catch (error) { console.error('[GLACE FAMILY] Join scheduling failed:', error); }
+});
+
+client.on(Events.GuildMemberUpdate, async (_oldMember, newMember) => {
+  try {
+    await syncStaffRoles(newMember, { reason: 'Bloxlink/rank change automatic team + ticket sync' });
+  } catch (error) { console.error('[ROLE SYNC] Member-update staff-role sync failed:', error); }
+
+  try {
+    const familyResult = await ensureGlaceFamily(newMember);
+    if (!familyResult.eligible) scheduleGlaceFamily(newMember);
+  } catch (error) { console.error('[GLACE FAMILY] Member-update check failed:', error); }
+});
+
+client.on(Events.GuildMemberRemove, (member) => {
+  try { cancelFamilyTimer(member.guild.id, member.id); } catch {}
+});
 
 // ===========================
 // MESSAGES
@@ -328,6 +374,7 @@ process.on('uncaughtException', (error) => console.error('[UNCAUGHT EXCEPTION]',
 async function shutdown(signal) {
   console.log(`[SHUTDOWN] ${signal} received.`);
   for (const interval of intervals) clearInterval(interval);
+  try { clearRoleSyncTimers(); } catch {}
   try { client.priorityStore?.saveNow?.(); } catch {}
   try { client.destroy(); } catch {}
   server.close(() => process.exit(0));

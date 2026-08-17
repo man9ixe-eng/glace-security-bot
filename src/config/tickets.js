@@ -24,10 +24,14 @@ module.exports = {
   },
 
   ROLES: {
+    // Staff/team sync also uses intern + chief even though the current ticket
+    // panels only ping trial/mod/admin/reviewer directly.
+    intern: env('TICKET_ROLE_INTERN_ID'),
     trial: env('TICKET_ROLE_TRIAL_ID'),
     mod: env('TICKET_ROLE_MOD_ID'),
     admin: env('TICKET_ROLE_ADMIN_ID'),
     reviewer: env('TICKET_ROLE_REVIEWER_ID'),
+    chief: env('TICKET_ROLE_CHIEF_ID'),
   },
 
   // One TICKET_LOG_CHANNEL_ID can replace all of the old ticket log channels.
