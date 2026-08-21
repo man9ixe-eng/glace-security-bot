@@ -109,7 +109,6 @@ const COMMANDS_REQUIRING_OUTRANK = Object.freeze({
   demote: 'member',
   promote: 'member',
   resign: 'member',
-  updateuser: 'member',
 });
 
 const WEBSITE_CAPABILITIES = Object.freeze({

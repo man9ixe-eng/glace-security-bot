@@ -449,9 +449,24 @@ async function findJourneyCardForMember(guild, member, { includeClosed = true } 
 }
 
 async function findJourneyCardByRobloxUsername(username, { includeClosed = true } = {}) {
-  const wanted = normalize(username);
+  // Staff Journey username lookups are intentionally exact (case-insensitive).
+  // Do not fall back to Discord display names or fuzzy/normalized matching here.
+  const wanted = clean(username, 100).toLowerCase();
   const cards = await allBoardCards({ includeClosed });
-  return cards.find((card) => normalize(usernameFromCardName(card.name)) === wanted) || null;
+  return cards.find((card) => clean(usernameFromCardName(card.name), 100).toLowerCase() === wanted) || null;
+}
+
+async function findProfileForJourneyCard(guildId, card, username) {
+  try {
+    const profiles = await staffRequestStore.listProfiles(guildId);
+    const wanted = clean(username, 100).toLowerCase();
+    return profiles.find((profile) => String(profile.staffJourneyCardId || '') === String(card?.id || ''))
+      || profiles.find((profile) => clean(profile.robloxUsername, 100).toLowerCase() === wanted)
+      || null;
+  } catch (error) {
+    console.warn('[STAFF JOURNEY] Could not match Supabase profile for username update:', error.message || error);
+    return null;
+  }
 }
 
 async function updateCard(cardId, changes) {
@@ -823,27 +838,43 @@ function updateLocalJsonUsername(oldName, newName) {
 }
 
 async function operationUpdateUser(interaction, payload) {
-  const member = await interaction.guild.members.fetch(payload.memberId).catch(() => null);
-  if (!member) throw new Error('I could not find that Discord member in the server.');
+  const requestedOldUsername = clean(payload.oldUsername, 100);
   const newUsername = clean(payload.newUsername, 100);
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(newUsername)) throw new Error('That does not look like a valid Roblox username.');
-  const { card, profile } = await findJourneyCardForMember(interaction.guild, member, { includeClosed: true });
-  if (!card) throw new Error(`I couldn't find a Staff Journey for ${member}.`);
-  const oldUsername = profile?.robloxUsername || usernameFromCardName(card.name);
-  if (normalize(oldUsername) === normalize(newUsername)) throw new Error('The new Roblox username is the same as the current username.');
-  const titleDate = card.name.match(/\b\d{2}\/\d{2}\/\d{4}\b/)?.[0] || profile?.staffJourneyStartDate;
-  if (!titleDate) throw new Error('I could not read the original Staff Journey date from the card title.');
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(requestedOldUsername)) throw new Error('That current Roblox username does not look valid.');
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(newUsername)) throw new Error('That new Roblox username does not look valid.');
+  if (requestedOldUsername.toLowerCase() === newUsername.toLowerCase()) throw new Error('The new Roblox username is the same as the current username.');
+
+  // IMPORTANT: /updateuser is card-first. It does not use a Discord member to guess a card.
+  const card = await findJourneyCardByRobloxUsername(requestedOldUsername, { includeClosed: true });
+  if (!card) {
+    throw new Error(`I couldn't find a Staff Journey card beginning with the exact Roblox username **${requestedOldUsername}**. Check the card title and try again.`);
+  }
+
+  const oldUsername = usernameFromCardName(card.name);
+  const firstPromotion = firstPromotionParts(card.desc);
+  const titleDate = card.name.match(/(?:^|\s-\s)(\d{2}\/\d{2}\/\d{4})\s*$/)?.[1]
+    || (firstPromotion ? formatMmDdYyyy(firstPromotion) : null);
+  if (!titleDate) throw new Error('I could not read the original Staff Journey date from either the card title or the first promotion row.');
+
   const desc = addFormerUsername(card.desc, oldUsername);
   await updateCard(card.id, { name: `${newUsername} - ${titleDate}`, desc });
-  await saveProfile(interaction.guild.id, member.id, {
-    ...profile,
-    robloxUsername: newUsername,
-    formerRobloxUsernames: [...new Set([...(profile?.formerRobloxUsernames || []), oldUsername])],
-    staffJourneyCardId: card.id,
-    staffJourneyCardUrl: card.shortUrl || card.url,
-  }, { id: interaction.user.id, tag: interaction.user.tag });
+
+  // If this Journey has a linked Supabase profile, keep it synced. A card without
+  // a linked Discord profile is still allowed to be renamed successfully.
+  const profile = await findProfileForJourneyCard(interaction.guild.id, card, oldUsername);
+  if (profile?.userId) {
+    await saveProfile(interaction.guild.id, profile.userId, {
+      ...profile,
+      robloxUsername: newUsername,
+      formerRobloxUsernames: [...new Set([...(profile.formerRobloxUsernames || []), oldUsername])],
+      staffJourneyCardId: card.id,
+      staffJourneyCardUrl: card.shortUrl || card.url,
+      staffJourneyStartDate: profile.staffJourneyStartDate || titleDate,
+    }, { id: interaction.user.id, tag: interaction.user.tag });
+  }
+
   const localFiles = updateLocalJsonUsername(oldUsername, newUsername);
-  return { member, oldUsername, newUsername, localFiles };
+  return { oldUsername, newUsername, localFiles, profileUpdated: Boolean(profile?.userId) };
 }
 
 async function operationDemote(interaction, payload) {
@@ -1197,7 +1228,7 @@ async function runStaffJourneyTest(interaction, input) {
       const resolved = card ? await resolvePromoterNamesToDisplay(interaction.guild, promoterNames) : noPingPromoters.map((p) => ({ ...p, text: p.mention }));
       publicPreview = resignationAnnouncement({ username, rank: current?.rank || selectedRank, customMessage: message, promoters: resolved, memberId: member.id, cardUrl: fakeUrl });
     } else if (type === 'updateuser') {
-      confirmation = `Are you sure you want to update ${member} from **${username}** to **${input.newUsername || `${username}_NEW`}**?`;
+      confirmation = `Are you sure you want to update the Staff Journey card for **${username}** to **${input.newUsername || `${username}_NEW`}**?`;
       success = `✅ Staff Journey updated from **${username}** to **${input.newUsername || `${username}_NEW`}**.`;
       publicPreview = '*No public announcement is posted by /updateuser.*';
     } else if (type === 'demote') {
