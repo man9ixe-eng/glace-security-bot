@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -374,13 +374,29 @@ function buildResignedDescription(desc, resignationDate) {
 }
 
 function addFormerUsername(desc, username) {
-  const split = splitDescription(desc);
-  if (!split.formerUsernames.some((name) => normalize(name) === normalize(username))) split.formerUsernames.push(username);
-  const entries = historyEntries(desc).map((entry) => ({ line: entry.raw }));
-  const totalMatch = split.main.match(/\*\*Total Staff Journey:\s*(.+?)\*\*/i);
-  return rebuildDescription({ entries, formerUsernames: split.formerUsernames, totalJourney: totalMatch?.[1] || null });
-}
+  // Preserve the Staff Journey description exactly as it already exists.
+  // We only append the former-name section; legacy history formatting is never rebuilt here.
+  const text = String(desc || '').replace(/\r/g, '').trimEnd();
+  const oldName = clean(username, 100);
+  if (!oldName) return text;
 
+  const marker = '**Former Usernames:**';
+  const lines = text.split('\n');
+  const markerIndex = lines.findIndex((line) => line.trim().toLowerCase() === marker.toLowerCase());
+
+  if (markerIndex >= 0) {
+    const existing = lines
+      .slice(markerIndex + 1)
+      .map((line) => line.replace(/^\s*-\s*/, '').trim())
+      .filter(Boolean);
+    if (!existing.some((name) => normalize(name) === normalize(oldName))) {
+      lines.push(`- ${oldName}`);
+    }
+    return lines.join('\n').trim();
+  }
+
+  return `${text}${text ? '\n\n\n' : ''}${marker}\n- ${oldName}`.trim();
+}
 // ---------------------------
 // Trello helpers
 // ---------------------------
@@ -581,7 +597,7 @@ function promotionAnnouncement({ username, rank, customMessage, promoters, membe
   const promoterText = promoters.map((p) => p.text || p.mention || p).join(' & ') || 'None recorded';
   const promoterLabel = promoters.length > 1 ? 'Promoter(s)' : 'Promoter';
   return [
-    '# 🎉  **PROMOTION** 🎉',
+    '# ðŸŽ‰  **PROMOTION** ðŸŽ‰',
     '',
     `Please congratulate **${username}** on their promotion to ${emoji ? `${emoji} ` : ''}**${rank}**!`,
     '',
@@ -599,7 +615,7 @@ function promotionAnnouncement({ username, rank, customMessage, promoters, membe
 function resignationAnnouncement({ username, rank, customMessage, promoters, memberId, cardUrl }) {
   const promoterText = promoters.map((p) => p.text || p.mention || p).join(' & ') || 'None recorded';
   return [
-    '# 🚪 **RESIGNATION** 🚪',
+    '# ðŸšª **RESIGNATION** ðŸšª',
     '',
     `**${username}** has resigned from their position, **${rank}**!`,
     '',
@@ -844,39 +860,48 @@ async function operationUpdateUser(interaction, payload) {
   if (!/^[A-Za-z0-9_]{3,20}$/.test(newUsername)) throw new Error('That new Roblox username does not look valid.');
   if (requestedOldUsername.toLowerCase() === newUsername.toLowerCase()) throw new Error('The new Roblox username is the same as the current username.');
 
-  // IMPORTANT: /updateuser is card-first. It does not use a Discord member to guess a card.
+  // Card-first lookup: the FULL current Roblox username must match the username
+  // at the start of the Trello card title. No Discord-member lookup is used.
   const card = await findJourneyCardByRobloxUsername(requestedOldUsername, { includeClosed: true });
   if (!card) {
     throw new Error(`I couldn't find a Staff Journey card beginning with the exact Roblox username **${requestedOldUsername}**. Check the card title and try again.`);
   }
 
   const oldUsername = usernameFromCardName(card.name);
-  const firstPromotion = firstPromotionParts(card.desc);
-  const titleDate = card.name.match(/(?:^|\s-\s)(\d{2}\/\d{2}\/\d{4})\s*$/)?.[1]
-    || (firstPromotion ? formatMmDdYyyy(firstPromotion) : null);
-  if (!titleDate) throw new Error('I could not read the original Staff Journey date from either the card title or the first promotion row.');
+  const currentTitle = String(card.name || '');
 
+  // IMPORTANT: do NOT parse or rebuild the title. Preserve every character after
+  // the old username exactly, whether the card uses a new or legacy title format.
+  const suffix = currentTitle.slice(oldUsername.length);
+  const newTitle = `${newUsername}${suffix}`;
   const desc = addFormerUsername(card.desc, oldUsername);
-  await updateCard(card.id, { name: `${newUsername} - ${titleDate}`, desc });
+  await updateCard(card.id, { name: newTitle, desc });
 
-  // If this Journey has a linked Supabase profile, keep it synced. A card without
-  // a linked Discord profile is still allowed to be renamed successfully.
+  // Keep a linked Supabase profile synchronized when one exists. A Trello card
+  // without a linked Discord/Supabase profile is still a successful username update.
   const profile = await findProfileForJourneyCard(interaction.guild.id, card, oldUsername);
   if (profile?.userId) {
-    await saveProfile(interaction.guild.id, profile.userId, {
+    const changes = {
       ...profile,
       robloxUsername: newUsername,
       formerRobloxUsernames: [...new Set([...(profile.formerRobloxUsernames || []), oldUsername])],
       staffJourneyCardId: card.id,
       staffJourneyCardUrl: card.shortUrl || card.url,
-      staffJourneyStartDate: profile.staffJourneyStartDate || titleDate,
-    }, { id: interaction.user.id, tag: interaction.user.tag });
+    };
+
+    // Preserve an existing stored journey date. If it is missing, use the first
+    // readable promotion row when possible, but NEVER fail /updateuser over a date.
+    if (!changes.staffJourneyStartDate) {
+      const firstPromotion = firstPromotionParts(card.desc);
+      if (firstPromotion) changes.staffJourneyStartDate = formatMmDdYyyy(firstPromotion);
+    }
+
+    await saveProfile(interaction.guild.id, profile.userId, changes, { id: interaction.user.id, tag: interaction.user.tag });
   }
 
   const localFiles = updateLocalJsonUsername(oldUsername, newUsername);
   return { oldUsername, newUsername, localFiles, profileUpdated: Boolean(profile?.userId) };
 }
-
 async function operationDemote(interaction, payload) {
   const member = await interaction.guild.members.fetch(payload.memberId).catch(() => null);
   if (!member) throw new Error('I could not find that Discord member in the server.');
@@ -987,21 +1012,21 @@ async function handleStaffJourneyInteraction(interaction) {
   prunePending();
   const item = pending.get(id);
   if (!item) {
-    await interaction.reply({ content: '❌ This Staff Journey confirmation expired. Please run the command again.', ephemeral: true }).catch(() => null);
+    await interaction.reply({ content: 'âŒ This Staff Journey confirmation expired. Please run the command again.', ephemeral: true }).catch(() => null);
     return true;
   }
   if (String(item.initiatorId) !== String(interaction.user.id)) {
-    await interaction.reply({ content: '❌ Only the person who ran this Staff Journey command can confirm it.', ephemeral: true }).catch(() => null);
+    await interaction.reply({ content: 'âŒ Only the person who ran this Staff Journey command can confirm it.', ephemeral: true }).catch(() => null);
     return true;
   }
   if (action === 'cancel') {
     pending.delete(id);
-    await interaction.update({ content: '❌ Staff Journey action cancelled. Nothing was changed.', components: [] });
+    await interaction.update({ content: 'âŒ Staff Journey action cancelled. Nothing was changed.', components: [] });
     return true;
   }
   pending.delete(id);
   const post = action === 'post';
-  const processing = item.processingMessage || '⏳ Updating Staff Journey, this may take a bit...';
+  const processing = item.processingMessage || 'â³ Updating Staff Journey, this may take a bit...';
   await interaction.update({ content: processing, components: [] });
   try {
     let result;
@@ -1013,25 +1038,25 @@ async function handleStaffJourneyInteraction(interaction) {
     else if (item.type === 'staffjourneypost') result = await operationStaffJourneyPost(interaction, item.payload);
     else throw new Error('Unknown Staff Journey action.');
 
-    let success = '✅ Staff Journey updated successfully.';
+    let success = 'âœ… Staff Journey updated successfully.';
     if (item.type === 'enroll') {
-      success = `✅ ${result.member} has been enrolled into Staff Journey as Leadership Intern!! WOO, ${post ? 'the promotion announcement has also been posted.' : 'you may now create the staff journey announcement.'}`;
+      success = `âœ… ${result.member} has been enrolled into Staff Journey as Leadership Intern!! WOO, ${post ? 'the promotion announcement has also been posted.' : 'you may now create the staff journey announcement.'}`;
     } else if (item.type === 'promote') {
-      success = `✅ Promotion complete!\n${result.member} has been promoted to **${result.rank}**. Their Staff Journey card, rank history, and labels have been updated.${post ? ' The announcement has also been posted.' : ' No announcement was posted.'}`;
+      success = `âœ… Promotion complete!\n${result.member} has been promoted to **${result.rank}**. Their Staff Journey card, rank history, and labels have been updated.${post ? ' The announcement has also been posted.' : ' No announcement was posted.'}`;
     } else if (item.type === 'resign') {
-      success = `✅ Resignation complete!\n${result.member}’s Staff Journey has been closed as a resignation. Their history has been preserved. Staff Journey card, rank history, and labels have been updated.${post ? ' The resignation announcement has also been posted.' : ' No announcement was posted.'}`;
+      success = `âœ… Resignation complete!\n${result.member}â€™s Staff Journey has been closed as a resignation. Their history has been preserved. Staff Journey card, rank history, and labels have been updated.${post ? ' The resignation announcement has also been posted.' : ' No announcement was posted.'}`;
     } else if (item.type === 'updateuser') {
-      success = `✅ Staff Journey updated from **${result.oldUsername}** to **${result.newUsername}**.`;
+      success = `âœ… Staff Journey updated from **${result.oldUsername}** to **${result.newUsername}**.`;
     } else if (item.type === 'demote') {
-      success = `✅ Demotion complete!\n${result.member}’s Staff Journey has been moved from **${result.oldRank}** to **${result.rank}**. No public announcement was posted.`;
+      success = `âœ… Demotion complete!\n${result.member}â€™s Staff Journey has been moved from **${result.oldRank}** to **${result.rank}**. No public announcement was posted.`;
     } else if (item.type === 'staffjourneypost') {
-      success = `✅ Staff Journey ${result.type} announcement posted for ${result.member}.`;
+      success = `âœ… Staff Journey ${result.type} announcement posted for ${result.member}.`;
     }
     await interaction.editReply({ content: success, components: [] });
   } catch (error) {
     console.error(`[STAFF JOURNEY ${String(item.type).toUpperCase()}]`, error);
     const message = error.message || 'That Staff Journey action failed safely.';
-    await interaction.editReply({ content: `❌ ${message}\n\nNo announcement was posted if the Staff Journey update failed.`, components: [] }).catch(() => null);
+    await interaction.editReply({ content: `âŒ ${message}\n\nNo announcement was posted if the Staff Journey update failed.`, components: [] }).catch(() => null);
   }
   return true;
 }
@@ -1215,41 +1240,41 @@ async function runStaffJourneyTest(interaction, input) {
     let publicPreview = '';
     if (type === 'enroll') {
       confirmation = `Are you sure you want to enroll ${member} into Staff Journey as **Leadership Intern**?`;
-      success = `✅ ${member} has been enrolled into Staff Journey as Leadership Intern!! WOO, you may now create the staff journey announcement.`;
+      success = `âœ… ${member} has been enrolled into Staff Journey as Leadership Intern!! WOO, you may now create the staff journey announcement.`;
       publicPreview = promotionAnnouncement({ username, rank: 'Leadership Intern', customMessage: message, promoters: noPingPromoters, memberId: member.id, cardUrl: fakeUrl });
     } else if (type === 'promote') {
       confirmation = `Are you sure you want to promote ${member} from **${current?.rank || 'Supervisor'}** to **${selectedRank}**?`;
-      success = `✅ Promotion complete!\n${member} has been promoted to **${selectedRank}**. Their Staff Journey card, rank history, labels, and announcement have been updated.`;
+      success = `âœ… Promotion complete!\n${member} has been promoted to **${selectedRank}**. Their Staff Journey card, rank history, labels, and announcement have been updated.`;
       publicPreview = promotionAnnouncement({ username, rank: selectedRank, customMessage: message, promoters: noPingPromoters, memberId: member.id, cardUrl: fakeUrl });
     } else if (type === 'resign') {
-      confirmation = `Are you sure you want to archive ${member}’s Staff Journey from **${current?.rank || selectedRank}** as resigned?`;
-      success = `✅ Resignation complete!\n${member}’s Staff Journey has been closed as a resignation. Their history has been preserved.`;
+      confirmation = `Are you sure you want to archive ${member}â€™s Staff Journey from **${current?.rank || selectedRank}** as resigned?`;
+      success = `âœ… Resignation complete!\n${member}â€™s Staff Journey has been closed as a resignation. Their history has been preserved.`;
       const promoterNames = card ? allPromoterNames(card.desc) : promoterInfos.map((p) => p.robloxName);
       const resolved = card ? await resolvePromoterNamesToDisplay(interaction.guild, promoterNames) : noPingPromoters.map((p) => ({ ...p, text: p.mention }));
       publicPreview = resignationAnnouncement({ username, rank: current?.rank || selectedRank, customMessage: message, promoters: resolved, memberId: member.id, cardUrl: fakeUrl });
     } else if (type === 'updateuser') {
       confirmation = `Are you sure you want to update the Staff Journey card for **${username}** to **${input.newUsername || `${username}_NEW`}**?`;
-      success = `✅ Staff Journey updated from **${username}** to **${input.newUsername || `${username}_NEW`}**.`;
+      success = `âœ… Staff Journey updated from **${username}** to **${input.newUsername || `${username}_NEW`}**.`;
       publicPreview = '*No public announcement is posted by /updateuser.*';
     } else if (type === 'demote') {
       confirmation = `Are you sure you want to demote ${member} from **${current?.rank || 'Assistant Manager'}** to **${selectedRank}**?`;
-      success = `✅ Demotion complete! No public announcement was posted.`;
+      success = `âœ… Demotion complete! No public announcement was posted.`;
       publicPreview = '*No public announcement is posted by /demote.*';
     } else if (type === 'staffjourneypost') {
       confirmation = `Are you sure you want to post a **${input.announcementType || 'promotion'}** Staff Journey announcement for ${member}?`;
-      success = `✅ Staff Journey ${input.announcementType || 'promotion'} announcement posted for ${member}.`;
+      success = `âœ… Staff Journey ${input.announcementType || 'promotion'} announcement posted for ${member}.`;
       if ((input.announcementType || 'promotion') === 'resignation') {
         const promoterNames = card ? allPromoterNames(card.desc) : promoterInfos.map((p) => p.robloxName);
         const resolved = card ? await resolvePromoterNamesToDisplay(interaction.guild, promoterNames) : noPingPromoters.map((p) => ({ ...p, text: p.mention }));
         publicPreview = resignationAnnouncement({ username, rank: current?.rank || selectedRank, customMessage: message, promoters: resolved, memberId: member.id, cardUrl: fakeUrl });
       } else publicPreview = promotionAnnouncement({ username, rank: selectedRank, customMessage: message, promoters: noPingPromoters, memberId: member.id, cardUrl: fakeUrl });
     } else if (type === 'monthly_milestone') {
-      confirmation = '*Automatic at 12:00 AM Eastern — no confirmation in live mode.*';
-      success = '✅ Test milestone preview generated. Live automation posts nothing when nobody has a milestone.';
+      confirmation = '*Automatic at 12:00 AM Eastern â€” no confirmation in live mode.*';
+      success = 'âœ… Test milestone preview generated. Live automation posts nothing when nobody has a milestone.';
       publicPreview = milestoneAnnouncement({ dateParts: currentEasternDate(), entries: [{ username, rank: current?.rank || selectedRank, months: Number(input.months || 1), cardUrl: fakeUrl, memberId: member.id }] });
     } else continue;
 
-    const header = `## 🧪 STAFF JOURNEY TEST — /${type === 'monthly_milestone' ? 'automatic milestone' : type}\n**Nothing below changes Trello, Supabase, roles, or real Staff Journey data. Pings are disabled in this channel.**`;
+    const header = `## ðŸ§ª STAFF JOURNEY TEST â€” /${type === 'monthly_milestone' ? 'automatic milestone' : type}\n**Nothing below changes Trello, Supabase, roles, or real Staff Journey data. Pings are disabled in this channel.**`;
     await channel.send({ content: `${header}\n\n**Confirmation Preview**\n${confirmation}\n\n**Success Reply Preview**\n${success}`, allowedMentions: { parse: [], users: [], roles: [] } });
     await channel.send({ content: `**Public Announcement Preview**\n\n${publicPreview}`, allowedMentions: { parse: [], users: [], roles: [] } });
     posted.push(type);
@@ -1275,3 +1300,4 @@ module.exports = {
   milestoneAnnouncement,
   __test: { parseHistoryLine, historyEntries, firstPromotionParts, closeCurrentAndAppend, buildResignedDescription, addFormerUsername, calendarDuration, humanDuration, nextMilestoneAfter, zonedIso, isoToEasternDateParts },
 };
+
