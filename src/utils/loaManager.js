@@ -503,7 +503,7 @@ async function findOrCreateLoaLabel() {
   return { ok: true, labelId: created.data.id };
 }
 
-async function addLoaLabelToStaffCard(username, commentText) {
+async function addLoaLabelToStaffCard(username, _commentText) {
   const cardResult = await findBestActiveStaffCard(username);
   if (!cardResult.ok || !cardResult.card) {
     return {
@@ -527,14 +527,10 @@ async function addLoaLabelToStaffCard(username, commentText) {
     await trelloRequest('POST', `/cards/${cardResult.card.id}/idLabels`, { value: labelResult.labelId });
   }
 
-  if (commentText) {
-    await trelloRequest('POST', `/cards/${cardResult.card.id}/actions/comments`, { text: commentText });
-  }
-
   return { ok: true, card: cardResult.card, labelId: labelResult.labelId };
 }
 
-async function removeLoaLabelFromStaffCard(username, storedCardId, commentText) {
+async function removeLoaLabelFromStaffCard(username, storedCardId, _commentText) {
   let card = null;
 
   if (storedCardId) {
@@ -562,10 +558,6 @@ async function removeLoaLabelFromStaffCard(username, storedCardId, commentText) 
   }
 
   await trelloRequest('DELETE', `/cards/${card.id}/idLabels/${labelResult.labelId}`);
-
-  if (commentText) {
-    await trelloRequest('POST', `/cards/${card.id}/actions/comments`, { text: commentText });
-  }
 
   return { ok: true, card, labelId: labelResult.labelId };
 }

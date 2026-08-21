@@ -22,6 +22,8 @@ const { handleOpsWebRequest } = require('./web/opsPortal');
 const { handleStaffRequestInteraction } = require('./utils/staffRequestSystem');
 const { handlePromotionInteraction } = require('./utils/promotionDiscord');
 const { ensureReviewOnCallPanel, handleReviewOnCallInteraction } = require('./utils/reviewOnCallPanel');
+const { handleStaffJourneyInteraction, startStaffJourneyAutomation, stopStaffJourneyAutomation } = require('./utils/staffJourneySystem');
+const { startSupabaseHeartbeat } = require('./utils/supabaseHeartbeat');
 const {
   syncStaffRoles,
   ensureGlaceFamily,
@@ -154,20 +156,34 @@ async function ensureRuntimeSlashCommands(readyClient) {
     ? (readyClient.guilds.cache.get(guildId) || await readyClient.guilds.fetch(guildId).catch(() => null))
     : null;
   if (!guild) {
-    console.warn('[COMMAND SYNC] GUILD_ID was not available; new session commands were not synced.');
+    console.warn('[COMMAND SYNC] GUILD_ID was not available; runtime command sync was skipped.');
     return;
   }
 
-  const commandNames = ['addsession', 'editcard', 'manualjuniorlog'];
+  const commandNames = [
+    'addsession', 'editcard', 'manualjuniorlog',
+    'enroll', 'promote', 'resign', 'updateuser', 'demote', 'staffjourneypost', 'staffjourneytest',
+  ];
+  const retiredStaffJourneyNames = [
+    'promotion', 'announce-promotion', 'changeuser', 'resignation', 'staff-journey', 'add-demotion', 'unenroll',
+  ];
 
   try {
     const existing = await guild.commands.fetch();
+    for (const retiredName of retiredStaffJourneyNames) {
+      const oldCommand = existing.find((entry) => entry.name === retiredName);
+      if (oldCommand) {
+        await guild.commands.delete(oldCommand.id);
+        console.log(`[COMMAND SYNC] Removed retired /${retiredName}.`);
+      }
+    }
+
+    const refreshed = await guild.commands.fetch();
     for (const commandName of commandNames) {
       const command = readyClient.commands.get(commandName);
       if (!command?.data) continue;
-
       const payload = command.data.toJSON();
-      const current = existing.find((entry) => entry.name === payload.name);
+      const current = refreshed.find((entry) => entry.name === payload.name);
       if (current) {
         await guild.commands.edit(current.id, payload);
         console.log(`[COMMAND SYNC] Updated /${commandName}.`);
@@ -177,13 +193,15 @@ async function ensureRuntimeSlashCommands(readyClient) {
       }
     }
   } catch (error) {
-    console.error('[COMMAND SYNC] Could not sync new session commands:', error);
+    console.error('[COMMAND SYNC] Could not sync Staff Journey/session commands:', error);
   }
 }
 
 // ===========================
 // READY / AUTOMATION
 // ===========================
+let stopSupabaseHeartbeat = null;
+
 client.once(Events.ClientReady, async (readyClient) => {
   logConfigurationReport();
   try { await Promise.resolve(runWeeklyMaintenance()); } catch (error) { console.error('[ACTIVITY] Ready maintenance failed:', error); }
@@ -198,6 +216,8 @@ client.once(Events.ClientReady, async (readyClient) => {
     const panel = await ensureReviewOnCallPanel(readyClient);
     if (!panel.ok) console.warn('[REVIEW ON-CALL]', panel.reason);
   } catch (error) { console.error('[REVIEW ON-CALL] Panel setup failed:', error); }
+  try { startStaffJourneyAutomation(readyClient); } catch (error) { console.error('[STAFF JOURNEY] Automation startup failed:', error); }
+  try { if (!stopSupabaseHeartbeat) stopSupabaseHeartbeat = startSupabaseHeartbeat(); } catch (error) { console.error('[SUPABASE] Heartbeat startup failed:', error); }
   console.log(`[READY] Logged in as ${readyClient.user.tag} in ${readyClient.guilds.cache.size} guild(s).`);
 });
 
@@ -311,6 +331,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (banAppeals?.handleBanAppealInteraction && await banAppeals.handleBanAppealInteraction(interaction)) return;
 
+    if (interaction.isButton() && await handleStaffJourneyInteraction(interaction)) return;
+
     if (interaction.isModalSubmit() && String(interaction.customId || '').startsWith('manualjuniorlog:')) {
       const manualJuniorLog = interaction.client.commands.get('manualjuniorlog');
       if (manualJuniorLog?.handleModalSubmit && await manualJuniorLog.handleModalSubmit(interaction)) return;
@@ -375,6 +397,8 @@ async function shutdown(signal) {
   console.log(`[SHUTDOWN] ${signal} received.`);
   for (const interval of intervals) clearInterval(interval);
   try { clearRoleSyncTimers(); } catch {}
+  try { stopStaffJourneyAutomation(); } catch {}
+  try { stopSupabaseHeartbeat?.(); } catch {}
   try { client.priorityStore?.saveNow?.(); } catch {}
   try { client.destroy(); } catch {}
   server.close(() => process.exit(0));

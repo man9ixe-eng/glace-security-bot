@@ -83,14 +83,13 @@ const COMMAND_MIN_TIER = Object.freeze({
   addloa: TIERS.CORPORATE,
   extendloa: TIERS.CORPORATE,
   removeloa: TIERS.CORPORATE,
-  promotion: TIERS.CORPORATE,
   enroll: TIERS.CORPORATE,
-  changeuser: TIERS.CORPORATE,
-  resignation: TIERS.CORPORATE,
-  'staff-journey': TIERS.CORPORATE,
-  'announce-promotion': TIERS.CORPORATE,
-  'add-demotion': TIERS.CORPORATE_BOARD,
-  unenroll: TIERS.CORPORATE_BOARD,
+  promote: TIERS.CORPORATE,
+  resign: TIERS.CORPORATE,
+  updateuser: TIERS.CORPORATE,
+  staffjourneypost: TIERS.MANAGEMENT,
+  demote: TIERS.CORPORATE_BOARD,
+  staffjourneytest: TIERS.PRESIDENTIAL,
 
   // Ticket commands. Ticket context applies finer rules.
   ticketpanel: TIERS.CORPORATE,
@@ -107,9 +106,10 @@ const COMMANDS_REQUIRING_OUTRANK = Object.freeze({
   ban: 'user',
   clearwarn: 'user',
   clearwarnall: 'user',
-  'add-demotion': 'member',
-  promotion: 'username',
-  resignation: 'member',
+  demote: 'member',
+  promote: 'member',
+  resign: 'member',
+  updateuser: 'member',
 });
 
 const WEBSITE_CAPABILITIES = Object.freeze({

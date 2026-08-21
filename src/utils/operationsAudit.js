@@ -15,9 +15,9 @@ const DISCORD_LOG_COMMANDS = new Set([
   'warn', 'clearwarn', 'clearwarnall', 'kick', 'timeout', 'ban', 'unban',
   'lock', 'unlock', 'slowmode', 'clear', 'sendappeal',
   'addsession', 'editcard', 'manualjuniorlog', 'cancelsession', 'logsession', 'editactivity', 'removesession',
-  'activitysettings', 'addloa', 'extendloa', 'removeloa', 'promotion',
-  'announce-promotion', 'enroll', 'changeuser', 'resignation', 'unenroll',
-  'add-demotion', 'ticketpanel', 'forceclose', 'adduser', 'opspanel',
+  'activitysettings', 'addloa', 'extendloa', 'removeloa',
+  'enroll', 'promote', 'resign', 'updateuser', 'demote', 'staffjourneypost',
+  'ticketpanel', 'forceclose', 'adduser', 'opspanel',
 ]);
 
 function readStore() {
