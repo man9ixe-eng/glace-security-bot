@@ -17,25 +17,25 @@ module.exports = {
 
   async execute(interaction) {
     const member = await resolveTargetMember(interaction, 'member');
-    if (!member) return interaction.reply({ content: '❌ I could not find that Discord member in this server.', ephemeral: true });
+    if (!member) return interaction.reply({ content: '\u274C I could not find that Discord member in this server.', ephemeral: true });
 
     const promotionDate = interaction.options.getString('promotion_date', true).trim();
     if (!parseMmDdYyyy(promotionDate)) {
-      return interaction.reply({ content: '❌ Invalid promotion date. Use the exact format MM/DD/YYYY.', ephemeral: true });
+      return interaction.reply({ content: '\u274C Invalid promotion date. Use the exact format MM/DD/YYYY.', ephemeral: true });
     }
 
     const promoter = interaction.options.getUser('promoter', true);
     const promoter2 = interaction.options.getUser('promoter_2');
     const robloxUsername = interaction.options.getString('roblox_username', true).trim();
     if (!/^[A-Za-z0-9_]{3,20}$/.test(robloxUsername)) {
-      return interaction.reply({ content: '❌ That does not look like a valid Roblox username.', ephemeral: true });
+      return interaction.reply({ content: '\u274C That does not look like a valid Roblox username.', ephemeral: true });
     }
 
     return beginConfirmation(
       interaction,
       {
         type: 'enroll',
-        processingMessage: `⏳ Enrolling ${member} into the AMAZING Staff Journey system, this may take a bit...`,
+        processingMessage: `\u23F3 Enrolling ${member} into the AMAZING Staff Journey system, this may take a bit...`,
         payload: {
           memberId: member.id,
           robloxUsername,

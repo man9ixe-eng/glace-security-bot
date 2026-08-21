@@ -67,7 +67,7 @@ module.exports = {
       const otherReason = interaction.options.getString('other_reason') || '';
 
       if (!target) {
-        await interaction.editReply('❌ I could not find that member in this server.');
+        await interaction.editReply('\u274C I could not find that member in this server.');
         return;
       }
 
@@ -79,10 +79,10 @@ module.exports = {
         otherReason,
       });
 
-      await interaction.editReply(result.message || (result.ok ? '✅ LOA added.' : '❌ Could not add LOA.'));
+      await interaction.editReply(result.message || (result.ok ? '\u2705 LOA added.' : '\u274C Could not add LOA.'));
     } catch (err) {
       console.error('[ADDLOA COMMAND ERROR]', err);
-      const message = '❌ Something went wrong while running `/addloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
+      const message = '\u274C Something went wrong while running `/addloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(message).catch(() => null);
       } else {

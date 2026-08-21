@@ -44,7 +44,7 @@ module.exports = {
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const member = await resolveTargetMember(interaction, 'member');
-    if (!member) return interaction.editReply('❌ I could not find that Discord member in this server.');
+    if (!member) return interaction.editReply('\u274C I could not find that Discord member in this server.');
     const promoter = interaction.options.getUser('promoter');
     const promoter2 = interaction.options.getUser('promoter_2');
     try {
@@ -58,10 +58,10 @@ module.exports = {
         newUsername: interaction.options.getString('new_username') || null,
         months: interaction.options.getInteger('months') || 1,
       });
-      return interaction.editReply(`✅ Posted **${result.posted.length}** Staff Journey test preview${result.posted.length === 1 ? '' : 's'} in ${result.channel}. Nothing real was changed and no one was pinged.`);
+      return interaction.editReply(`\u2705 Posted **${result.posted.length}** Staff Journey test preview${result.posted.length === 1 ? '' : 's'} in ${result.channel}. Nothing real was changed and no one was pinged.`);
     } catch (error) {
       console.error('[STAFF JOURNEY TEST]', error);
-      return interaction.editReply(`❌ Staff Journey test failed: ${error.message || error}`);
+      return interaction.editReply(`\u274C Staff Journey test failed: ${error.message || error}`);
     }
   },
 };

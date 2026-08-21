@@ -32,9 +32,9 @@ module.exports = {
 
   async execute(interaction) {
     const member = await resolveTargetMember(interaction, 'member');
-    if (!member) return interaction.reply({ content: '❌ I could not find that Discord member in this server.', ephemeral: true });
+    if (!member) return interaction.reply({ content: '\u274C I could not find that Discord member in this server.', ephemeral: true });
     const date = interaction.options.getString('promotion_date', true).trim();
-    if (!parseMmDdYyyy(date)) return interaction.reply({ content: '❌ Invalid promotion date. Use MM/DD/YYYY.', ephemeral: true });
+    if (!parseMmDdYyyy(date)) return interaction.reply({ content: '\u274C Invalid promotion date. Use MM/DD/YYYY.', ephemeral: true });
     const rankKey = interaction.options.getString('new_rank', true);
     const newRank = rankByKey(rankKey);
     const { card } = await findJourneyCardForMember(interaction.guild, member, { includeClosed: false });
@@ -47,7 +47,7 @@ module.exports = {
       interaction,
       {
         type: 'promote',
-        processingMessage: `⏳ Updating ${member}’s Staff Journey promotion, this may take a bit...`,
+        processingMessage: `\u23F3 Updating ${member}\u2019s Staff Journey promotion, this may take a bit...`,
         payload: {
           memberId: member.id,
           rankKey,

@@ -20,9 +20,9 @@ module.exports = {
 
   async execute(interaction) {
     const member = await resolveTargetMember(interaction, 'member');
-    if (!member) return interaction.reply({ content: '❌ I could not find that Discord member in this server.', ephemeral: true });
+    if (!member) return interaction.reply({ content: '\u274C I could not find that Discord member in this server.', ephemeral: true });
     const date = interaction.options.getString('resignation_date', true).trim();
-    if (!parseMmDdYyyy(date)) return interaction.reply({ content: '❌ Invalid resignation date. Use MM/DD/YYYY.', ephemeral: true });
+    if (!parseMmDdYyyy(date)) return interaction.reply({ content: '\u274C Invalid resignation date. Use MM/DD/YYYY.', ephemeral: true });
     const { card } = await findJourneyCardForMember(interaction.guild, member, { includeClosed: false });
     const current = card ? currentRankEntry(card.desc) : null;
 
@@ -30,7 +30,7 @@ module.exports = {
       interaction,
       {
         type: 'resign',
-        processingMessage: `⏳ Closing ${member}’s Staff Journey as a resignation, this may take a bit...`,
+        processingMessage: `\u23F3 Closing ${member}\u2019s Staff Journey as a resignation, this may take a bit...`,
         payload: {
           memberId: member.id,
           resignationDate: date,

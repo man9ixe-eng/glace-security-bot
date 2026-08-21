@@ -28,20 +28,20 @@ module.exports = {
     const newUsername = interaction.options.getString('new_roblox_username', true).trim();
 
     if (!validRobloxUsername(oldUsername)) {
-      return interaction.reply({ content: '❌ That current Roblox username does not look valid.', ephemeral: true });
+      return interaction.reply({ content: '\u274C That current Roblox username does not look valid.', ephemeral: true });
     }
     if (!validRobloxUsername(newUsername)) {
-      return interaction.reply({ content: '❌ That new Roblox username does not look valid.', ephemeral: true });
+      return interaction.reply({ content: '\u274C That new Roblox username does not look valid.', ephemeral: true });
     }
     if (oldUsername.toLowerCase() === newUsername.toLowerCase()) {
-      return interaction.reply({ content: '❌ The new Roblox username is the same as the current username.', ephemeral: true });
+      return interaction.reply({ content: '\u274C The new Roblox username is the same as the current username.', ephemeral: true });
     }
 
     return beginConfirmation(
       interaction,
       {
         type: 'updateuser',
-        processingMessage: `⏳ Updating **${oldUsername}** to **${newUsername}** in Staff Journey, this may take a bit...`,
+        processingMessage: `\u23F3 Updating **${oldUsername}** to **${newUsername}** in Staff Journey, this may take a bit...`,
         payload: { oldUsername, newUsername },
       },
       `Are you sure you want to update the Staff Journey card for **${oldUsername}** to **${newUsername}**?\n\nThe bot will look for a card whose username matches **${oldUsername}** exactly. The original Staff Journey date and rank history will stay untouched.`,

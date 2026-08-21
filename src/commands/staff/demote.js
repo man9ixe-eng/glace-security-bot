@@ -29,9 +29,9 @@ module.exports = {
 
   async execute(interaction) {
     const member = await resolveTargetMember(interaction, 'member');
-    if (!member) return interaction.reply({ content: '❌ I could not find that Discord member in this server.', ephemeral: true });
+    if (!member) return interaction.reply({ content: '\u274C I could not find that Discord member in this server.', ephemeral: true });
     const date = interaction.options.getString('date', true).trim();
-    if (!parseMmDdYyyy(date)) return interaction.reply({ content: '❌ Invalid demotion date. Use MM/DD/YYYY.', ephemeral: true });
+    if (!parseMmDdYyyy(date)) return interaction.reply({ content: '\u274C Invalid demotion date. Use MM/DD/YYYY.', ephemeral: true });
     const newRank = rankByKey(interaction.options.getString('new_rank', true));
     const { card } = await findJourneyCardForMember(interaction.guild, member, { includeClosed: false });
     const current = card ? currentRankEntry(card.desc) : null;
@@ -39,7 +39,7 @@ module.exports = {
       interaction,
       {
         type: 'demote',
-        processingMessage: `⏳ Updating ${member}’s Staff Journey demotion, this may take a bit...`,
+        processingMessage: `\u23F3 Updating ${member}\u2019s Staff Journey demotion, this may take a bit...`,
         payload: { memberId: member.id, rankKey: newRank?.key, date },
       },
       `Are you sure you want to demote ${member} from **${current?.rank || 'their current rank'}** to **${newRank?.display || 'Unknown Rank'}**?\n\nNo public announcement will be posted.`,

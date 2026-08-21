@@ -31,15 +31,15 @@ module.exports = {
       const endDate = interaction.options.getString('end_date', true);
 
       if (!target) {
-        await interaction.editReply('❌ I could not find that member in this server.');
+        await interaction.editReply('\u274C I could not find that member in this server.');
         return;
       }
 
       const result = await removeLoa(interaction, target, { endDate });
-      await interaction.editReply(result.message || (result.ok ? '✅ LOA removed.' : '❌ Could not remove LOA.'));
+      await interaction.editReply(result.message || (result.ok ? '\u2705 LOA removed.' : '\u274C Could not remove LOA.'));
     } catch (err) {
       console.error('[REMOVELOA COMMAND ERROR]', err);
-      const message = '❌ Something went wrong while running `/removeloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
+      const message = '\u274C Something went wrong while running `/removeloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(message).catch(() => null);
       } else {

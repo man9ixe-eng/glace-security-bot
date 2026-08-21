@@ -38,7 +38,7 @@ module.exports = {
       const reason = interaction.options.getString('reason', true);
 
       if (!target) {
-        await interaction.editReply('❌ I could not find that member in this server.');
+        await interaction.editReply('\u274C I could not find that member in this server.');
         return;
       }
 
@@ -47,10 +47,10 @@ module.exports = {
         reason,
       });
 
-      await interaction.editReply(result.message || (result.ok ? '✅ LOA extended.' : '❌ Could not extend LOA.'));
+      await interaction.editReply(result.message || (result.ok ? '\u2705 LOA extended.' : '\u274C Could not extend LOA.'));
     } catch (err) {
       console.error('[EXTENDLOA COMMAND ERROR]', err);
-      const message = '❌ Something went wrong while running `/extendloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
+      const message = '\u274C Something went wrong while running `/extendloa`. I stopped the command so it does not stay processing. Check the console log for the exact error.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(message).catch(() => null);
       } else {

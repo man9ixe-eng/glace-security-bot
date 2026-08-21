@@ -18,7 +18,7 @@ module.exports = {
     const url = portalUrl();
     if (!url) {
       return interaction.reply({
-        content: '❌ Add `PUBLIC_BASE_URL` in Render first, then run `/opspanel` again.',
+        content: '\u274C Add `PUBLIC_BASE_URL` in Render first, then run `/opspanel` again.',
         ephemeral: true,
       });
     }
@@ -45,6 +45,6 @@ module.exports = {
     );
 
     await interaction.channel.send({ embeds: [embed], components: [row] });
-    return interaction.reply({ content: '✅ Glace Staff Hub panel posted.', ephemeral: true });
+    return interaction.reply({ content: '\u2705 Glace Staff Hub panel posted.', ephemeral: true });
   },
 };

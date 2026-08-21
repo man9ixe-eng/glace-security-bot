@@ -28,13 +28,13 @@ module.exports = {
 
   async execute(interaction) {
     const member = await resolveTargetMember(interaction, 'member');
-    if (!member) return interaction.reply({ content: '❌ I could not find that Discord member in this server.', ephemeral: true });
+    if (!member) return interaction.reply({ content: '\u274C I could not find that Discord member in this server.', ephemeral: true });
     const announcementType = interaction.options.getString('announcement_type', true);
     return beginConfirmation(
       interaction,
       {
         type: 'staffjourneypost',
-        processingMessage: `⏳ Preparing ${member}’s Staff Journey announcement...`,
+        processingMessage: `\u23F3 Preparing ${member}\u2019s Staff Journey announcement...`,
         payload: {
           announcementType,
           memberId: member.id,
