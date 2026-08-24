@@ -51,9 +51,9 @@ const STAFF_GROUPS = Object.freeze([
     rankNames: ['security', 'custodian', 'hotel cook', 'front desk'],
     teamIds: configuredIds('JUNIOR_STAFF_ROLE_IDS'),
     teamNames: ['junior staff'],
-    // Junior Staff use the Trial ticket role.
-    ticketEnvNames: ['TICKET_ROLE_TRIAL_ID'],
-    ticketNames: ['ticket trial'],
+    // Junior Staff do not receive a ticket role.
+    ticketEnvNames: [],
+    ticketNames: [],
   },
   {
     key: 'intern',
@@ -62,9 +62,9 @@ const STAFF_GROUPS = Object.freeze([
     rankNames: ['leadership intern'],
     teamIds: configuredIds('INTERN_ROLE_IDS'),
     teamNames: ['intern team'],
-    // Prefer a dedicated Intern ticket role when configured; fall back to Trial.
-    ticketEnvNames: ['TICKET_ROLE_INTERN_ID', 'TICKET_ROLE_TRIAL_ID'],
-    ticketNames: ['ticket intern', 'ticket trial'],
+    // Leadership Interns receive Ticket Trial.
+    ticketEnvNames: ['TICKET_ROLE_TRIAL_ID'],
+    ticketNames: ['ticket trial'],
   },
   {
     key: 'management',
