@@ -51,7 +51,7 @@ module.exports = {
     .addIntegerOption((option) =>
       option
         .setName('amount')
-        .setDescription('How many messages to delete (1–100).')
+        .setDescription('How many messages to delete (1\u2013100).')
         .setRequired(true),
     )
     .addStringOption((option) =>
@@ -86,7 +86,7 @@ module.exports = {
     let totalDeleted = 0;
     let lastProgressEdit = 0;
 
-    // We’ll keep fetching until we hit the amount or there’s nothing left to delete
+    // We\u2019ll keep fetching until we hit the amount or there\u2019s nothing left to delete
     // NOTE: Discord fetch limit is 100; we only need up to 100 anyway.
     let beforeId = null;
     let safetyLoops = 0;
@@ -109,7 +109,7 @@ module.exports = {
         // Convert to array (newest -> oldest)
         const batch = Array.from(fetched.values());
 
-        // Don’t delete the interaction itself (usually not in message fetch, but safe)
+        // Don\u2019t delete the interaction itself (usually not in message fetch, but safe)
         const candidates = batch.filter((m) => m.id !== interaction.id);
 
         // 1) Bulk delete everything Discord allows (newer than 14 days)
@@ -127,21 +127,21 @@ module.exports = {
             .slice(0, amount - totalDeleted);
 
           if (leftovers.length > 0) {
-            // progress ping (don’t spam edits too hard)
+            // progress ping (don\u2019t spam edits too hard)
             await interaction.editReply(
-              `🧹 Clearing messages...\n` +
+              `\uD83E\uDDF9 Clearing messages...\n` +
               `Deleted so far: **${totalDeleted}/${amount}**\n` +
               `Reason: ${reason}`,
             );
 
             const deletedOld = await deleteWithPool(leftovers, DELETE_CONCURRENCY, async (delta) => {
-              // edit every ~10 deletes to show it’s alive
+              // edit every ~10 deletes to show it\u2019s alive
               const now = totalDeleted + delta;
               if (now - lastProgressEdit >= 10) {
                 lastProgressEdit = now;
                 try {
                   await interaction.editReply(
-                    `🧹 Clearing messages...\n` +
+                    `\uD83E\uDDF9 Clearing messages...\n` +
                     `Deleted so far: **${now}/${amount}**\n` +
                     `Reason: ${reason}`,
                   );
@@ -151,20 +151,20 @@ module.exports = {
 
             totalDeleted += deletedOld;
 
-            // Small pause between batches prevents “stuck mid-way” behavior from rate limits
+            // Small pause between batches prevents \u201Cstuck mid-way\u201D behavior from rate limits
             await sleep(BATCH_SLEEP_MS);
           }
         }
 
 
-        // If we didn’t delete anything this loop, we’re probably hitting permissions/managed messages
+        // If we didn\u2019t delete anything this loop, we\u2019re probably hitting permissions/managed messages
         if (bulkDeletedCount === 0 && totalDeleted < amount) {
           // continue loop, but if nothing changes next time it will break naturally
         }
       }
 
           await interaction.editReply(
-        `✅ Deleted **${totalDeleted}** message(s) in ${channel}.\nReason: ${reason}`,
+        `\u2705 Deleted **${totalDeleted}** message(s) in ${channel}.\nReason: ${reason}`,
       );
 
       await logModerationAction(interaction, {
@@ -176,7 +176,7 @@ module.exports = {
     } catch (err) {
       console.error('[CLEAR] Error:', err);
       await interaction.editReply(
-        `⚠️ I started clearing, but something interrupted it.\nDeleted: **${totalDeleted}/${amount}**\nReason: ${reason}`,
+        `\u26A0\uFE0F I started clearing, but something interrupted it.\nDeleted: **${totalDeleted}/${amount}**\nReason: ${reason}`,
       );
     }
   },

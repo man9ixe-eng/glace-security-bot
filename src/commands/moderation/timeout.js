@@ -21,7 +21,7 @@ module.exports = {
     .addIntegerOption(option =>
       option
         .setName('minutes')
-        .setDescription('Duration in minutes (1–10080).')
+        .setDescription('Duration in minutes (1\u201310080).')
         .setRequired(true),
     )
     .addStringOption(option =>

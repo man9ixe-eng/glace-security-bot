@@ -378,14 +378,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.error(`[COMMAND] /${interaction.commandName} failed:`, error);
       await auditCommand(interaction, 'failed', { error: error?.message || String(error) });
-      const payload = { content: '❌ That command failed safely. Nothing else will continue running from this request. The error was added to the Operations Audit.', ephemeral: true };
+      const payload = { content: '\u274C That command failed safely. Nothing else will continue running from this request. The error was added to the Operations Audit.', ephemeral: true };
       if (interaction.deferred && !interaction.replied) await interaction.editReply(payload).catch(() => null);
       else if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
       else await interaction.reply(payload).catch(() => null);
     }
   } catch (error) {
     console.error('[INTERACTION] Unhandled interaction error:', error);
-    const payload = { content: '❌ This interaction could not be completed.', ephemeral: true };
+    const payload = { content: '\u274C This interaction could not be completed.', ephemeral: true };
     if (interaction.deferred && !interaction.replied) await interaction.editReply(payload).catch(() => null);
     else if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);

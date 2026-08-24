@@ -327,7 +327,7 @@ async function complete(submissionId, verification, actor) {
   return mutate(submissionId, actor, 'promotion_completed', (entry) => {
     if (entry.status !== 'approved_awaiting_completion') throw new Error('This promotion is not awaiting completion.');
     if (String(entry.assignedCompletionId) !== String(actor?.id)) throw new Error('This promotion is assigned to a different Corporate member.');
-    if (!verification?.discordVerified) throw new Error('The candidate’s Discord rank could not be verified.');
+    if (!verification?.discordVerified) throw new Error('The candidate\u2019s Discord rank could not be verified.');
     const a = actorData(actor); const when = nowIso();
     entry.status = 'completed'; entry.completedById = a.id; entry.completedByTag = a.tag; entry.completedAt = when;
     entry.discordVerified = true; entry.verifiedTier = Number(verification.verifiedTier) || null; entry.updatedAt = when;

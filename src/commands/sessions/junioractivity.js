@@ -1,5 +1,5 @@
 // src/commands/sessions/junioractivity.js
-// Glace Hotels — Junior Staff Roblox training activity panel
+// Glace Hotels \u2014 Junior Staff Roblox training activity panel
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { atLeastTier } = require('../../utils/permissions');
@@ -48,14 +48,14 @@ function buildRecentLogs(records) {
       timeZone: TIME_ZONE,
     });
 
-    return `• ${dateText} — ${record.role || 'Unknown Role'} — ${formatMinutes(record.minutesInTC)}`;
+    return `\u2022 ${dateText} \u2014 ${record.role || 'Unknown Role'} \u2014 ${formatMinutes(record.minutesInTC)}`;
   }).join('\n');
 }
 
 function buildRoleBreakdown(summary) {
   const entries = Object.entries(summary.roles || {})
     .sort((a, b) => b[1] - a[1])
-    .map(([role, count]) => `• ${role}: ${count}`);
+    .map(([role, count]) => `\u2022 ${role}: ${count}`);
 
   return entries.length ? entries.join('\n') : 'No roles found for this range.';
 }
@@ -65,8 +65,8 @@ function buildConsistencyLines(windows) {
 
   return windows.map((window) => {
     const label = window.offset === 0 ? 'Current Week' : `${window.offset} Week${window.offset === 1 ? '' : 's'} Ago`;
-    const status = window.metTwoTrainingStandard ? '✅' : '❌';
-    return `${status} ${label} (${formatWeekWindowShort(window.range)}): ${window.trainings} training${window.trainings === 1 ? '' : 's'} • ${formatMinutes(window.minutes)}`;
+    const status = window.metTwoTrainingStandard ? '\u2705' : '\u274C';
+    return `${status} ${label} (${formatWeekWindowShort(window.range)}): ${window.trainings} training${window.trainings === 1 ? '' : 's'} \u2022 ${formatMinutes(window.minutes)}`;
   }).join('\n');
 }
 
@@ -79,8 +79,8 @@ function getRangeFromOptions(interaction) {
     const safeWeekBack = Math.max(0, Math.min(weekBack, 52));
     const range = getWeekRange(-safeWeekBack);
     const label = safeWeekBack === 0
-      ? `Current Week • ${formatRangeLabel(range)}`
-      : `${safeWeekBack} Week${safeWeekBack === 1 ? '' : 's'} Ago • ${formatRangeLabel(range)}`;
+      ? `Current Week \u2022 ${formatRangeLabel(range)}`
+      : `${safeWeekBack} Week${safeWeekBack === 1 ? '' : 's'} Ago \u2022 ${formatRangeLabel(range)}`;
     return { range, label, mode: 'week' };
   }
 
@@ -89,11 +89,11 @@ function getRangeFromOptions(interaction) {
     const { year: currentYear } = getDefaultMonthYear();
     const year = Number.isInteger(yearOption) ? yearOption : currentYear;
     const range = monthRange(safeMonth, year);
-    return { range, label: `Month View • ${formatRangeLabel(range)}`, mode: 'month' };
+    return { range, label: `Month View \u2022 ${formatRangeLabel(range)}`, mode: 'month' };
   }
 
   const range = getWeekRange(0);
-  return { range, label: `Current Week • ${formatRangeLabel(range)}`, mode: 'week' };
+  return { range, label: `Current Week \u2022 ${formatRangeLabel(range)}`, mode: 'week' };
 }
 
 module.exports = {
@@ -152,7 +152,7 @@ module.exports = {
 
     if (!backfill.ok && backfill.reason === 'missing_log_channel') {
       await interaction.editReply(
-        '⚠️ I could not find the Junior Staff Roblox training log channel. Set `JUNIOR_ACTIVITY_LOG_CHANNEL_ID` in Render, or name the channel `junior-activity-log`, `junior-training-log`, `training-log`, or `tc-log`.',
+        '\u26A0\uFE0F I could not find the Junior Staff Roblox training log channel. Set `JUNIOR_ACTIVITY_LOG_CHANNEL_ID` in Render, or name the channel `junior-activity-log`, `junior-training-log`, `training-log`, or `tc-log`.',
       );
       return;
     }
@@ -183,7 +183,7 @@ module.exports = {
       : player;
 
     const embed = new EmbedBuilder()
-      .setTitle(`${displayName} • Junior Staff Activity`)
+      .setTitle(`${displayName} \u2022 Junior Staff Activity`)
       .setColor(
         decision.status === 'Promotion Ready'
           ? 0x22C55E
@@ -201,7 +201,7 @@ module.exports = {
       )
       .addFields(
         {
-          name: '👤 Roblox Profile',
+          name: '\uD83D\uDC64 Roblox Profile',
           value: [
             `**Username:** ${profile.robloxUsername || displayName}`,
             `**Roblox ID:** ${profile.robloxId || 'Unknown'}`,
@@ -210,7 +210,7 @@ module.exports = {
           inline: false,
         },
         {
-          name: '📚 Training Breakdown',
+          name: '\uD83D\uDCDA Training Breakdown',
           value: [
             `**Trainings:** ${summary.totalTrainings}`,
             `**Minutes in TC:** ${formatMinutes(summary.totalMinutes)}`,
@@ -219,23 +219,23 @@ module.exports = {
           inline: false,
         },
         {
-          name: '🧊 Role Breakdown',
+          name: '\uD83E\uDDCA Role Breakdown',
           value: buildRoleBreakdown(summary),
           inline: false,
         },
         {
-          name: '📈 4-Week Consistency',
+          name: '\uD83D\uDCC8 4-Week Consistency',
           value: buildConsistencyLines(consistency),
           inline: false,
         },
         {
-          name: '📝 Recent Training Logs',
+          name: '\uD83D\uDCDD Recent Training Logs',
           value: buildRecentLogs(records),
           inline: false,
         },
       )
       .setFooter({
-        text: `Junior Staff tracking uses Roblox username/ID logs only • Synced ${backfill.added} new / ${backfill.updated} updated`,
+        text: `Junior Staff tracking uses Roblox username/ID logs only \u2022 Synced ${backfill.added} new / ${backfill.updated} updated`,
       })
       .setTimestamp();
 

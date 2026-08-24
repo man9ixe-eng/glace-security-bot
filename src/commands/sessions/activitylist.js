@@ -24,7 +24,7 @@ const TEAM_EMOJIS = {
 };
 
 function getTeamEmoji(profile) {
-  return TEAM_EMOJIS[profile?.key] || '🔹';
+  return TEAM_EMOJIS[profile?.key] || '\uD83D\uDD39';
 }
 
 function getTeamDisplayLabel(profile) {
@@ -34,12 +34,12 @@ function getTeamDisplayLabel(profile) {
 }
 
 function buildSectionBox(lines) {
-  return `╭────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────╯`;
+  return `\u256D\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n${lines.map((line) => `\u2502 ${line}`).join('\n')}\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F`;
 }
 
 function checkLine(label, actual, required) {
   if (!required || required <= 0) return null;
-  return `${label}: ${actual || 0}/${required} ${(actual || 0) >= required ? '✅' : '❌'}`;
+  return `${label}: ${actual || 0}/${required} ${(actual || 0) >= required ? '\u2705' : '\u274C'}`;
 }
 
 function buildRequirementChecks(summary, quotaProfile) {
@@ -139,7 +139,7 @@ module.exports = {
 
     const listLines = missing.length
       ? shown.flatMap(({ member, quotaProfile, summary }) => [
-          `• ${getTeamEmoji(quotaProfile)} **${member.displayName || member.user.username}**`,
+          `\u2022 ${getTeamEmoji(quotaProfile)} **${member.displayName || member.user.username}**`,
           `  ${getTeamDisplayLabel(quotaProfile)}`,
           ...buildRequirementChecks(summary, quotaProfile).map((line) => `  ${line}`),
           '',
@@ -148,7 +148,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x1d4ed8)
-      .setTitle(`💠 Activity List • ${isCurrent ? 'Current Week' : 'Last Week'}`)
+      .setTitle(`\uD83D\uDCA0 Activity List \u2022 ${isCurrent ? 'Current Week' : 'Last Week'}`)
       .setDescription(
         `Below is the current list of members who have not met quota.\n\n${buildSectionBox(
           listLines.length && listLines[listLines.length - 1] === ''
@@ -157,10 +157,10 @@ module.exports = {
         )}`,
       )
       .addFields({
-        name: '📅 Week Window',
+        name: '\uD83D\uDCC5 Week Window',
         value: buildSectionBox([
           `${formatRangeLabel(selectedRange)}`,
-          'Monday 12:00 AM → Sunday 11:59 PM',
+          'Monday 12:00 AM \u2192 Sunday 11:59 PM',
           `${TIME_ZONE}`,
         ]),
       })

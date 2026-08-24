@@ -112,7 +112,7 @@ module.exports = {
 
       await interaction.editReply({
         content:
-          `✅ Banned **${user.tag || user.username}**.\n` +
+          `\u2705 Banned **${user.tag || user.username}**.\n` +
           `**Rule:** ${rule.label}\n` +
           `**Appeal:** ${appealable ? "Yes" : "No"}\n` +
           `**Appeal Opens:** ${appealLine}\n` +

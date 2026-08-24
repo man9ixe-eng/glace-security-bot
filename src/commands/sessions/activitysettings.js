@@ -12,14 +12,14 @@ function addQuotaFields(embed, entry) {
       : Number(raw.total || 0) + Number(raw.hostedTotal || 0) + Number(raw.cohostTotal || 0) + Number(raw.minOverseer || 0);
 
   return embed.addFields(
-    { name: '📊 Req Total/Regular', value: String(entry.total ?? 0), inline: true },
-    { name: '✨ Display Total', value: String(displayTotal || 0), inline: true },
-    { name: '🏨 Req Hosted', value: String(entry.hosting ?? 0), inline: true },
-    { name: '🤝 Req Co-Host', value: String(entry.cohost ?? 0), inline: true },
-    { name: '👀 Req Overseer', value: String(entry.overseer ?? 0), inline: true },
-    { name: '🟣 Req Shift Minutes', value: String(entry.shiftMinutes ?? 0), inline: true },
+    { name: '\uD83D\uDCCA Req Total/Regular', value: String(entry.total ?? 0), inline: true },
+    { name: '\u2728 Display Total', value: String(displayTotal || 0), inline: true },
+    { name: '\uD83C\uDFE8 Req Hosted', value: String(entry.hosting ?? 0), inline: true },
+    { name: '\uD83E\uDD1D Req Co-Host', value: String(entry.cohost ?? 0), inline: true },
+    { name: '\uD83D\uDC40 Req Overseer', value: String(entry.overseer ?? 0), inline: true },
+    { name: '\uD83D\uDFE3 Req Shift Minutes', value: String(entry.shiftMinutes ?? 0), inline: true },
     {
-      name: '🟡 / 🔴 Split',
+      name: '\uD83D\uDFE1 / \uD83D\uDD34 Split',
       value: [
         `Interview Min: ${raw.minInterview ?? raw.hostedInterview ?? raw.cohostInterview ?? raw.overseerInterview ?? 0}`,
         `Training Min: ${raw.minTraining ?? raw.hostedTraining ?? raw.cohostTraining ?? raw.overseerTraining ?? 0}`,
@@ -134,7 +134,7 @@ module.exports = {
       const embed = addQuotaFields(
         new EmbedBuilder()
           .setColor(0x8fd3ff)
-          .setTitle('✨ Activity Settings')
+          .setTitle('\u2728 Activity Settings')
           .setDescription(`Viewing quota settings for **${tier}**`),
         current,
       );
@@ -157,7 +157,7 @@ module.exports = {
     const embed = addQuotaFields(
       new EmbedBuilder()
         .setColor(0x57f287)
-        .setTitle('✅ Activity Settings Updated')
+        .setTitle('\u2705 Activity Settings Updated')
         .setDescription(`Updated quota settings for **${tier}**`),
       next,
     );

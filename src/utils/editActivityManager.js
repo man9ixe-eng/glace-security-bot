@@ -82,7 +82,7 @@ function normalizeSectionName(value) {
   return String(value || '')
     .toLowerCase()
     .replace(/[\s_]+/g, ' ')
-    .replace(/[–—]/g, '-')
+    .replace(/[\u2013\u2014]/g, '-')
     .trim();
 }
 
@@ -340,9 +340,9 @@ function looksLikeAttendeesPost(message) {
   return (
     content.includes('selected attendees') ||
     content.includes('you should now join') ||
-    content.includes('trainers 🔴') ||
-    content.includes('interviewers 🟡') ||
-    content.includes('attendees 🟣')
+    content.includes('trainers \uD83D\uDD34') ||
+    content.includes('interviewers \uD83D\uDFE1') ||
+    content.includes('attendees \uD83D\uDFE3')
   );
 }
 
@@ -814,7 +814,7 @@ function extractDiscordUserId(text) {
 
 function cleanPossibleUsername(rawLine) {
   return String(rawLine || '')
-    .replace(/^\s*(?:\d+\s*[.)\-:]|[-•*])\s*/u, '')
+    .replace(/^\s*(?:\d+\s*[.)\-:]|[-\u2022*])\s*/u, '')
     .replace(/[`*_~]/g, '')
     .replace(/^@+/, '')
     .replace(/\s*\([^)]*\)\s*$/g, '')
@@ -945,7 +945,7 @@ async function parseLineupReply(text, sessionType, guild) {
   if (!sawKnownSection) {
     return {
       ok: false,
-      error: '❌ I couldn’t read that lineup. Please keep the section headers like `[Trainer]`, `[Supervisor]`, `[Co-Host]`, and `[Overseer]`.',
+      error: '\u274C I couldn\u2019t read that lineup. Please keep the section headers like `[Trainer]`, `[Supervisor]`, `[Co-Host]`, and `[Overseer]`.',
     };
   }
 
@@ -953,7 +953,7 @@ async function parseLineupReply(text, sessionType, guild) {
     return {
       ok: false,
       error:
-        `❌ I couldn’t find this user from your edit: **${unresolved[0]}**\n` +
+        `\u274C I couldn\u2019t find this user from your edit: **${unresolved[0]}**\n` +
         'Please paste their Discord user ID if Discord does not suggest them.',
     };
   }
@@ -984,7 +984,7 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
           return {
             ok: false,
             error:
-              `❌ One staff member is being changed into two different people.\n` +
+              `\u274C One staff member is being changed into two different people.\n` +
               'Please send one clean edit so the log updates correctly.',
           };
         }
@@ -1016,7 +1016,7 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
         return {
           ok: false,
           error:
-            `❌ One staff member is being changed into two different people.\n` +
+            `\u274C One staff member is being changed into two different people.\n` +
             'Please send one clean edit so the log updates correctly.',
         };
       }
@@ -1028,7 +1028,7 @@ function getReplacementPlan(oldSections, newSections, sessionType) {
   if (!replacementsByOldId.size && !sectionRewrites.length) {
     return {
       ok: false,
-      error: 'I couldn’t find anything new to update. Please make sure you changed the staff member’s mention, username, or Discord ID before sending it again.',
+      error: 'I couldn\u2019t find anything new to update. Please make sure you changed the staff member\u2019s mention, username, or Discord ID before sending it again.',
     };
   }
 
@@ -1187,13 +1187,13 @@ function replaceUserText(value, replacementDetails) {
     const newName = replacement.newName || `Unknown (${newId})`;
 
     const richLogPattern = new RegExp(
-      `<@!?${oldId}>\\s*(?:\\(\\s*${oldId}\\s*\\))?(?:\\s*•\\s*[^\\n\\r]*)?`,
+      `<@!?${oldId}>\\s*(?:\\(\\s*${oldId}\\s*\\))?(?:\\s*\u2022\\s*[^\\n\\r]*)?`,
       'g',
     );
 
     output = output.replace(richLogPattern, (match) => {
-      if (match.includes('•') || match.includes('(')) {
-        return `<@${newId}> (${newId}) • ${newName}`;
+      if (match.includes('\u2022') || match.includes('(')) {
+        return `<@${newId}> (${newId}) \u2022 ${newName}`;
       }
       return `<@${newId}>`;
     });
@@ -1459,7 +1459,7 @@ async function startEditActivity(interaction) {
   if (!resolved?.lineup) {
     await interaction.editReply(
       [
-        '❌ I couldn’t find that session log.',
+        '\u274C I couldn\u2019t find that session log.',
         '',
         'Please make sure the Trello card link is included in #session-logs, or try using the session log message link with `/editactivity`.',
       ].join('\n'),
@@ -1476,7 +1476,7 @@ async function startEditActivity(interaction) {
 
   if (addHelper) {
     if (lineup.sessionType !== 'training') {
-      await interaction.editReply('❌ Helpers can only be added to **training** session logs.');
+      await interaction.editReply('\u274C Helpers can only be added to **training** session logs.');
       return;
     }
 
@@ -1488,7 +1488,7 @@ async function startEditActivity(interaction) {
     }
 
     if (nextSections.helper.includes(addHelper.id)) {
-      await interaction.editReply(`❌ <@${addHelper.id}> is already listed as a helper for this log.`);
+      await interaction.editReply(`\u274C <@${addHelper.id}> is already listed as a helper for this log.`);
       return;
     }
 
@@ -1504,12 +1504,12 @@ async function startEditActivity(interaction) {
     });
 
     if (!applied.ok) {
-      await interaction.editReply(`❌ ${applied.error}`);
+      await interaction.editReply(`\u274C ${applied.error}`);
       return;
     }
 
     await interaction.editReply([
-      '✅ **Activity updated!**',
+      '\u2705 **Activity updated!**',
       `**Trello:** ${shortId}`,
       `**Added Helper:** <@${addHelper.id}>`,
       '',
@@ -1527,7 +1527,7 @@ async function startEditActivity(interaction) {
 
     if (!direct.found) {
       await interaction.editReply(
-        `❌ I found the session, but I couldn’t find <@${currentUser.id}> in the saved lineup. Try opening the editor without the user options and paste the corrected lineup instead.`,
+        `\u274C I found the session, but I couldn\u2019t find <@${currentUser.id}> in the saved lineup. Try opening the editor without the user options and paste the corrected lineup instead.`,
       );
       return;
     }
@@ -1542,14 +1542,14 @@ async function startEditActivity(interaction) {
     });
 
     if (!applied.ok) {
-      await interaction.editReply(`❌ ${applied.error}`);
+      await interaction.editReply(`\u274C ${applied.error}`);
       return;
     }
 
     await interaction.editReply([
-      '✅ **Activity updated!**',
+      '\u2705 **Activity updated!**',
       `**Trello:** ${shortId}`,
-      `**Updated:** <@${currentUser.id}> → <@${correctUser.id}>`,
+      `**Updated:** <@${currentUser.id}> \u2192 <@${correctUser.id}>`,
       '',
       'The saved session log has been corrected.',
     ].join('\n'));
@@ -1570,7 +1570,7 @@ async function startEditActivity(interaction) {
       '',
       'Only change the staff member that needs to be fixed. You can use a mention, username, or Discord ID.',
       '',
-      'Once sent, I’ll update the saved session log.',
+      'Once sent, I\u2019ll update the saved session log.',
     ].join('\n'));
 
   const prompt = await interaction.channel.send({
@@ -1586,7 +1586,7 @@ async function startEditActivity(interaction) {
   });
 
   await interaction.editReply(
-    `✅ Editor opened. Send the corrected lineup whenever you’re ready.`,
+    `\u2705 Editor opened. Send the corrected lineup whenever you\u2019re ready.`,
   );
 }
 
@@ -1626,7 +1626,7 @@ async function handleEditActivityReply(message) {
 
   if (!sessionType || !resolved?.lineup) {
     await message.reply({
-      content: '❌ I couldn’t find the saved lineup anymore. Please run `/editactivity` again.',
+      content: '\u274C I couldn\u2019t find the saved lineup anymore. Please run `/editactivity` again.',
     });
     if (clearPromptMessageId) clearPendingEdit(clearPromptMessageId);
     return true;
@@ -1639,7 +1639,7 @@ async function handleEditActivityReply(message) {
 
   const parsed = await parseLineupReply(message.content, sessionType, message.guild);
   if (!parsed.ok) {
-    await message.reply({ content: `❌ ${parsed.error}` });
+    await message.reply({ content: `\u274C ${parsed.error}` });
     return true;
   }
 
@@ -1661,19 +1661,19 @@ async function handleEditActivityReply(message) {
   });
 
   if (!applied.ok) {
-    await message.reply({ content: `❌ ${applied.error}` });
+    await message.reply({ content: `\u274C ${applied.error}` });
     return true;
   }
 
   if (clearPromptMessageId) clearPendingEdit(clearPromptMessageId);
 
   const changes = applied.replacements
-    .map((entry) => `<@${entry.oldId}> → <@${entry.newId}>`)
+    .map((entry) => `<@${entry.oldId}> \u2192 <@${entry.newId}>`)
     .join('\n');
 
   await message.reply({
     content: [
-      '✅ **Activity updated!**',
+      '\u2705 **Activity updated!**',
       `**Trello:** ${pending.shortId}`,
       `**Updated Section:** ${applied.changedSpots.join(', ')}`,
       '',

@@ -48,7 +48,7 @@ async function enforceCommandAccess(interaction) {
 }
 
 async function denyAccess(interaction, result) {
-  const payload = { content: `❌ ${result.reason}`, ephemeral: true };
+  const payload = { content: `\u274C ${result.reason}`, ephemeral: true };
   if (interaction.deferred && !interaction.replied) return interaction.editReply(payload).catch(() => null);
   if (interaction.replied || interaction.deferred) return interaction.followUp(payload).catch(() => null);
   return interaction.reply(payload).catch(() => null);

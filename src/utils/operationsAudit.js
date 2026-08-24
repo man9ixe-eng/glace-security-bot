@@ -82,10 +82,10 @@ async function sendAuditToDiscord(client, entry) {
 
   const embed = new EmbedBuilder()
     .setColor(entry.status === 'failed' || entry.status === 'denied' ? 0xef4444 : 0x8b5cf6)
-    .setTitle(`Operations Audit • /${entry.command || 'unknown'}`)
+    .setTitle(`Operations Audit \u2022 /${entry.command || 'unknown'}`)
     .addFields(
       { name: 'Actor', value: entry.actorId ? `<@${entry.actorId}>\n${entry.actorTag || 'Unknown'}` : (entry.actorTag || 'Unknown'), inline: true },
-      { name: 'Access', value: `Tier ${entry.actorTier} • ${entry.actorTierLabel}`, inline: true },
+      { name: 'Access', value: `Tier ${entry.actorTier} \u2022 ${entry.actorTierLabel}`, inline: true },
       { name: 'Status', value: String(entry.status || 'executed'), inline: true },
       { name: 'Options', value: optionsText, inline: false },
     )

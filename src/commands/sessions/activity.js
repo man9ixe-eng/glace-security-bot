@@ -24,9 +24,9 @@ const TEAM_EMOJIS = {
 };
 
 const TYPE_DOTS = {
-  interview: '🟡',
-  training: '🔴',
-  shift: '🟣',
+  interview: '\uD83D\uDFE1',
+  training: '\uD83D\uDD34',
+  shift: '\uD83D\uDFE3',
 };
 
 const CORPORATE_INTERN_PLUS_KEYS = new Set([
@@ -38,7 +38,7 @@ const CORPORATE_INTERN_PLUS_KEYS = new Set([
 ]);
 
 function getTeamEmoji(profile) {
-  return TEAM_EMOJIS[profile?.key] || '🔹';
+  return TEAM_EMOJIS[profile?.key] || '\uD83D\uDD39';
 }
 
 function getTeamDisplayLabel(profile) {
@@ -64,14 +64,14 @@ function getTeamColor(profile, metQuota) {
 }
 
 function box(lines) {
-  return `╭────────────────────────╮\n${lines.map((line) => `│ ${line}`).join('\n')}\n╰────────────────────────╯`;
+  return `\u256D\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n${lines.map((line) => `\u2502 ${line}`).join('\n')}\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F`;
 }
 
 function buildProgressBar(current, required, size = 5) {
-  if (!required || required <= 0) return '░'.repeat(size);
+  if (!required || required <= 0) return '\u2591'.repeat(size);
   const ratio = Math.max(0, Math.min(1, Number(current || 0) / Number(required || 0)));
   const filled = Math.round(ratio * size);
-  return `${'█'.repeat(filled)}${'░'.repeat(size - filled)}`;
+  return `${'\u2588'.repeat(filled)}${'\u2591'.repeat(size - filled)}`;
 }
 
 function cleanNumber(value) {
@@ -248,7 +248,7 @@ function buildWeekBox(range, summary, source, profile, met) {
   const progressLines = buildRoleQuotaProgressLines(summary, source, profile);
 
   return box([
-    `📅 ${formatRangeLabel(range)}`,
+    `\uD83D\uDCC5 ${formatRangeLabel(range)}`,
     '',
     `${TYPE_DOTS.interview} Interviews`,
     ...(interviewLines.length ? interviewLines : ['- None: 0']),
@@ -261,7 +261,7 @@ function buildWeekBox(range, summary, source, profile, met) {
     '',
     ...(progressLines.length ? progressLines : ['No quota progress lines set.']),
     '',
-    `Status: ${met ? '✅ Met' : '❌ Below'}`,
+    `Status: ${met ? '\u2705 Met' : '\u274C Below'}`,
   ]);
 }
 
@@ -319,19 +319,19 @@ async function buildActivityEmbed(interaction, targetMember) {
 
   const fields = [
     {
-      name: '🏨 Quota',
+      name: '\uD83C\uDFE8 Quota',
       value: box(buildQuotaLines(quotaProfile)),
     },
     {
-      name: '📊 Current Week',
+      name: '\uD83D\uDCCA Current Week',
       value: buildWeekBox(currentRange, current, currentQuotaSource, quotaProfile, met),
     },
     {
-      name: '📁 Last Week',
+      name: '\uD83D\uDCC1 Last Week',
       value: buildWeekBox(lastRange, last, lastQuotaSource, quotaProfile, metLast),
     },
     {
-      name: '🏨 Overview',
+      name: '\uD83C\uDFE8 Overview',
       value: buildOverviewBox(current, currentQuotaSource),
     },
   ];
@@ -339,9 +339,9 @@ async function buildActivityEmbed(interaction, targetMember) {
 
   const embed = new EmbedBuilder()
     .setColor(getTeamColor(quotaProfile, met))
-    .setTitle(`${getTeamEmoji(quotaProfile)}  ${name} • Activity ${getTeamEmoji(quotaProfile)}`)
+    .setTitle(`${getTeamEmoji(quotaProfile)}  ${name} \u2022 Activity ${getTeamEmoji(quotaProfile)}`)
     .setDescription(
-      `⏱ Resets Monday 12:00 AM → Sunday 11:59 PM (EST)\n\n${TYPE_DOTS.interview} Interview • ${TYPE_DOTS.training} Training • ${TYPE_DOTS.shift} Shift`,
+      `\u23F1 Resets Monday 12:00 AM \u2192 Sunday 11:59 PM (EST)\n\n${TYPE_DOTS.interview} Interview \u2022 ${TYPE_DOTS.training} Training \u2022 ${TYPE_DOTS.shift} Shift`,
     )
     .addFields(fields)
     .setThumbnail(targetMember.displayAvatarURL({ size: 256 }))

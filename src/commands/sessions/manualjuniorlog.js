@@ -36,7 +36,7 @@ function juniorRoleDisplay(role) {
 }
 
 function parseAttendeeLine(line, index) {
-  const cleanLine = String(line || '').replace(/^\s*[•*-]\s*/, '').trim();
+  const cleanLine = String(line || '').replace(/^\s*[\u2022*-]\s*/, '').trim();
   const parts = cleanLine.split('|').map((part) => part.trim()).filter(Boolean);
   if (parts.length < 2) {
     return { error: `Line ${index + 1}: use \`Username | Roblox ID | Role\`.` };
@@ -169,7 +169,7 @@ async function findSessionLog(channel, shortLink, cardUrl) {
 
 function buildAttendeeLines(attendees) {
   return attendees.map((attendee) => (
-    `• ${attendee.username} | ${attendee.robloxId || 'N/A'} | ${juniorRoleDisplay(attendee.role)}`
+    `\u2022 ${attendee.username} | ${attendee.robloxId || 'N/A'} | ${juniorRoleDisplay(attendee.role)}`
   ));
 }
 
@@ -213,7 +213,7 @@ function buildNewSessionEmbed({ card, cardUrl, shortLink, attendees, recoveredBy
       ...buildAttendeeFields(attendees),
       { name: 'Recovered By', value: recoveredBy, inline: false },
     )
-    .setFooter({ text: `Glace Hotels • Junior Staff Session • Card ${shortLink}` })
+    .setFooter({ text: `Glace Hotels \u2022 Junior Staff Session \u2022 Card ${shortLink}` })
     .setTimestamp(sessionDate);
 }
 
@@ -241,7 +241,7 @@ function buildUpdatedEmbeds(existingMessage, attendees, recoveredBy, shortLink) 
     title: data.title || 'Junior Staff Session Log',
     color: data.color || 0x2563eb,
     fields: fields.slice(0, 25),
-    footer: data.footer || { text: `Glace Hotels • Junior Staff Session • Card ${shortLink}` },
+    footer: data.footer || { text: `Glace Hotels \u2022 Junior Staff Session \u2022 Card ${shortLink}` },
   })];
 }
 
@@ -263,9 +263,9 @@ async function handleModalSubmit(interaction) {
   if (errors.length) {
     await interaction.reply({
       content: [
-        '❌ I could not submit the Junior Staff log yet:',
+        '\u274C I could not submit the Junior Staff log yet:',
         '',
-        ...errors.slice(0, 10).map((error) => `• ${error}`),
+        ...errors.slice(0, 10).map((error) => `\u2022 ${error}`),
         '',
         'Use one person per line: `Username | Roblox ID | Security Helper`',
         'The Roblox ID may be `N/A`.',
@@ -279,19 +279,19 @@ async function handleModalSubmit(interaction) {
 
   const cardResult = await getSessionCard(cardIdentifier).catch(() => null);
   if (!cardResult?.ok || !cardResult.card) {
-    await interaction.editReply('❌ I could not load that Trello session card. Run `/manualjuniorlog` again with the card link.');
+    await interaction.editReply('\u274C I could not load that Trello session card. Run `/manualjuniorlog` again with the card link.');
     return true;
   }
 
   const card = cardResult.card;
   if (!card.due || Number.isNaN(new Date(card.due).getTime())) {
-    await interaction.editReply('❌ That Trello card does not have a valid session date and time.');
+    await interaction.editReply('\u274C That Trello card does not have a valid session date and time.');
     return true;
   }
 
   const channel = await resolveJuniorLogChannel(interaction.client, interaction.guild).catch(() => null);
   if (!channel?.isTextBased?.()) {
-    await interaction.editReply('❌ I could not find the Junior Staff log channel. Check the Junior Activity log channel environment variable.');
+    await interaction.editReply('\u274C I could not find the Junior Staff log channel. Check the Junior Activity log channel environment variable.');
     return true;
   }
 
@@ -319,12 +319,12 @@ async function handleModalSubmit(interaction) {
   });
 
   await interaction.editReply([
-    `✅ **Junior Staff session log ${action}.**`,
+    `\u2705 **Junior Staff session log ${action}.**`,
     '',
-    `• Session card: ${cardUrl}`,
-    `• Junior Staff entered: ${attendees.length}`,
-    `• Log message: ${resultMessage.url}`,
-    '• LI+ activity tracking was not changed.',
+    `\u2022 Session card: ${cardUrl}`,
+    `\u2022 Junior Staff entered: ${attendees.length}`,
+    `\u2022 Log message: ${resultMessage.url}`,
+    '\u2022 LI+ activity tracking was not changed.',
   ].join('\n'));
   return true;
 }
@@ -347,7 +347,7 @@ module.exports = {
     const cardIdentifier = extractCardIdentifier(interaction.options.getString('session_card', true));
     if (!cardIdentifier) {
       return interaction.reply({
-        content: '❌ Paste the full Trello session card link, such as `https://trello.com/c/abc12345/session-name`.',
+        content: '\u274C Paste the full Trello session card link, such as `https://trello.com/c/abc12345/session-name`.',
         ephemeral: true,
       });
     }

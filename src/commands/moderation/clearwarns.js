@@ -1,5 +1,5 @@
 // src/commands/moderation/clearwarns.js
-// Command name: /clearwarnall – clear ALL warnings for a user (Tier 6+)
+// Command name: /clearwarnall \u2013 clear ALL warnings for a user (Tier 6+)
 
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { atLeastTier } = require('../../utils/permissions');

@@ -17,7 +17,7 @@ module.exports = {
     ),
 
   /**
-   * /sessionqueue – Tier 4+ (Management and up) opens a joinable queue
+   * /sessionqueue \u2013 Tier 4+ (Management and up) opens a joinable queue
    * for the provided Trello session card.
    */
   async execute(interaction) {

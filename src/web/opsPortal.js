@@ -256,22 +256,22 @@ function publicLoginPage(req) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.8.0"></head><body class="public-portal">
   <main class="login-shell resort-login">
     <section class="login-hero resort-hero">
-      <div class="logo-lockup resort-logo"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
+      <div class="logo-lockup resort-logo"><div class="logo-mark">\u2605</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
       <div class="hero-content resort-hero-content">
         <div class="motto-block">
           <h1 class="resort-motto">The future is<br>what <em>YOU</em> create.</h1>
-          <div class="motto-divider"><span></span><b>★</b><span></span></div>
+          <div class="motto-divider"><span></span><b>\u2605</b><span></span></div>
           <p class="confidential-alert"><strong>** This system is used for CURRENT Interns+ employed at Glace Hotels. Confidential access restricted.</strong></p>
         </div>
         <section class="tier-showcase" aria-label="Glace Hotels leadership tiers">
           <div class="tier-showcase-title"><span></span><strong>BUILT FOR EVERY LEVEL OF LEADERSHIP</strong><span></span></div>
           <div class="tier-card-grid">
-            <article class="tier-info-card presidential-card"><div class="tier-medallion crown-only">♛</div><h2>Presidential</h2><p>Keeps the team together, manages the entirety of the group, and supports the Board and Corporates. Makes the final decisions for the group, and works 70% behind the scenes.</p><i></i></article>
-            <article class="tier-info-card board-card"><div class="tier-medallion">★★★★</div><h2>Corporate Board</h2><p>Manages the Corporate and lower teams to ensure a smooth operation, and makes important decisions for the group. You work 50% behind the scenes.</p><i></i></article>
-            <article class="tier-info-card corporate-card"><div class="tier-medallion">★★★★</div><h2>Corporate</h2><p>Manages the lower teams, and manages staff, promotions, events, and more. You work 30% behind the scenes.</p><i></i></article>
-            <article class="tier-info-card senior-card"><div class="tier-medallion">★★★</div><h2>Senior Management</h2><p>Supports the Management team and ensure communication between the two reaches higher level. In charge of higher level actions, and responsibilities. You work 20% behind the scenes.</p><i></i></article>
-            <article class="tier-info-card management-card"><div class="tier-medallion">★★</div><h2>Management</h2><p>Supports the interns into growing into managements, working towards growth, learning, and leading. You work 10% Behind the scenes.</p><i></i></article>
-            <article class="tier-info-card intern-card"><div class="tier-medallion">★</div><h2>Intern Team</h2><p>Growth, consistency, and working towards completing your internship and being promoted to Supervisor! You work 5% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card presidential-card"><div class="tier-medallion crown-only">\u265B</div><h2>Presidential</h2><p>Keeps the team together, manages the entirety of the group, and supports the Board and Corporates. Makes the final decisions for the group, and works 70% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card board-card"><div class="tier-medallion">\u2605\u2605\u2605\u2605</div><h2>Corporate Board</h2><p>Manages the Corporate and lower teams to ensure a smooth operation, and makes important decisions for the group. You work 50% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card corporate-card"><div class="tier-medallion">\u2605\u2605\u2605\u2605</div><h2>Corporate</h2><p>Manages the lower teams, and manages staff, promotions, events, and more. You work 30% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card senior-card"><div class="tier-medallion">\u2605\u2605\u2605</div><h2>Senior Management</h2><p>Supports the Management team and ensure communication between the two reaches higher level. In charge of higher level actions, and responsibilities. You work 20% behind the scenes.</p><i></i></article>
+            <article class="tier-info-card management-card"><div class="tier-medallion">\u2605\u2605</div><h2>Management</h2><p>Supports the interns into growing into managements, working towards growth, learning, and leading. You work 10% Behind the scenes.</p><i></i></article>
+            <article class="tier-info-card intern-card"><div class="tier-medallion">\u2605</div><h2>Intern Team</h2><p>Growth, consistency, and working towards completing your internship and being promoted to Supervisor! You work 5% behind the scenes.</p><i></i></article>
           </div>
         </section>
       </div>
@@ -279,13 +279,13 @@ function publicLoginPage(req) {
     </section>
     <section class="login-panel resort-login-panel">
       <article class="login-card resort-login-card">
-        <div class="welcome-star">★</div>
+        <div class="welcome-star">\u2605</div>
         <h1>Welcome back.</h1>
-        <div class="welcome-divider"><span></span><b>★</b><span></span></div>
+        <div class="welcome-divider"><span></span><b>\u2605</b><span></span></div>
         <p class="lead">Sign in securely with your Discord account to access the Glace Hotels Management Portal.</p>
-        ${ready ? '<a class="discord-button" href="/ops/login"><span>◈</span> Sign in with Discord</a>' : '<div class="oauth-error">OAuth setup is incomplete. Add <b>DISCORD_CLIENT_SECRET</b>, confirm <b>CLIENT_ID</b>, and set the redirect URL before opening the portal.</div>'}
+        ${ready ? '<a class="discord-button" href="/ops/login"><span>\u25C8</span> Sign in with Discord</a>' : '<div class="oauth-error">OAuth setup is incomplete. Add <b>DISCORD_CLIENT_SECRET</b>, confirm <b>CLIENT_ID</b>, and set the redirect URL before opening the portal.</div>'}
         <div class="protected-line"><span></span><b>Protected. Private. Professional.</b><span></span></div>
-        <div class="access-note privacy-note"><div class="privacy-shield">★</div><div><strong>This system is linked to Discord, and created by Man9ixe, our sign in process does not reveal anything more than your discord username and server roles.</strong></div></div>
+        <div class="access-note privacy-note"><div class="privacy-shield">\u2605</div><div><strong>This system is linked to Discord, and created by Man9ixe, our sign in process does not reveal anything more than your discord username and server roles.</strong></div></div>
       </article>
     </section>
   </main></body></html>`;
@@ -295,29 +295,29 @@ function portalPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fffaf3"><title>Glace Hotels Management Portal</title><link rel="stylesheet" href="/ops/assets/ops.css?v=2.8.0"><script defer src="/ops/assets/ops.js?v=2.8.0"></script></head><body>
   <div class="app-layout">
     <aside class="sidebar">
-      <div class="logo-lockup"><div class="logo-mark">★</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
-      <div class="sidebar-profile"><div class="profile-line"><div id="profileAvatar"></div><div class="profile-copy"><strong id="profileName">Loading…</strong><span id="profileRole"></span></div></div></div>
+      <div class="logo-lockup"><div class="logo-mark">\u2605</div><div class="logo-copy"><strong>GLACE HOTELS</strong><span>MANAGEMENT PORTAL</span></div></div>
+      <div class="sidebar-profile"><div class="profile-line"><div id="profileAvatar"></div><div class="profile-copy"><strong id="profileName">Loading\u2026</strong><span id="profileRole"></span></div></div></div>
       <div class="sidebar-section">Workspace</div>
       <nav class="nav">
-        <button class="active" data-tab="dashboard" data-title="Staff Hub Dashboard" data-subtitle="A bright, role-aware view of the tools available to your current Glace tier."><span class="nav-icon">⌂</span><span>Dashboard</span></button>
-        <button data-tab="requests" data-capability="viewStaffRequests" data-title="Staff Request Center" data-subtitle="Submit resignations, username updates, LOAs, LOA removals, and timezone changes; then follow each review."><span class="nav-icon">✉</span><span>Requests</span></button>
-        <button data-tab="activity" data-capability="viewActivity" data-title="LI+ Activity" data-subtitle="Live quota activity pulled from the existing Discord session tracking system."><span class="nav-icon">◫</span><span>Activity</span></button>
-        <button data-tab="staff" data-capability="viewStaffDirectory" data-title="Glace Staff Directory" data-subtitle="Current Intern+ staff aligned from the Roblox community ranks into Glace teams."><span class="nav-icon">♚</span><span>Staff List</span></button>
-        <button data-tab="promotions" data-capability="viewPromotions" data-title="Promotion Submissions" data-subtitle="Corporate owns the submission from due diligence through verified completion."><span class="nav-icon">♛</span><span>Promotions</span></button>
-        <button data-tab="cases" data-capability="viewStaffCases" data-title="Staff Actions" data-subtitle="Permanent coaching, warning, suspension, demotion, and termination records."><span class="nav-icon">◇</span><span>Staff Actions</span></button>
-        <button data-tab="restricted" data-capability="viewRestrictedRecords" data-title="Restricted Records" data-subtitle="Confidential Board-level investigations and leadership decisions."><span class="nav-icon">◆</span><span>Restricted</span></button>
-        <button data-tab="documents" data-capability="viewDocuments" data-title="Documentation" data-subtitle="Policies and internal resources filtered to your access tier."><span class="nav-icon">▤</span><span>Documents</span></button>
-        <button data-tab="posts" data-capability="viewPosts" data-title="Schedules & Updates" data-subtitle="Website records paired with clean Discord announcements."><span class="nav-icon">✦</span><span>Updates</span></button>
-        <button data-tab="loas" data-capability="viewLoas" data-title="Leave of Absence" data-subtitle="Current LOAs and permanent ended history from the Discord workflow."><span class="nav-icon">◔</span><span>LOAs</span></button>
-        <button data-tab="audit" data-capability="viewAudit" data-title="System Audit" data-subtitle="A permanent trail of protected bot and portal activity."><span class="nav-icon">⌁</span><span>Audit Log</span></button>
+        <button class="active" data-tab="dashboard" data-title="Staff Hub Dashboard" data-subtitle="A bright, role-aware view of the tools available to your current Glace tier."><span class="nav-icon">\u2302</span><span>Dashboard</span></button>
+        <button data-tab="requests" data-capability="viewStaffRequests" data-title="Staff Request Center" data-subtitle="Submit resignations, username updates, LOAs, LOA removals, and timezone changes; then follow each review."><span class="nav-icon">\u2709</span><span>Requests</span></button>
+        <button data-tab="activity" data-capability="viewActivity" data-title="LI+ Activity" data-subtitle="Live quota activity pulled from the existing Discord session tracking system."><span class="nav-icon">\u25EB</span><span>Activity</span></button>
+        <button data-tab="staff" data-capability="viewStaffDirectory" data-title="Glace Staff Directory" data-subtitle="Current Intern+ staff aligned from the Roblox community ranks into Glace teams."><span class="nav-icon">\u265A</span><span>Staff List</span></button>
+        <button data-tab="promotions" data-capability="viewPromotions" data-title="Promotion Submissions" data-subtitle="Corporate owns the submission from due diligence through verified completion."><span class="nav-icon">\u265B</span><span>Promotions</span></button>
+        <button data-tab="cases" data-capability="viewStaffCases" data-title="Staff Actions" data-subtitle="Permanent coaching, warning, suspension, demotion, and termination records."><span class="nav-icon">\u25C7</span><span>Staff Actions</span></button>
+        <button data-tab="restricted" data-capability="viewRestrictedRecords" data-title="Restricted Records" data-subtitle="Confidential Board-level investigations and leadership decisions."><span class="nav-icon">\u25C6</span><span>Restricted</span></button>
+        <button data-tab="documents" data-capability="viewDocuments" data-title="Documentation" data-subtitle="Policies and internal resources filtered to your access tier."><span class="nav-icon">\u25A4</span><span>Documents</span></button>
+        <button data-tab="posts" data-capability="viewPosts" data-title="Schedules & Updates" data-subtitle="Website records paired with clean Discord announcements."><span class="nav-icon">\u2726</span><span>Updates</span></button>
+        <button data-tab="loas" data-capability="viewLoas" data-title="Leave of Absence" data-subtitle="Current LOAs and permanent ended history from the Discord workflow."><span class="nav-icon">\u25D4</span><span>LOAs</span></button>
+        <button data-tab="audit" data-capability="viewAudit" data-title="System Audit" data-subtitle="A permanent trail of protected bot and portal activity."><span class="nav-icon">\u2301</span><span>Audit Log</span></button>
       </nav>
       <div class="sidebar-bottom"><a href="/ops/logout"><span>Sign out</span></a></div>
     </aside>
     <main class="app-main">
-      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>The future is what YOU create.</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section…"></div><div class="top-actions"><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">★</button></div></header>
-      <div id="loading" class="loading-screen"><div><div class="loading-orb"></div><div id="loadingMessage">Verifying your Glace server rank…</div></div></div>
+      <header class="topbar"><div class="topbar-title"><strong>Glace Hotels Staff Hub</strong><span>The future is what YOU create.</span></div><div class="search"><input id="globalSearch" type="search" placeholder="Search this section\u2026"></div><div class="top-actions"><span id="opsBadge" class="role-chip"></span><button class="icon-btn" type="button" aria-label="Portal status">\u2605</button></div></header>
+      <div id="loading" class="loading-screen"><div><div class="loading-orb"></div><div id="loadingMessage">Verifying your Glace server rank\u2026</div></div></div>
       <div id="app" hidden class="content">
-        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="brand-motto-strip"><span class="brand-motto-star">★</span><span class="brand-motto-copy">The future is what <strong>YOU</strong> create.</span><span class="brand-confidential">CURRENT Interns+ · Confidential access restricted</span></div><div class="page-head"><div class="page-heading-copy"><span id="pageEyebrow" class="page-eyebrow">GLACE STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><aside class="page-tier-card"><span class="access-view-kicker">Access view</span><strong id="pageTierLabel">Loading…</strong><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview another tier</label><select id="previewTier" aria-label="Preview another staff tier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div></aside></div>
+        <div id="previewBanner" class="preview-banner" hidden><div><strong id="previewBannerTitle">Preview mode</strong><span id="previewBannerCopy"></span></div><button id="exitPreview" class="btn small ghost" type="button">Exit Preview</button></div><div class="brand-motto-strip"><span class="brand-motto-star">\u2605</span><span class="brand-motto-copy">The future is what <strong>YOU</strong> create.</span><span class="brand-confidential">CURRENT Interns+ \u00B7 Confidential access restricted</span></div><div class="page-head"><div class="page-heading-copy"><span id="pageEyebrow" class="page-eyebrow">GLACE STAFF HUB</span><h1 id="pageTitle">Staff Hub Dashboard</h1><p id="pageSubtitle">Your Glace management workspace.</p></div><aside class="page-tier-card"><span class="access-view-kicker">Access view</span><strong id="pageTierLabel">Loading\u2026</strong><div id="previewControl" class="preview-control" hidden><label for="previewTier">Preview another tier</label><select id="previewTier" aria-label="Preview another staff tier"><option value="8">Presidential</option><option value="7">Corporate Board</option><option value="6">Corporate</option><option value="5">Senior Management</option><option value="4">Management</option><option value="3">Intern Team</option></select></div></aside></div>
 
         <section id="section-dashboard" class="section active">
           <div id="dashboardStats" class="dashboard-grid"></div>
@@ -335,7 +335,7 @@ function portalPage() {
           <div class="workspace request-workspace">
             <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Resignation</h2><p>Corporate Board receives resignation submissions.</p><form id="resignationRequestForm" data-request-type="resignation" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Former Rank</label><input name="formerRank" required></div><div class="field"><label>New Rank</label><input name="newRank" required placeholder="Example: Former Staff"></div><div class="field full"><label>Notes</label><textarea name="notes"></textarea></div><button class="btn danger full" type="submit">Submit Resignation</button></form></article>
             <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Username Update</h2><p>You may submit a new one whenever your username changes.</p><form id="usernameRequestForm" data-request-type="username_update" class="form-grid"><div class="field"><label>Former Username</label><input name="formerUsername" required></div><div class="field"><label>New Username</label><input name="newUsername" required></div><div class="field full"><label>Rank</label><input name="rank" required></div><button class="btn purple full" type="submit">Submit Username Update</button></form></article>
-            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Leave of Absence</h2><p>Must start on Monday and end on Sunday. Returning midweek does not remove that week's quota.</p><form id="loaRequestForm" data-request-type="loa" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Rank</label><input name="rank" required></div><div class="field"><label>Start Date — Monday</label><input name="startDate" placeholder="MM/DD/YYYY" required></div><div class="field"><label>End Date — Sunday</label><input name="endDate" placeholder="MM/DD/YYYY" required></div><div class="field full"><label>Reason</label><textarea name="reason" required></textarea></div><button class="btn primary full" type="submit">Submit LOA Request</button></form></article>
+            <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Leave of Absence</h2><p>Must start on Monday and end on Sunday. Returning midweek does not remove that week's quota.</p><form id="loaRequestForm" data-request-type="loa" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Rank</label><input name="rank" required></div><div class="field"><label>Start Date \u2014 Monday</label><input name="startDate" placeholder="MM/DD/YYYY" required></div><div class="field"><label>End Date \u2014 Sunday</label><input name="endDate" placeholder="MM/DD/YYYY" required></div><div class="field full"><label>Reason</label><textarea name="reason" required></textarea></div><button class="btn primary full" type="submit">Submit LOA Request</button></form></article>
             <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>LOA Removal</h2><p>Submit this when you are ready to come off your current LOA.</p><form id="loaRemovalRequestForm" data-request-type="loa_removal" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Rank</label><input name="rank" required></div><div class="field full"><label>Week(s) on LOA</label><input name="weeksOnLoa" required placeholder="Example: 2 weeks"></div><button class="btn gold full" type="submit">Submit LOA Removal</button></form></article>
             <article class="form-card request-form-card" data-capability="submitStaffRequest"><h2>Timezone Update</h2><p>You may submit a new one whenever your timezone changes.</p><form id="timezoneRequestForm" data-request-type="timezone_change" class="form-grid"><div class="field"><label>Username</label><input name="username" required></div><div class="field"><label>Timezone</label><input name="timezone" required placeholder="Example: EST or America/New_York"></div><button class="btn gold full" type="submit">Submit Timezone Update</button></form></article>
           </div>
@@ -361,12 +361,12 @@ function portalPage() {
                 <div class="field"><label>Candidate Username</label><input name="candidateUsername" required></div>
                 <div class="field"><label>Current Rank</label><input name="currentRank" required></div>
                 <div class="field"><label>Proposed Rank</label><input name="proposedRank" required placeholder="Example: Supervisor"></div>
-                <div class="field full"><label>Proposed Access Tier</label><select name="proposedTier" required><option value="3">Intern Team — Pink</option><option value="4">Management — Purple</option><option value="5">Senior Management — Green</option><option value="6">Corporate — Red</option><option value="7">Corporate Board — Orange</option><option value="8">Presidential — Gold</option></select></div>
+                <div class="field full"><label>Proposed Access Tier</label><select name="proposedTier" required><option value="3">Intern Team \u2014 Pink</option><option value="4">Management \u2014 Purple</option><option value="5">Senior Management \u2014 Green</option><option value="6">Corporate \u2014 Red</option><option value="7">Corporate Board \u2014 Orange</option><option value="8">Presidential \u2014 Gold</option></select></div>
                 <div class="field full"><label>Promotion Recommendation</label><textarea name="reason" required placeholder="Explain why this person is ready now."></textarea></div>
                 <div class="field full"><label>Due-Diligence Evidence</label><textarea name="evidence" required placeholder="Activity, quota, time in rank, sessions, conduct checks, links, and any relevant records reviewed."></textarea></div>
                 <div class="field full"><label>Strengths & Readiness</label><textarea name="strengths" required></textarea></div>
                 <div class="field full"><label>Concerns Disclosed</label><textarea name="concerns" placeholder="Enter none if no concerns were found."></textarea></div>
-                <label class="checkline full"><input type="checkbox" name="diligenceConfirmed" required><span>I confirm that I reviewed this staff member’s activity, conduct, eligibility, time in rank, LOAs, and relevant records before submitting.</span></label>
+                <label class="checkline full"><input type="checkbox" name="diligenceConfirmed" required><span>I confirm that I reviewed this staff member\u2019s activity, conduct, eligibility, time in rank, LOAs, and relevant records before submitting.</span></label>
                 <div class="full" style="display:flex;gap:9px"><button id="promotionSubmit" class="btn primary" type="submit">Submit for Board Review</button><button id="promotionReset" class="btn ghost" type="button">Reset</button></div>
               </form>
             </article>
@@ -400,10 +400,10 @@ function viewerCapabilities(tier) {
 function buildFeed({ posts, loas }) {
   const feed = [];
   for (const item of posts.slice(0, 20)) {
-    feed.push({ icon: item.type === 'schedule' ? '▤' : '✦', tier: item.type === 'schedule' ? TIERS.MANAGEMENT : TIERS.INTERN, title: item.title, detail: `${item.type === 'schedule' ? 'Schedule' : 'Staff update'} by ${item.createdByTag || 'Unknown'}`, createdAt: item.createdAt });
+    feed.push({ icon: item.type === 'schedule' ? '\u25A4' : '\u2726', tier: item.type === 'schedule' ? TIERS.MANAGEMENT : TIERS.INTERN, title: item.title, detail: `${item.type === 'schedule' ? 'Schedule' : 'Staff update'} by ${item.createdByTag || 'Unknown'}`, createdAt: item.createdAt });
   }
   for (const item of loas.slice(0, 20)) {
-    feed.push({ icon: '◔', tier: TIERS.SENIOR_MANAGEMENT, title: 'Active LOA', detail: `${item.originalDisplayName || item.staffCardName || item.userId} • through ${item.officialEndDate || 'unknown'}`, createdAt: item.createdAt || item.startedAt || new Date().toISOString() });
+    feed.push({ icon: '\u25D4', tier: TIERS.SENIOR_MANAGEMENT, title: 'Active LOA', detail: `${item.originalDisplayName || item.staffCardName || item.userId} \u2022 through ${item.officialEndDate || 'unknown'}`, createdAt: item.createdAt || item.startedAt || new Date().toISOString() });
   }
   return feed.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 30);
 }
@@ -515,7 +515,7 @@ async function bootstrap(session, client) {
     ...await staffRequestStore.listAudit({ limit: 200, guildId: session.guildId }),
     ...listCommandAudit({ limit: 200, guildId: session.guildId }).map((entry) => ({
       id: entry.id,
-      action: `/${entry.command || 'unknown'} • ${entry.status || 'executed'}`,
+      action: `/${entry.command || 'unknown'} \u2022 ${entry.status || 'executed'}`,
       actorId: entry.actorId,
       actorTag: entry.actorTag,
       details: entry.options || {},
@@ -577,7 +577,7 @@ async function publishDiscordPost(client, session, input) {
     .setTitle(String(input.title || (input.type === 'schedule' ? 'Staff Schedule' : 'Staff Update')).slice(0, 256))
     .setDescription(String(input.content || '').slice(0, 4096))
     .setColor(input.type === 'schedule' ? 0x8b5cf6 : 0xec4899)
-    .setFooter({ text: `Glace Hotels • Published by ${session.memberDisplayName || session.user.username}` })
+    .setFooter({ text: `Glace Hotels \u2022 Published by ${session.memberDisplayName || session.user.username}` })
     .setTimestamp(new Date());
   const message = await channel.send({ embeds: [embed] });
   return { posted: true, channelId: channel.id, messageId: message.id, warning: null };
@@ -597,7 +597,7 @@ async function verifyPromotionCompletion(client, entry) {
     return { ok: false, error: `The candidate still appears as ${getTierLabel(verifiedTier)}. Apply the approved Discord rank before completing.` };
   }
   if (!rankMatched) {
-    return { ok: false, error: `The candidate does not appear to have a Discord role matching “${entry.proposedRank}”. Current detected roles: ${roleNames.slice(0, 10).join(', ') || 'none'}.` };
+    return { ok: false, error: `The candidate does not appear to have a Discord role matching \u201C${entry.proposedRank}\u201D. Current detected roles: ${roleNames.slice(0, 10).join(', ') || 'none'}.` };
   }
   return { ok: true, discordVerified: true, verifiedTier, matchedRole: roleNames.find((name) => name === proposed || name.includes(proposed) || proposed.includes(name)) };
 }
@@ -629,9 +629,9 @@ async function handlePromotionApi(req, res, url, client, method) {
       title: `Promotion Submission ${entry.submissionNumber}`,
       fields: [
         { name: 'Candidate', value: `${entry.candidateUsername} (${entry.candidateId})` },
-        { name: 'Promotion', value: `${entry.currentRank} → ${entry.proposedRank}` },
+        { name: 'Promotion', value: `${entry.currentRank} \u2192 ${entry.proposedRank}` },
         { name: 'Corporate Owner', value: entry.submittedByTag },
-        { name: 'Status', value: boardAvailable ? 'Corporate Board Review' : 'Presidential Review — Board unavailable' },
+        { name: 'Status', value: boardAvailable ? 'Corporate Board Review' : 'Presidential Review \u2014 Board unavailable' },
       ],
     });
     sendJson(res, 201, { ok: true, entry, warning: boardAvailable ? null : 'No current Corporate Board members were detected, so this was routed directly to Presidential review.' });
@@ -670,7 +670,7 @@ async function handlePromotionApi(req, res, url, client, method) {
       title: `${entry.submissionNumber} Presidential Override`,
       fields: [
         { name: 'Candidate', value: entry.candidateUsername || entry.candidateId },
-        { name: 'Promotion', value: `${entry.currentRank} → ${entry.proposedRank}` },
+        { name: 'Promotion', value: `${entry.currentRank} \u2192 ${entry.proposedRank}` },
         { name: 'Override By', value: session.memberDisplayName || session.user.username },
         { name: 'Status', value: entry.status.replaceAll('_', ' ') },
         { name: 'Reason', value: String(body.reason).slice(0, 1024) },

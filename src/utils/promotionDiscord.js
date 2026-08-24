@@ -24,7 +24,7 @@ function promotionColor(tier) {
 function stageLabel(entry) {
   if (entry.status === 'board_review') return 'Corporate Board Review';
   if (entry.status === 'presidential_review') return 'Presidential Review';
-  if (entry.status === 'approved_awaiting_completion') return 'Approved — Awaiting Promotion';
+  if (entry.status === 'approved_awaiting_completion') return 'Approved \u2014 Awaiting Promotion';
   if (entry.status === 'returned_to_corporate') return 'Returned to Corporate';
   if (entry.status === 'denied') return 'Denied';
   if (entry.status === 'completed') return 'Completed';
@@ -49,12 +49,12 @@ function requiredPresidentialApprovals(entry) {
 function reviewEmbed(entry, stage) {
   const approvals = Array.isArray(entry.presidentialApprovals) ? entry.presidentialApprovals : [];
   const embed = new EmbedBuilder()
-    .setTitle(`★ Promotion Review • ${entry.submissionNumber}`)
+    .setTitle(`\u2605 Promotion Review \u2022 ${entry.submissionNumber}`)
     .setDescription(`A promotion submission is ready for **${stage === 'board' ? 'Corporate Board' : 'Presidential'} review**.`)
     .addFields(
-      { name: 'Candidate', value: `${clean(entry.candidateUsername, 100) || 'Unknown'}${entry.candidateId ? ` · <@${entry.candidateId}>` : ''}`, inline: false },
-      { name: 'Promotion', value: `${clean(entry.currentRank, 100)} → **${clean(entry.proposedRank, 100)}**`, inline: false },
-      { name: 'Corporate Submitter', value: `${clean(entry.submittedByTag, 100)}${entry.submittedById ? ` · <@${entry.submittedById}>` : ''}`, inline: false },
+      { name: 'Candidate', value: `${clean(entry.candidateUsername, 100) || 'Unknown'}${entry.candidateId ? ` \u00B7 <@${entry.candidateId}>` : ''}`, inline: false },
+      { name: 'Promotion', value: `${clean(entry.currentRank, 100)} \u2192 **${clean(entry.proposedRank, 100)}**`, inline: false },
+      { name: 'Corporate Submitter', value: `${clean(entry.submittedByTag, 100)}${entry.submittedById ? ` \u00B7 <@${entry.submittedById}>` : ''}`, inline: false },
       { name: 'Status', value: stageLabel(entry), inline: true },
       { name: 'Presidential Approval', value: `${approvals.length}/${requiredPresidentialApprovals(entry)} recorded`, inline: true },
       { name: 'Recommendation', value: clean(entry.reason, 1024) || 'No recommendation provided.', inline: false },
@@ -62,7 +62,7 @@ function reviewEmbed(entry, stage) {
       { name: 'Due Diligence / Evidence', value: clean(entry.evidence, 1024) || 'No evidence provided.', inline: false },
     )
     .setColor(promotionColor(entry.proposedTier))
-    .setFooter({ text: 'Glace Hotels • Confidential Promotion Workflow' })
+    .setFooter({ text: 'Glace Hotels \u2022 Confidential Promotion Workflow' })
     .setTimestamp(new Date(entry.updatedAt || entry.createdAt || Date.now()));
   if (entry.concerns) embed.addFields({ name: 'Concerns Disclosed', value: clean(entry.concerns, 1024), inline: false });
   if (entry.boardAutoSkipped) embed.addFields({ name: 'Board Stage', value: clean(entry.boardAutoSkipReason, 1024) || 'Automatically routed to Presidential because no current Corporate Board members were detected.', inline: false });
@@ -143,15 +143,15 @@ async function sendApprovalLog(client, entry) {
   const approvals = (entry.presidentialApprovals || []).map((x) => x.tag).filter(Boolean).join(', ') || 'Presidential Team';
   const message = await channel.send({
     embeds: [new EmbedBuilder()
-      .setTitle(`★ ${entry.submissionNumber} Approved`)
+      .setTitle(`\u2605 ${entry.submissionNumber} Approved`)
       .setDescription(`The promotion for **${entry.candidateUsername || entry.candidateId}** to **${entry.proposedRank}** has been approved. The assigned Corporate submitter may now apply the promotion.`)
       .addFields(
         { name: 'Corporate Owner', value: entry.assignedCompletionTag || entry.submittedByTag || 'Unknown', inline: true },
-        { name: 'Board Stage', value: entry.boardAutoSkipped ? 'Automatically skipped — no Board members detected' : (entry.boardDecision === 'approve' ? 'Approved' : entry.boardDecision || 'Not recorded'), inline: false },
+        { name: 'Board Stage', value: entry.boardAutoSkipped ? 'Automatically skipped \u2014 no Board members detected' : (entry.boardDecision === 'approve' ? 'Approved' : entry.boardDecision || 'Not recorded'), inline: false },
         { name: 'Presidential Approval', value: approvals, inline: false },
       )
       .setColor(promotionColor(entry.proposedTier))
-      .setFooter({ text: 'Glace Hotels • Internal Approval Log' })
+      .setFooter({ text: 'Glace Hotels \u2022 Internal Approval Log' })
       .setTimestamp(new Date())],
   });
   return promotionStore.setDiscordRouting(entry.id, { approvalLogMessageId: message.id });
@@ -163,7 +163,7 @@ async function notifyReviewerReceipt(client, actor, entry, decision, stage) {
       .setDescription(`You recorded **${decision}** during **${stage === 'board' ? 'Corporate Board' : 'Presidential'} review** for ${entry.submissionNumber}.`)
       .addFields(
         { name: 'Candidate', value: entry.candidateUsername || entry.candidateId, inline: true },
-        { name: 'Promotion', value: `${entry.currentRank} → ${entry.proposedRank}`, inline: false },
+        { name: 'Promotion', value: `${entry.currentRank} \u2192 ${entry.proposedRank}`, inline: false },
         { name: 'Current Status', value: stageLabel(entry), inline: true },
       )
       .setColor(promotionColor(entry.proposedTier))],
@@ -171,7 +171,7 @@ async function notifyReviewerReceipt(client, actor, entry, decision, stage) {
 }
 async function notifySubmitter(client, entry, title, description) {
   return safeDm(client, entry.submittedById, {
-    embeds: [new EmbedBuilder().setTitle(title).setDescription(description).setColor(promotionColor(entry.proposedTier)).setFooter({ text: `Glace Hotels • ${entry.submissionNumber}` })],
+    embeds: [new EmbedBuilder().setTitle(title).setDescription(description).setColor(promotionColor(entry.proposedTier)).setFooter({ text: `Glace Hotels \u2022 ${entry.submissionNumber}` })],
   });
 }
 async function routeNewPromotion(client, guild, entry) {
@@ -282,8 +282,8 @@ async function handlePromotionInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true });
       try {
         const updated = await processDecision(interaction, stage, decision, entry, '');
-        await interaction.editReply(`✅ ${updated.submissionNumber}: ${stage === 'board' ? 'Board approval' : 'Presidential approval'} recorded. Current status: **${stageLabel(updated)}**.`);
-      } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+        await interaction.editReply(`\u2705 ${updated.submissionNumber}: ${stage === 'board' ? 'Board approval' : 'Presidential approval'} recorded. Current status: **${stageLabel(updated)}**.`);
+      } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
       return true;
     }
     await interaction.showModal(decisionModal(stage, decision, entry.id));
@@ -299,8 +299,8 @@ async function handlePromotionInteraction(interaction) {
       if (!entry) throw new Error('This promotion submission could not be found.');
       const reason = interaction.fields.getTextInputValue('reason');
       const updated = await processDecision(interaction, stage, decision, entry, reason);
-      await interaction.editReply(`✅ ${updated.submissionNumber} updated. Current status: **${stageLabel(updated)}**.`);
-    } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+      await interaction.editReply(`\u2705 ${updated.submissionNumber} updated. Current status: **${stageLabel(updated)}**.`);
+    } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
     return true;
   }
   return false;

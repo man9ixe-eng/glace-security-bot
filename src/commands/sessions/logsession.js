@@ -31,7 +31,7 @@ module.exports = {
 
     if (!success) {
       await interaction.editReply(
-        '⚠️ I tried to log that session on Trello, but something went wrong.\nPlease double-check the card link/ID and my Trello configuration.',
+        '\u26A0\uFE0F I tried to log that session on Trello, but something went wrong.\nPlease double-check the card link/ID and my Trello configuration.',
       );
       return;
     }
@@ -54,7 +54,7 @@ module.exports = {
 
       if (!result?.ok) {
         await interaction.editReply(
-          '⚠️ The Trello card was completed and the session notice was cleared, but I could not create the session log/activity entry. Please make sure the queue exists and the session log channel is configured correctly.',
+          '\u26A0\uFE0F The Trello card was completed and the session notice was cleared, but I could not create the session log/activity entry. Please make sure the queue exists and the session log channel is configured correctly.',
         );
         return;
       }
@@ -63,13 +63,13 @@ module.exports = {
     } catch (err) {
       console.error('[LOGSESSION] Error while logging/cleaning queue:', err);
       await interaction.editReply(
-        '⚠️ The Trello card was completed, but an error happened while creating the session log/activity entry.',
+        '\u26A0\uFE0F The Trello card was completed, but an error happened while creating the session log/activity entry.',
       );
       return;
     }
 
     await interaction.editReply(
-      '✅ Session successfully marked as completed on Trello.\n✅ Session notice cleared.\n✅ Attendees logged and queue messages cleaned up.',
+      '\u2705 Session successfully marked as completed on Trello.\n\u2705 Session notice cleared.\n\u2705 Attendees logged and queue messages cleaned up.',
     );
   },
 };

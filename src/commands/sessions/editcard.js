@@ -102,13 +102,13 @@ module.exports = {
     const loaded = await getSessionCard(cardInput);
     if (!loaded.ok || !loaded.card) {
       return interaction.editReply(
-        '❌ I could not find that Trello card. Check the card link or short ID and try again.',
+        '\u274C I could not find that Trello card. Check the card link or short ID and try again.',
       );
     }
 
     const { cardId, card } = loaded;
     if (card.closed) {
-      return interaction.editReply('❌ Archived Trello cards cannot be edited with this command.');
+      return interaction.editReply('\u274C Archived Trello cards cannot be edited with this command.');
     }
 
     const currentDueMs = card.due ? new Date(card.due).getTime() : NaN;
@@ -141,7 +141,7 @@ module.exports = {
       parsed = parseSessionDateTime(dateToUse, timeToUse);
       if (!parsed) {
         return interaction.editReply([
-          '❌ I could not understand the new date, time, or timezone.',
+          '\u274C I could not understand the new date, time, or timezone.',
           '',
           '**Examples:** `08/12/2026`, `3:00 PM CET`, `15:00 GMT`, `2 PM America/Chicago`',
           '',
@@ -168,14 +168,14 @@ module.exports = {
 
     if (!updateResult.ok) {
       return interaction.editReply(
-        '❌ Trello rejected the card update. Check the bot’s Trello access and try again.',
+        '\u274C Trello rejected the card update. Check the bot\u2019s Trello access and try again.',
       );
     }
 
     const commentResult = await addCardComment(cardId, commentInput);
     if (!commentResult.ok) {
       return interaction.editReply(
-        '⚠️ The card fields were updated, but Trello could not add the optional comment.',
+        '\u26A0\uFE0F The card fields were updated, but Trello could not add the optional comment.',
       );
     }
 
@@ -186,7 +186,7 @@ module.exports = {
     }
 
     const link = card.shortUrl || card.url || cardInput;
-    const lines = ['✅ **Trello session card updated.**', '', `Card: ${link}`];
+    const lines = ['\u2705 **Trello session card updated.**', '', `Card: ${link}`];
     if (hostInput) lines.push(`Host: **${newHost}**`);
     if (parsed) {
       const unix = Math.floor(parsed.utcMs / 1000);

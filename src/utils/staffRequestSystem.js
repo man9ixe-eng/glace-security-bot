@@ -261,16 +261,16 @@ function reviewEmbed(request) {
     .setTitle(`${pending ? 'New' : 'Updated'} ${requestTypeLabel(request.type)} Request`)
     .setDescription(`**${request.requestNumber}** is ${pending ? `ready for **${reviewerLabel(request.status)}**` : `now **${request.status.replaceAll('_', ' ')}**`}.`)
     .addFields(
-      { name: 'Submitted By', value: `<@${request.requesterId}> · ${clean(request.requesterTag, 100)}`, inline: false },
+      { name: 'Submitted By', value: `<@${request.requesterId}> \u00B7 ${clean(request.requesterTag, 100)}`, inline: false },
       { name: 'Staff Tier', value: clean(request.requesterTierLabel, 100) || getTierLabel(request.requesterTier), inline: true },
       { name: 'Status', value: request.status.replaceAll('_', ' '), inline: true },
       ...requestDetailsFields(request),
     )
     .setColor(requestColor(request.type))
-    .setFooter({ text: 'Glace Hotels • Confidential Staff Request' })
+    .setFooter({ text: 'Glace Hotels \u2022 Confidential Staff Request' })
     .setTimestamp(new Date(request.updatedAt || request.createdAt || Date.now()));
   if (request.reviewClaimedById && pending) {
-    embed.addFields({ name: 'Current Reviewer', value: `<@${request.reviewClaimedById}> · Only this reviewer may complete the decision.`, inline: false });
+    embed.addFields({ name: 'Current Reviewer', value: `<@${request.reviewClaimedById}> \u00B7 Only this reviewer may complete the decision.`, inline: false });
   }
   if (request.decisionNote) embed.addFields({ name: 'Decision Note', value: clean(request.decisionNote, 1024), inline: false });
   return embed;
@@ -289,7 +289,7 @@ async function sendRequestLog(client, request, actionLabel) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) return false;
   const embed = new EmbedBuilder()
-    .setTitle(`${request.requestNumber} • ${actionLabel}`)
+    .setTitle(`${request.requestNumber} \u2022 ${actionLabel}`)
     .addFields(
       { name: 'Request', value: requestTypeLabel(request.type), inline: true },
       { name: 'Staff Member', value: `${request.requesterTag || request.requesterId} (${request.requesterId})`, inline: false },
@@ -298,7 +298,7 @@ async function sendRequestLog(client, request, actionLabel) {
       ...requestDetailsFields(request),
     )
     .setColor(request.status === 'approved' ? 0x16a34a : request.status === 'denied' ? 0xdc2626 : 0xc59a42)
-    .setFooter({ text: 'Glace Hotels • Internal Operations Log' })
+    .setFooter({ text: 'Glace Hotels \u2022 Internal Operations Log' })
     .setTimestamp(new Date());
   await channel.send({ embeds: [embed] });
   return true;
@@ -332,29 +332,29 @@ async function updateReviewMessage(client, request) {
 }
 function requestPanelEmbed() {
   return new EmbedBuilder()
-    .setTitle('★ Glace Staff Request Center')
+    .setTitle('\u2605 Glace Staff Request Center')
     .setDescription([
       '**Current Leadership Interns+ may submit the following requests.**',
       '',
       '**RESIGNATION**',
-      'Username · Former Rank · New Rank · Notes',
+      'Username \u00B7 Former Rank \u00B7 New Rank \u00B7 Notes',
       'Intern Team through Senior Management: reviewed by Corporate Board.',
       'Corporate and Corporate Board: reviewed by Presidential.',
       '',
       '**USERNAME UPDATE**',
-      'Former Username · New Username · Rank',
+      'Former Username \u00B7 New Username \u00B7 Rank',
       '*You may submit a new request whenever it changes.*',
       '',
       '**LEAVE OF ABSENCE**',
-      'Username · Rank · Start Date · End Date · Reason',
+      'Username \u00B7 Rank \u00B7 Start Date \u00B7 End Date \u00B7 Reason',
       '`Start date must be a MONDAY. End date must be a SUNDAY.`',
       'If you return during a week, you are still responsible for that week\'s quota.',
       '',
       '**LOA REMOVAL**',
-      'Username · Rank · Week(s) on LOA',
+      'Username \u00B7 Rank \u00B7 Week(s) on LOA',
       '',
       '**TIMEZONE**',
-      'Username · Timezone',
+      'Username \u00B7 Timezone',
       '*You may submit a new request whenever it changes.*',
       '',
       '**Only one reviewer may react. These review buttons must not be clicked by anyone who is not reviewing.**',
@@ -362,7 +362,7 @@ function requestPanelEmbed() {
       '**DO NOT** edit a submission after it has been claimed. Delete and submit a new one, or use the returned-request revision in the Staff Hub.',
     ].join('\n'))
     .setColor(0x1f4d85)
-    .setFooter({ text: 'Glace Hotels • The future is what YOU create.' });
+    .setFooter({ text: 'Glace Hotels \u2022 The future is what YOU create.' });
 }
 function requestPanelComponents() {
   const first = new ActionRowBuilder().addComponents(
@@ -509,7 +509,7 @@ async function applyApprovedRequest(interactionLike, request) {
   if (!target) throw new Error('The staff member is no longer in the Glace server.');
   if (request.type === 'loa_removal') {
     const result = await removeLoa(interactionLike, target, { endDate: todayMmDdYyyy() });
-    if (!result.ok) throw new Error(String(result.message || 'The LOA could not be removed.').replace(/^❌\s*/, ''));
+    if (!result.ok) throw new Error(String(result.message || 'The LOA could not be removed.').replace(/^\u274C\s*/, ''));
     return { ok: true, type: 'loa_removal', message: clean(result.message, 3000), weeksOnLoa: clean(data.weeksOnLoa, 100) };
   }
   const result = await addLoa(interactionLike, target, {
@@ -519,7 +519,7 @@ async function applyApprovedRequest(interactionLike, request) {
     reason: 'Other',
     otherReason: clean(data.reason, 1500),
   });
-  if (!result.ok) throw new Error(String(result.message || 'The LOA could not be applied.').replace(/^❌\s*/, ''));
+  if (!result.ok) throw new Error(String(result.message || 'The LOA could not be applied.').replace(/^\u274C\s*/, ''));
   return { ok: true, type: 'loa', message: clean(result.message, 3000) };
 }
 async function claimRequest(interaction, request) {
@@ -583,8 +583,8 @@ async function handleStaffRequestInteraction(interaction) {
         const request = await store.get(claimMatch[1], interaction.guildId);
         if (!request) throw new Error('This request could not be found.');
         const claimed = await claimRequest(interaction, request);
-        await interaction.editReply(`✅ You claimed ${claimed.requestNumber}. Only you can complete or release this review.`);
-      } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+        await interaction.editReply(`\u2705 You claimed ${claimed.requestNumber}. Only you can complete or release this review.`);
+      } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
       return true;
     }
     const releaseMatch = id.match(/^ghreq:release:(.+)$/);
@@ -596,8 +596,8 @@ async function handleStaffRequestInteraction(interaction) {
         if (String(request.reviewClaimedById || '') !== String(interaction.user.id)) throw new Error('Only the reviewer who claimed this request may release it.');
         const updated = await store.releaseReview(request.id, { id: interaction.user.id, tag: interaction.member?.displayName || interaction.user.username });
         await updateReviewMessage(interaction.client, updated).catch(() => false);
-        await interaction.editReply(`✅ ${updated.requestNumber} is available for another reviewer.`);
-      } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+        await interaction.editReply(`\u2705 ${updated.requestNumber} is available for another reviewer.`);
+      } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
       return true;
     }
     const match = id.match(/^ghreq:(approve|return|deny):(.+)$/);
@@ -615,8 +615,8 @@ async function handleStaffRequestInteraction(interaction) {
         throw new Error('Claim this request before approving it.');
       }
       const updated = await decideRequest(interaction, request, 'approve', '');
-      await interaction.editReply(`✅ ${updated.requestNumber} was approved and applied.`);
-    } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+      await interaction.editReply(`\u2705 ${updated.requestNumber} was approved and applied.`);
+    } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
     return true;
   }
   if (interaction.isModalSubmit()) {
@@ -654,8 +654,8 @@ async function handleStaffRequestInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true });
       try {
         const request = await createFromDiscord(interaction, type, getData());
-        await interaction.editReply(`✅ ${request.requestNumber} was submitted for ${reviewerLabel(request.status)}.`);
-      } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+        await interaction.editReply(`\u2705 ${request.requestNumber} was submitted for ${reviewerLabel(request.status)}.`);
+      } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
       return true;
     }
     const match = id.match(/^ghreq:decision:(return|deny):(.+)$/);
@@ -670,8 +670,8 @@ async function handleStaffRequestInteraction(interaction) {
       }
       const note = interaction.fields.getTextInputValue('note');
       const updated = await decideRequest(interaction, request, decision, note);
-      await interaction.editReply(`✅ ${updated.requestNumber} was ${decision === 'return' ? 'returned' : 'denied'}.`);
-    } catch (error) { await interaction.editReply(`❌ ${error.message}`); }
+      await interaction.editReply(`\u2705 ${updated.requestNumber} was ${decision === 'return' ? 'returned' : 'denied'}.`);
+    } catch (error) { await interaction.editReply(`\u274C ${error.message}`); }
     return true;
   }
   return false;

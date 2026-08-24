@@ -659,7 +659,7 @@ function embedLooksCancelled(embed) {
 function normalizeFieldName(name) {
   return String(name || '')
     .toLowerCase()
-    .replace(/[–—]/g, '-')
+    .replace(/[\u2013\u2014]/g, '-')
     .replace(/[^a-z0-9\s-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

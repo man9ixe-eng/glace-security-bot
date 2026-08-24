@@ -203,7 +203,7 @@ async function handleMessageAutomod(message) {
       await handleAutoWarningAndTimeout(message, REASON_BAD_WORD);
     }
 
-    return; // Don’t also treat as spam
+    return; // Don\u2019t also treat as spam
   }
 
   // ===== SPAM FILTER =====

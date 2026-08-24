@@ -1,5 +1,5 @@
 // src/utils/juniorActivityTracker.js
-// Glace Hotels — Junior Staff training activity tracker
+// Glace Hotels \u2014 Junior Staff training activity tracker
 // Tracks Roblox USERNAME + Roblox ID from Roblox/TC log messages.
 
 const fs = require('node:fs');
@@ -161,7 +161,7 @@ function cleanValue(value) {
     .replace(/<a?:\w+:\d+>/g, '')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/[`*_~]/g, '')
-    .replace(/^[-•\s:]+/, '')
+    .replace(/^[-\u2022\s:]+/, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -256,8 +256,8 @@ function parseMinutes(value) {
 
   const direct = firstRegex(text, [
     /^\s*(\d{1,4})\s*$/,
-    /(?:minutes?|mins?)\s*(?:spent\s*)?(?:in\s*)?(?:the\s*)?(?:tc|training\s*center)\s*[:#\-–]\s*(\d{1,4})/i,
-    /(?:time\s*(?:spent)?\s*(?:in)?\s*(?:the)?\s*(?:tc|training\s*center)|tc\s*time|time|minutes?|mins?)\s*[:#\-–]\s*(\d{1,4})/i,
+    /(?:minutes?|mins?)\s*(?:spent\s*)?(?:in\s*)?(?:the\s*)?(?:tc|training\s*center)\s*[:#\-\u2013]\s*(\d{1,4})/i,
+    /(?:time\s*(?:spent)?\s*(?:in)?\s*(?:the)?\s*(?:tc|training\s*center)|tc\s*time|time|minutes?|mins?)\s*[:#\-\u2013]\s*(\d{1,4})/i,
     /(\d{1,4})\s*(?:minutes?|mins?)\b/i,
   ]);
 
@@ -301,7 +301,7 @@ function parseManualJuniorActivityRecords(message) {
   const records = [];
 
   for (const rawLine of String(attendeesField).split(/\r?\n/)) {
-    const line = rawLine.replace(/^\s*[•*-]\s*/, '').trim();
+    const line = rawLine.replace(/^\s*[\u2022*-]\s*/, '').trim();
     if (!line) continue;
     const parts = line.split('|').map((part) => part.trim()).filter(Boolean);
     if (parts.length < 2) continue;
@@ -374,17 +374,17 @@ function parseRobloxActivityLogMessage(message) {
   ]);
 
   const robloxUsername = usernameField || firstRegex(text, [
-    /(?:roblox\s*)?username\s*[:#\-–]\s*([^\n|]+)/i,
-    /(?:player|staff)\s*[:#\-–]\s*([^\n|]+)/i,
+    /(?:roblox\s*)?username\s*[:#\-\u2013]\s*([^\n|]+)/i,
+    /(?:player|staff)\s*[:#\-\u2013]\s*([^\n|]+)/i,
   ]);
 
   const robloxId = idField || firstRegex(text, [
-    /(?:roblox\s*)?(?:user\s*)?id\s*[:#\-–]\s*(\d{3,20})/i,
-    /\bRBX\s*ID\s*[:#\-–]\s*(\d{3,20})/i,
+    /(?:roblox\s*)?(?:user\s*)?id\s*[:#\-\u2013]\s*(\d{3,20})/i,
+    /\bRBX\s*ID\s*[:#\-\u2013]\s*(\d{3,20})/i,
   ]);
 
   const roleRaw = roleField || firstRegex(text, [
-    /(?:role|rank|position|team)\s*[:#\-–]\s*([^\n]+)/i,
+    /(?:role|rank|position|team)\s*[:#\-\u2013]\s*([^\n]+)/i,
   ]);
 
   const minutesInTC = parseMinutes(minutesField || text);
@@ -692,7 +692,7 @@ function getPromotionDecision(consistencyWindows) {
   if (!windows.length || totalTrainings === 0) {
     return {
       status: 'Needs Improvement',
-      emoji: '🔴',
+      emoji: '\uD83D\uDD34',
       reason: 'No tracked training activity was found yet.',
       successfulWeeks,
       totalTrainings,
@@ -703,7 +703,7 @@ function getPromotionDecision(consistencyWindows) {
   if (successfulWeeks >= 4) {
     return {
       status: 'Promotion Ready',
-      emoji: '🟢',
+      emoji: '\uD83D\uDFE2',
       reason: 'They reached at least 2 trainings every week across the review window.',
       successfulWeeks,
       totalTrainings,
@@ -714,7 +714,7 @@ function getPromotionDecision(consistencyWindows) {
   if (successfulWeeks >= 2) {
     return {
       status: 'Needs Time',
-      emoji: '🟡',
+      emoji: '\uD83D\uDFE1',
       reason: 'They are showing activity, but it is not fully consistent yet.',
       successfulWeeks,
       totalTrainings,
@@ -724,7 +724,7 @@ function getPromotionDecision(consistencyWindows) {
 
   return {
     status: 'Needs Improvement',
-    emoji: '🔴',
+    emoji: '\uD83D\uDD34',
     reason: 'They are not consistently reaching 2 trainings per week yet.',
     successfulWeeks,
     totalTrainings,

@@ -73,7 +73,7 @@ module.exports = {
       );
 
       await interaction.reply({
-        content: `🔒 Locked ${targetChannel}.\nReason: ${reason}`,
+        content: `\uD83D\uDD12 Locked ${targetChannel}.\nReason: ${reason}`,
       });
 
       await logModerationAction(interaction, {

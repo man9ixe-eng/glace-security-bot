@@ -219,9 +219,9 @@ function getAllowedQueueRoles(queue, member) {
 }
 
 function getHeaderEmoji(sessionType) {
-  if (sessionType === 'training') return '🔴';
-  if (sessionType === 'massshift') return '🟣';
-  return '🟡';
+  if (sessionType === 'training') return '\uD83D\uDD34';
+  if (sessionType === 'massshift') return '\uD83D\uDFE3';
+  return '\uD83D\uDFE1';
 }
 
 function extractShortId(cardOption) {
@@ -615,10 +615,10 @@ function formatBackupsLine(backups, maxShow = 10) {
   const shown = backups
     .slice(0, maxShow)
     .map((e) => `<@${e.userId}>`)
-    .join(' • ');
+    .join(' \u2022 ');
   const extra =
     backups.length > maxShow ? ` (+${backups.length - maxShow} more)` : '';
-  return `🟠 Backups: ${shown}${extra}`;
+  return `\uD83D\uDFE0 Backups: ${shown}${extra}`;
 }
 
 function getEditableSections(sessionType) {
@@ -808,30 +808,30 @@ async function updateAttendeesMessage(client, sessionRecord, lineup) {
   if (!message) return;
 
   const lines = [
-    '╔══════════════════════════════════════╗',
-    '                              ✅  SELECTED ATTENDEES ✅',
-    '╚══════════════════════════════════════╝',
+    '\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557',
+    '                              \u2705  SELECTED ATTENDEES \u2705',
+    '\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D',
     '',
     lineup.hostId
-      ? `🧊 Host: <@${lineup.hostId}>`
-      : `🧊 Host: ${lineup.hostName || 'Unknown'}`,
+      ? `\uD83E\uDDCA Host: <@${lineup.hostId}>`
+      : `\uD83E\uDDCA Host: ${lineup.hostName || 'Unknown'}`,
     lineup.sections.cohost?.[0]
-      ? `🧊 Co-Host: <@${lineup.sections.cohost[0]}>`
-      : '🧊 Co-Host: None selected',
+      ? `\uD83E\uDDCA Co-Host: <@${lineup.sections.cohost[0]}>`
+      : '\uD83E\uDDCA Co-Host: None selected',
     lineup.sections.overseer?.[0]
-      ? `🧊 Overseer: <@${lineup.sections.overseer[0]}>`
-      : '🧊 Overseer: None selected',
+      ? `\uD83E\uDDCA Overseer: <@${lineup.sections.overseer[0]}>`
+      : '\uD83E\uDDCA Overseer: None selected',
     '',
-    '────────────',
+    '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
     '',
   ];
 
   if (lineup.sessionType === 'training') {
-    lines.push('🔴  Trainers 🔴');
+    lines.push('\uD83D\uDD34  Trainers \uD83D\uDD34');
   } else if (lineup.sessionType === 'massshift') {
-    lines.push('🟣  Attendees 🟣');
+    lines.push('\uD83D\uDFE3  Attendees \uD83D\uDFE3');
   } else {
-    lines.push('🟡  Interviewers 🟡');
+    lines.push('\uD83D\uDFE1  Interviewers \uD83D\uDFE1');
   }
 
   const mainList = lineup.sections.interviewer || [];
@@ -845,18 +845,18 @@ async function updateAttendeesMessage(client, sessionRecord, lineup) {
 
   const supervisorList = lineup.sections.supervisor || [];
   if (supervisorList.length) {
-    lines.push('', '🟢  Supervisors 🟢');
+    lines.push('', '\uD83D\uDFE2  Supervisors \uD83D\uDFE2');
     supervisorList.forEach((userId, idx) => {
       lines.push(`${idx + 1}. <@${userId}>`);
     });
   }
 
-  lines.push('', '────────────', '');
+  lines.push('', '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500', '');
   lines.push(
-    '🧊 You should now join! Please join within **5 minutes**, or your spot will be given to someone else.',
+    '\uD83E\uDDCA You should now join! Please join within **5 minutes**, or your spot will be given to someone else.',
   );
   lines.push(
-    '🧊 Failure to join on time will result in a **written warning**.',
+    '\uD83E\uDDCA Failure to join on time will result in a **written warning**.',
   );
 
   if (lineup.sessionType === 'interview') {
@@ -875,7 +875,7 @@ async function updateAttendeesMessage(client, sessionRecord, lineup) {
 
   let content = lines.join('\n');
   if (content.length > 1950) {
-    content = content.slice(0, 1940) + '\n…';
+    content = content.slice(0, 1940) + '\n\u2026';
   }
 
   await message.edit({ content });
@@ -1069,12 +1069,12 @@ async function openQueueForCard(interaction, cardOption) {
   const startsIn = formatDiscordRelativeFromDue(card.due);
   const cardUrl = card.shortUrl || card.url || cardOption;
 
-  const headerTop = '╔══════════════════════════════════════╗';
+  const headerTop = '\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557';
   const headerEmoji = getHeaderEmoji(sessionType);
   const headerTitle = `${headerEmoji} ${cfg.typeLabel} | ${hostName || 'Host'} | ${
     timeText || 'Time'
   } ${headerEmoji}`;
-  const headerBottom = '╚══════════════════════════════════════╝';
+  const headerBottom = '\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D';
 
   const descriptionLines = [
     headerTop,
@@ -1082,55 +1082,55 @@ async function openQueueForCard(interaction, cardOption) {
     headerBottom,
     '',
     hostId
-      ? `📌  Host: <@${hostId}> (${hostId}) • ${hostName || 'Unknown'}`
-      : `📌  Host: ${hostName || 'Unknown'}`,
-    startsIn ? `📌  Starts: ${startsIn}` : null,
-    timeText ? `📌  Time: ${timeText}` : null,
+      ? `\uD83D\uDCCC  Host: <@${hostId}> (${hostId}) \u2022 ${hostName || 'Unknown'}`
+      : `\uD83D\uDCCC  Host: ${hostName || 'Unknown'}`,
+    startsIn ? `\uD83D\uDCCC  Starts: ${startsIn}` : null,
+    timeText ? `\uD83D\uDCCC  Time: ${timeText}` : null,
     '',
-    '💠 ROLES 💠',
+    '\uD83D\uDCA0 ROLES \uD83D\uDCA0',
     '----------------------------------------------------------------',
   ];
 
   if (sessionType === 'interview') {
     descriptionLines.push(
-      'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Head Corporate+',
-      'ℹ️  **Interviewer (12):** Leadership Intern+',
+      '\u2139\uFE0F  **Co-Host:** Corporate Intern+',
+      '\u2139\uFE0F  **Overseer:** Head Corporate+',
+      '\u2139\uFE0F  **Interviewer (12):** Leadership Intern+',
     );
   } else if (sessionType === 'training') {
     descriptionLines.push(
-      'ℹ️  **Co-Host:** Corporate Intern+',
-      'ℹ️  **Overseer:** Head Corporate+',
-      'ℹ️  **Supervisor (4):** Assistant Manager+',
-      'ℹ️  **Trainer (8):** Leadership Intern+',
+      '\u2139\uFE0F  **Co-Host:** Corporate Intern+',
+      '\u2139\uFE0F  **Overseer:** Head Corporate+',
+      '\u2139\uFE0F  **Supervisor (4):** Assistant Manager+',
+      '\u2139\uFE0F  **Trainer (8):** Leadership Intern+',
     );
   } else if (sessionType === 'massshift') {
     descriptionLines.push(
-      'ℹ️  **Co-Host:** Executive Manager+',
-      'ℹ️  **Overseer:** Head Corporate+',
-      'ℹ️  **Attendees (15):** Leadership Intern+',
+      '\u2139\uFE0F  **Co-Host:** Executive Manager+',
+      '\u2139\uFE0F  **Overseer:** Head Corporate+',
+      '\u2139\uFE0F  **Attendees (15):** Leadership Intern+',
     );
   }
 
   descriptionLines.push(
     '',
-    '❓  HOW TO JOIN THE QUEUE ❓',
+    '\u2753  HOW TO JOIN THE QUEUE \u2753',
     '----------------------------------------------------------------',
-    '- Check the role list above — if your rank is allowed, press **Join Queue** and choose your role from the dropdown.',
-    '- You’ll get a popup that says: “You have been added to the (ROLE) Queue.”',
-    '- Do NOT join until you are pinged in “Session Attendees” **15 minutes before** the session starts.',
+    '- Check the role list above \u2014 if your rank is allowed, press **Join Queue** and choose your role from the dropdown.',
+    '- You\u2019ll get a popup that says: \u201CYou have been added to the (ROLE) Queue.\u201D',
+    '- Do NOT join until you are pinged in \u201CSession Attendees\u201D **15 minutes before** the session starts.',
     '- Line up on the number/role you are selected for on "Session Attendees".',
     '- You have 5 minutes after session attendees is posted to join.',
     '',
-    '❓ HOW TO LEAVE THE QUEUE/INFORM LATE ARRIVAL ❓',
+    '\u2753 HOW TO LEAVE THE QUEUE/INFORM LATE ARRIVAL \u2753',
     '----------------------------------------------------------------',
     '- After you join, the bot will privately show you a **Leave Queue** button.',
     '- You can only leave the queue BEFORE the session list is posted. After that, message your host if you need to un-queue.',
     '- If you do not let the host know anything before **5 minutes** after an attendees post was made, you will be given a **Written Warning, and your spot could be given up.**',
     '----------------------------------------------------------------',
-    '╭─────── 💠 LINKS 💠 ───────────╮',
-    `〰️ Trello Card: ${cardUrl}`,
-    '╰─────────────────────────────╯',
+    '\u256D\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \uD83D\uDCA0 LINKS \uD83D\uDCA0 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E',
+    `\u3030\uFE0F Trello Card: ${cardUrl}`,
+    '\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F',
   );
 
   const embed = new EmbedBuilder()
@@ -1184,7 +1184,7 @@ async function openQueueForCard(interaction, cardOption) {
   });
 
   await interaction.editReply({
-    content: `✅ Opened queue for **${card.name}** in <#${queueChannel.id}>`,
+    content: `\u2705 Opened queue for **${card.name}** in <#${queueChannel.id}>`,
   });
   setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
@@ -1225,9 +1225,9 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
     queue,
   );
 
-  const headerTop = '╔══════════════════════════════════════╗';
-  const headerTitle = '                              ✅  SELECTED ATTENDEES ✅';
-  const headerBottom = '╚══════════════════════════════════════╝';
+  const headerTop = '\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557';
+  const headerTitle = '                              \u2705  SELECTED ATTENDEES \u2705';
+  const headerBottom = '\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D';
 
   const lines = [
     headerTop,
@@ -1235,14 +1235,14 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
     headerBottom,
     '',
     queue.hostId
-      ? `🧊 Host: <@${queue.hostId}>`
-      : `🧊 Host: ${queue.hostName || 'Unknown'}`,
+      ? `\uD83E\uDDCA Host: <@${queue.hostId}>`
+      : `\uD83E\uDDCA Host: ${queue.hostName || 'Unknown'}`,
     cohost.selected[0]
-      ? `🧊 Co-Host: <@${cohost.selected[0].userId}>`
-      : '🧊 Co-Host: None selected',
+      ? `\uD83E\uDDCA Co-Host: <@${cohost.selected[0].userId}>`
+      : '\uD83E\uDDCA Co-Host: None selected',
     overseer.selected[0]
-      ? `🧊 Overseer: <@${overseer.selected[0].userId}>`
-      : '🧊 Overseer: None selected',
+      ? `\uD83E\uDDCA Overseer: <@${overseer.selected[0].userId}>`
+      : '\uD83E\uDDCA Overseer: None selected',
   ];
 
   const cohostBackups = formatBackupsLine(cohost.backups, 5);
@@ -1251,14 +1251,14 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
   const overseerBackups = formatBackupsLine(overseer.backups, 5);
   if (overseerBackups) lines.push(overseerBackups);
 
-  lines.push('', '────────────', '');
+  lines.push('', '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500', '');
 
   if (queue.sessionType === 'training') {
-    lines.push('🔴  Trainers 🔴');
+    lines.push('\uD83D\uDD34  Trainers \uD83D\uDD34');
   } else if (queue.sessionType === 'massshift') {
-    lines.push('🟣  Attendees 🟣');
+    lines.push('\uD83D\uDFE3  Attendees \uD83D\uDFE3');
   } else {
-    lines.push('🟡  Interviewers 🟡');
+    lines.push('\uD83D\uDFE1  Interviewers \uD83D\uDFE1');
   }
 
   if (main.selected.length === 0) {
@@ -1273,7 +1273,7 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
   if (mainBackups) lines.push(mainBackups);
 
   if (supervisor.sorted.length) {
-    lines.push('', '🟢  Supervisors 🟢');
+    lines.push('', '\uD83D\uDFE2  Supervisors \uD83D\uDFE2');
 
     if (supervisor.selected.length === 0) {
       lines.push('None selected.');
@@ -1287,12 +1287,12 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
     if (supervisorBackups) lines.push(supervisorBackups);
   }
 
-  lines.push('', '────────────', '');
+  lines.push('', '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500', '');
   lines.push(
-    '🧊 You should now join! Please join within **5 minutes**, or your spot will be given to someone else.',
+    '\uD83E\uDDCA You should now join! Please join within **5 minutes**, or your spot will be given to someone else.',
   );
   lines.push(
-    '🧊 Failure to join on time will result in a **written warning**.',
+    '\uD83E\uDDCA Failure to join on time will result in a **written warning**.',
   );
 
   if (queue.sessionType === 'interview') {
@@ -1306,7 +1306,7 @@ function buildLiveAttendeesMessage(queue, priorityStore) {
   let msg = lines.join('\n');
 
   if (msg.length > 1950) {
-    msg = msg.slice(0, 1940) + '\n…';
+    msg = msg.slice(0, 1940) + '\n\u2026';
   }
 
   return msg;
@@ -1410,7 +1410,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
         entry.userId,
         `Unknown (${entry.userId})`,
       );
-      results.push(`<@${entry.userId}> (${entry.userId}) • ${displayName}`);
+      results.push(`<@${entry.userId}> (${entry.userId}) \u2022 ${displayName}`);
     }
     return results;
   }
@@ -1436,7 +1436,7 @@ async function logAttendeesForCard(client, cardOptionOrShortId, options = {}) {
     {
       name: 'Host',
       value: queue.hostId
-        ? `<@${queue.hostId}> (${queue.hostId}) • ${resolvedHostName}`
+        ? `<@${queue.hostId}> (${queue.hostId}) \u2022 ${resolvedHostName}`
         : resolvedHostName,
     },
     {

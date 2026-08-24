@@ -36,7 +36,7 @@ module.exports = {
 
     if (!success) {
       await interaction.editReply(
-        '⚠️ I tried to cancel that session on Trello, but something went wrong.\nPlease double-check the card link/ID and Trello configuration.',
+        '\u26A0\uFE0F I tried to cancel that session on Trello, but something went wrong.\nPlease double-check the card link/ID and Trello configuration.',
       );
       return;
     }
@@ -74,13 +74,13 @@ module.exports = {
     } catch (err) {
       console.error('[CANCELSESSION] Error while cleaning queue messages:', err);
       await interaction.editReply(
-        `✅ Session successfully cancelled on Trello.\n✅ Session notice cleared.\n⚠️ ${logLine}\n⚠️ An error happened while removing the queue messages.`,
+        `\u2705 Session successfully cancelled on Trello.\n\u2705 Session notice cleared.\n\u26A0\uFE0F ${logLine}\n\u26A0\uFE0F An error happened while removing the queue messages.`,
       );
       return;
     }
 
     await interaction.editReply(
-      `✅ Session successfully cancelled on Trello.\n✅ Session notice cleared.\n✅ Queue messages cleaned up.\n${shouldLog ? '✅' : 'ℹ️'} ${logLine}`,
+      `\u2705 Session successfully cancelled on Trello.\n\u2705 Session notice cleared.\n\u2705 Queue messages cleaned up.\n${shouldLog ? '\u2705' : '\u2139\uFE0F'} ${logLine}`,
     );
   },
 };

@@ -4,7 +4,7 @@ const { forceCloseTicket } = require("../../utils/ticketSystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("forceclose") // ✅ MUST BE forceclose (yours was accidentally close)
+    .setName("forceclose") // \u2705 MUST BE forceclose (yours was accidentally close)
     .setDescription("Force close this ticket now (claimer/admin/reviewer only).")
     .addStringOption((opt) =>
       opt.setName("reason").setDescription("Reason for closing").setRequired(false)

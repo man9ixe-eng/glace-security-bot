@@ -24,7 +24,7 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('❄ Glace Hotels Staff Hub')
+      .setTitle('\u2744 Glace Hotels Staff Hub')
       .setDescription([
         'Use the private Staff Hub for documentation, actions, approvals, schedules, updates, and LOA records.',
         '',
@@ -34,7 +34,7 @@ module.exports = {
       ].join('\n'))
       .setColor(0x8b5cf6)
       .setFooter({
-        text: `${getTierLabel(getTier(interaction.member))} access • Glace Hotels`,
+        text: `${getTierLabel(getTier(interaction.member))} access \u2022 Glace Hotels`,
       });
 
     const row = new ActionRowBuilder().addComponents(

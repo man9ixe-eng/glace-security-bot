@@ -44,31 +44,31 @@ module.exports = {
 
   TYPES: {
     corporate: {
-      emoji: '⚪', label: 'Corporate Assistance', prefix: 'corporate-', pingRole: 'reviewer', log: 'corporate_pban',
+      emoji: '\u26AA', label: 'Corporate Assistance', prefix: 'corporate-', pingRole: 'reviewer', log: 'corporate_pban',
       theme: { color: 0xffffff }, panelTitle: 'Corporate Assistance',
       panelBody: ['Need corporate support? Click below to start a private case.', '', '**How it works**', '1) Click **Open Ticket**', '2) A private channel is created', '3) Send the details and evidence', '4) The case closes once resolved'].join('\n'),
       buttonLabel: 'Open Ticket',
     },
     kick: {
-      emoji: '🟡', label: 'Kick Request', prefix: 'kick-', pingRole: 'mod', log: 'kick',
+      emoji: '\uD83D\uDFE1', label: 'Kick Request', prefix: 'kick-', pingRole: 'mod', log: 'kick',
       theme: { color: 0xf1c40f }, panelTitle: 'Kick Request',
       panelBody: ['Need a kick handled? Click below to start a private case.', '', 'Provide the username, proof, and reason when the ticket opens.'].join('\n'),
       buttonLabel: 'Open Ticket',
     },
     ban: {
-      emoji: '🟠', label: 'Ban Request', prefix: 'ban-', pingRole: 'admin', log: 'ban',
+      emoji: '\uD83D\uDFE0', label: 'Ban Request', prefix: 'ban-', pingRole: 'admin', log: 'ban',
       theme: { color: 0xe67e22 }, panelTitle: 'Ban Request',
       panelBody: ['Need a ban handled? Click below to start a private case.', '', 'Provide the username, proof, and ban reason when the ticket opens.'].join('\n'),
       buttonLabel: 'Open Ticket',
     },
     pban: {
-      emoji: '🔴', label: 'PBAN Request', prefix: 'pban-', pingRole: 'reviewer', log: 'corporate_pban',
+      emoji: '\uD83D\uDD34', label: 'PBAN Request', prefix: 'pban-', pingRole: 'reviewer', log: 'corporate_pban',
       theme: { color: 0xe74c3c }, panelTitle: 'PBAN Request',
       panelBody: ['Need a PBAN handled? Click below to start a private case.', '', 'Provide the full evidence bundle and context when the ticket opens.'].join('\n'),
       buttonLabel: 'Open Ticket',
     },
     ingame: {
-      emoji: '🔵', label: 'In-Game Assistance', prefix: 'in-game-', pingRole: 'trial', log: 'ingame',
+      emoji: '\uD83D\uDD35', label: 'In-Game Assistance', prefix: 'in-game-', pingRole: 'trial', log: 'ingame',
       theme: { color: 0x3aa6ff }, panelTitle: 'In-Game Assistance',
       panelBody: ['Need help in-game? Click below to start a private case.', '', 'Tell staff what is happening and where you are.'].join('\n'),
       buttonLabel: 'Open Ticket',

@@ -6,13 +6,13 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const rolesConfig = require('../config/roles');
 const { getLoaRecord, setLoaRecord, clearLoaRecord, listActiveLoas } = require('./loaStore');
 
-const LOA_PREFIX = '🔕';
+const LOA_PREFIX = '\uD83D\uDD15';
 
 const MR_LOA_ROLE_ID = process.env.MR_LOA_ROLE_ID || '1495157788190576741';
 const HR_LOA_ROLE_ID = process.env.HR_LOA_ROLE_ID || '1434829767911411874';
 const LOA_LOG_CHANNEL_ID = process.env.CURRENT_LOAS_CHANNEL_ID || process.env.LOA_LOG_CHANNEL_ID || '1498580557200621578';
-const LOA_PENDING_EMOJI = process.env.LOA_PENDING_EMOJI || '🟡';
-const LOA_ENDED_EMOJI = process.env.LOA_ENDED_EMOJI || '🟢';
+const LOA_PENDING_EMOJI = process.env.LOA_PENDING_EMOJI || '\uD83D\uDFE1';
+const LOA_ENDED_EMOJI = process.env.LOA_ENDED_EMOJI || '\uD83D\uDFE2';
 
 const TRELLO_KEY = process.env.TRELLO_KEY;
 const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
@@ -247,7 +247,7 @@ function parseLoaDate(value, fieldLabel = 'Date') {
     month = Number(legacyDashMatch[2]);
     day = Number(legacyDashMatch[3]);
   } else {
-    return { ok: false, message: `❌ **${fieldLabel}** must be in this format: **MM/DD/YYYY**.` };
+    return { ok: false, message: `\u274C **${fieldLabel}** must be in this format: **MM/DD/YYYY**.` };
   }
 
   const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
@@ -257,7 +257,7 @@ function parseLoaDate(value, fieldLabel = 'Date') {
     || date.getUTCMonth() !== month - 1
     || date.getUTCDate() !== day
   ) {
-    return { ok: false, message: `❌ **${fieldLabel}** is not a valid calendar date.` };
+    return { ok: false, message: `\u274C **${fieldLabel}** is not a valid calendar date.` };
   }
 
   return { ok: true, value: normalizeDateValue(month, day, year), date, raw };
@@ -298,12 +298,12 @@ function formatLoaReason(reason, otherReason = '') {
   const other = String(otherReason || '').trim();
 
   if (!LOA_REASONS.has(selected)) {
-    return { ok: false, message: '❌ Please choose a valid **Reason** option.' };
+    return { ok: false, message: '\u274C Please choose a valid **Reason** option.' };
   }
 
   if (selected === 'Other') {
     if (!other) {
-      return { ok: false, message: '❌ Since you chose **Other**, please fill in **other_reason**.' };
+      return { ok: false, message: '\u274C Since you chose **Other**, please fill in **other_reason**.' };
     }
     return { ok: true, value: `Other: ${other}` };
   }
@@ -331,29 +331,29 @@ function validateAddLoaOptions(options = {}) {
   const start = parseLoaDate(options.startDate, 'Start Date');
   if (!start.ok) return start;
   if (String(options.startDate || '').trim() !== start.value) {
-    return { ok: false, message: '❌ **Start Date** must be in this exact format: **MM/DD/YYYY**.' };
+    return { ok: false, message: '\u274C **Start Date** must be in this exact format: **MM/DD/YYYY**.' };
   }
 
   if (!isMonday(start.date)) {
-    return { ok: false, message: '❌ **Start Date** must be a **Monday**.' };
+    return { ok: false, message: '\u274C **Start Date** must be a **Monday**.' };
   }
 
   const end = parseLoaDate(options.endDate, 'End Date');
   if (!end.ok) return end;
   if (String(options.endDate || '').trim() !== end.value) {
-    return { ok: false, message: '❌ **End Date** must be in this exact format: **MM/DD/YYYY**.' };
+    return { ok: false, message: '\u274C **End Date** must be in this exact format: **MM/DD/YYYY**.' };
   }
 
   if (end.date.getTime() < start.date.getTime()) {
-    return { ok: false, message: '❌ **End Date** cannot be before the start date.' };
+    return { ok: false, message: '\u274C **End Date** cannot be before the start date.' };
   }
   if (!isSunday(end.date)) {
-    return { ok: false, message: '❌ **End Date** must be a **Sunday**.' };
+    return { ok: false, message: '\u274C **End Date** must be a **Sunday**.' };
   }
 
   const reviewerUsername = String(options.reviewerUsername || '').trim();
   if (!reviewerUsername) {
-    return { ok: false, message: '❌ Please include the **Reviewer Username** for this LOA.' };
+    return { ok: false, message: '\u274C Please include the **Reviewer Username** for this LOA.' };
   }
 
   const reason = formatLoaReason(options.reason, options.otherReason);
@@ -372,13 +372,13 @@ function validateRemoveLoaOptions(options = {}, existing = null) {
   const end = parseLoaDate(options.endDate, 'End Date');
   if (!end.ok) return end;
   if (String(options.endDate || '').trim() !== end.value) {
-    return { ok: false, message: '❌ **End Date** must be in this exact format: **MM/DD/YYYY**.' };
+    return { ok: false, message: '\u274C **End Date** must be in this exact format: **MM/DD/YYYY**.' };
   }
 
   if (existing?.officialStartDate) {
     const start = parseLoaDate(existing.officialStartDate, 'Start Date');
     if (start.ok && end.date.getTime() < start.date.getTime()) {
-      return { ok: false, message: '❌ **End Date** cannot be before the LOA start date.' };
+      return { ok: false, message: '\u274C **End Date** cannot be before the LOA start date.' };
     }
   }
 
@@ -389,22 +389,22 @@ function validateExtendLoaOptions(options = {}, existing = null) {
   const end = parseLoaDate(options.newEndDate, 'New Planned End Date');
   if (!end.ok) return end;
   if (String(options.newEndDate || '').trim() !== end.value) {
-    return { ok: false, message: '❌ **New Planned End Date** must be in this exact format: **MM/DD/YYYY**.' };
+    return { ok: false, message: '\u274C **New Planned End Date** must be in this exact format: **MM/DD/YYYY**.' };
   }
   if (!isSunday(end.date)) {
-    return { ok: false, message: '❌ **New Planned End Date** must be a **Sunday**.' };
+    return { ok: false, message: '\u274C **New Planned End Date** must be a **Sunday**.' };
   }
 
   if (existing?.officialStartDate) {
     const start = parseLoaDate(existing.officialStartDate, 'Start Date');
     if (start.ok && end.date.getTime() < start.date.getTime()) {
-      return { ok: false, message: '❌ **New Planned End Date** cannot be before the LOA start date.' };
+      return { ok: false, message: '\u274C **New Planned End Date** cannot be before the LOA start date.' };
     }
   }
 
   const reason = String(options.reason || '').trim();
   if (!reason) {
-    return { ok: false, message: '❌ Please include an extension reason.' };
+    return { ok: false, message: '\u274C Please include an extension reason.' };
   }
 
   return { ok: true, newEndDate: end.value, reason };
@@ -565,7 +565,7 @@ async function removeLoaLabelFromStaffCard(username, storedCardId, _commentText)
 async function ensureBotCanManageRoles(guild) {
   const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
   if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    return { ok: false, message: '❌ I need the **Manage Roles** permission to update LOA roles.' };
+    return { ok: false, message: '\u274C I need the **Manage Roles** permission to update LOA roles.' };
   }
 
   const mrRole = guild.roles.cache.get(MR_LOA_ROLE_ID) || null;
@@ -575,12 +575,12 @@ async function ensureBotCanManageRoles(guild) {
   if (!hrRole) missing.push('HR LOA');
 
   if (missing.length) {
-    return { ok: false, message: `❌ I could not find the ${missing.join(' and ')} role in this server.` };
+    return { ok: false, message: `\u274C I could not find the ${missing.join(' and ')} role in this server.` };
   }
 
   const problem = [mrRole, hrRole].find((role) => role.position >= botMember.roles.highest.position);
   if (problem) {
-    return { ok: false, message: `❌ I cannot manage **${problem.name}**. Move my bot role above it, then try again.` };
+    return { ok: false, message: `\u274C I cannot manage **${problem.name}**. Move my bot role above it, then try again.` };
   }
 
   return { ok: true, botMember, mrRole, hrRole };
@@ -697,7 +697,7 @@ function normalizeExtensions(extensions) {
 
   return String(extensions)
     .split('\n')
-    .map((line) => line.replace(/^[-•]\s*/, '').trim())
+    .map((line) => line.replace(/^[-\u2022]\s*/, '').trim())
     .filter(Boolean)
     .map((line) => ({ reason: line }));
 }
@@ -709,9 +709,9 @@ function formatExtensionHistory(extensions = []) {
   return entries
     .slice(-5)
     .map((entry, index) => {
-      const oldPart = entry.oldEndDate ? `${formatDateOnly(entry.oldEndDate)} → ` : '';
+      const oldPart = entry.oldEndDate ? `${formatDateOnly(entry.oldEndDate)} \u2192 ` : '';
       const newPart = entry.newEndDate ? formatDateOnly(entry.newEndDate) : 'Updated';
-      const reasonPart = entry.reason ? ` — ${entry.reason}` : '';
+      const reasonPart = entry.reason ? ` \u2014 ${entry.reason}` : '';
       return `${index + 1}. ${oldPart}${newPart}${reasonPart}`;
     })
     .join('\n')
@@ -752,7 +752,7 @@ function buildLoaLogEmbed(details, warnings = []) {
 
   const embed = new EmbedBuilder()
     .setColor(completed ? 0x22c55e : 0xf59e0b)
-    .setTitle(completed ? `${LOA_ENDED_EMOJI} LOA Log • Ended` : `${LOA_PENDING_EMOJI} LOA Log • Pending`)
+    .setTitle(completed ? `${LOA_ENDED_EMOJI} LOA Log \u2022 Ended` : `${LOA_PENDING_EMOJI} LOA Log \u2022 Pending`)
     .setDescription(`${details.target} ${completed ? 'has ended their LOA.' : 'has an active LOA request.'}`)
     .addFields(
       { name: 'User', value: `${details.target.user.tag}\n<@${details.target.id}>`, inline: true },
@@ -783,7 +783,7 @@ function buildLoaLogEmbed(details, warnings = []) {
   }
 
   if (warnings.length) {
-    embed.addFields({ name: 'Warnings', value: warnings.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
+    embed.addFields({ name: 'Warnings', value: warnings.map((w) => `\u26A0\uFE0F ${w}`).join('\n').slice(0, 1024), inline: false });
   }
 
   return embed;
@@ -837,12 +837,12 @@ async function addLoa(interaction, target, options = {}) {
   if (!validated.ok) return { ok: false, message: validated.message };
 
   if (!canManageLoa(interaction.member)) {
-    return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
+    return { ok: false, message: '\u274C Only Corporate+ can use LOA commands.' };
   }
 
   const staffClass = classifyStaffMember(target);
   if (!staffClass) {
-    return { ok: false, message: '❌ I could not tell what staff team this member is in.' };
+    return { ok: false, message: '\u274C I could not tell what staff team this member is in.' };
   }
 
   const roleCheck = await ensureBotCanManageRoles(interaction.guild);
@@ -875,7 +875,7 @@ async function addLoa(interaction, target, options = {}) {
     }
   } catch (err) {
     console.error('[LOA] Role update failed:', err);
-    return { ok: false, message: '❌ I could not update their LOA role. Check my role position and permissions.' };
+    return { ok: false, message: '\u274C I could not update their LOA role. Check my role position and permissions.' };
   }
 
   try {
@@ -946,7 +946,7 @@ async function addLoa(interaction, target, options = {}) {
   return {
     ok: true,
     message: [
-      `${isUpdatingExistingLoa ? '✅ Updated the active LOA for' : '✅ Added LOA for'} ${target}.`,
+      `${isUpdatingExistingLoa ? '\u2705 Updated the active LOA for' : '\u2705 Added LOA for'} ${target}.`,
       `Start Date: **${formatDateOnly(validated.startDate)}**`,
       `Planned End Date: **${formatDateOnly(validated.endDate)}**`,
       `Duration: **${formatCalendarDuration(validated.startDate, validated.endDate)}**`,
@@ -956,7 +956,7 @@ async function addLoa(interaction, target, options = {}) {
       `Team: **${staffClass.label}**`,
       trello.ok ? `Trello: added **LOA** label to **${trello.card.name}**.` : null,
       logResult.ok ? `${logResult.edited ? 'Updated' : 'Sent'} the LOA log in <#${LOA_LOG_CHANNEL_ID}>.` : null,
-      warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
+      warnings.length ? `\u26A0\uFE0F ${warnings.join('\n\u26A0\uFE0F ')}` : null,
     ].filter(Boolean).join('\n'),
   };
 }
@@ -965,7 +965,7 @@ async function removeLoa(interaction, target, options = {}) {
   const warnings = [];
 
   if (!canManageLoa(interaction.member)) {
-    return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
+    return { ok: false, message: '\u274C Only Corporate+ can use LOA commands.' };
   }
 
   const stored = getLoaRecord(interaction.guild.id, target.id);
@@ -973,7 +973,7 @@ async function removeLoa(interaction, target, options = {}) {
   const existing = stored || recovered;
 
   if (!existing?.logMessageId) {
-    return { ok: false, message: '❌ I could not find an active LOA log for this member. Please check if they currently have an active LOA post.' };
+    return { ok: false, message: '\u274C I could not find an active LOA log for this member. Please check if they currently have an active LOA post.' };
   }
 
   const validated = validateRemoveLoaOptions(options, existing);
@@ -992,7 +992,7 @@ async function removeLoa(interaction, target, options = {}) {
     }
   } catch (err) {
     console.error('[LOA] Role removal failed:', err);
-    return { ok: false, message: '❌ I could not remove their LOA role. Check my role position and permissions.' };
+    return { ok: false, message: '\u274C I could not remove their LOA role. Check my role position and permissions.' };
   }
 
   const fallbackName = stripLoaPrefix(target.displayName);
@@ -1061,7 +1061,7 @@ async function removeLoa(interaction, target, options = {}) {
   return {
     ok: true,
     message: [
-      `✅ Removed LOA for ${target}.`,
+      `\u2705 Removed LOA for ${target}.`,
       `Start Date: **${formatDateOnly(officialStartDate)}**`,
       `Final End Date: **${formatDateOnly(validated.endDate)}**`,
       endDateChanged ? `Updated the log end date from **${formatDateOnly(oldEndDate)}** to **${formatDateOnly(validated.endDate)}**.` : null,
@@ -1070,7 +1070,7 @@ async function removeLoa(interaction, target, options = {}) {
       logResult.ok
         ? `${logResult.edited ? 'Updated' : 'Sent'} the LOA log in <#${LOA_LOG_CHANNEL_ID}>.`
         : null,
-      warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
+      warnings.length ? `\u26A0\uFE0F ${warnings.join('\n\u26A0\uFE0F ')}` : null,
     ].filter(Boolean).join('\n'),
   };
 }
@@ -1079,7 +1079,7 @@ async function extendLoa(interaction, target, options = {}) {
   const warnings = [];
 
   if (!canManageLoa(interaction.member)) {
-    return { ok: false, message: '❌ Only Corporate+ can use LOA commands.' };
+    return { ok: false, message: '\u274C Only Corporate+ can use LOA commands.' };
   }
 
   const stored = getLoaRecord(interaction.guild.id, target.id);
@@ -1087,7 +1087,7 @@ async function extendLoa(interaction, target, options = {}) {
   const existing = stored || recovered;
 
   if (!existing?.logMessageId) {
-    return { ok: false, message: '❌ I could not find an active LOA log for this member. Please check if they currently have an active LOA post.' };
+    return { ok: false, message: '\u274C I could not find an active LOA log for this member. Please check if they currently have an active LOA post.' };
   }
 
   const validated = validateExtendLoaOptions(options, existing);
@@ -1116,7 +1116,7 @@ async function extendLoa(interaction, target, options = {}) {
   const trelloName = stripLoaPrefix(existing?.originalDisplayName || target.displayName);
   const trello = await addLoaLabelToStaffCard(
     trelloName,
-    `LOA Extended - ${formatDateOnly(oldEndDate || 'Unknown')} → ${formatDateOnly(validated.newEndDate)} - ${validated.reason}`,
+    `LOA Extended - ${formatDateOnly(oldEndDate || 'Unknown')} \u2192 ${formatDateOnly(validated.newEndDate)} - ${validated.reason}`,
   );
 
   if (!trello.ok && trello.warning) warnings.push(trello.warning);
@@ -1150,13 +1150,13 @@ async function extendLoa(interaction, target, options = {}) {
   return {
     ok: true,
     message: [
-      `✅ Extended LOA for ${target}.`,
+      `\u2705 Extended LOA for ${target}.`,
       oldEndDate ? `Old Planned End Date: **${formatDateOnly(oldEndDate)}**` : null,
       `New Planned End Date: **${formatDateOnly(validated.newEndDate)}**`,
       `Updated Duration: **${formatCalendarDuration(updatedRecord.officialStartDate, validated.newEndDate)}**`,
       `Reason: **${validated.reason}**`,
       logResult.ok ? `Updated the LOA log in <#${LOA_LOG_CHANNEL_ID}>.` : null,
-      warnings.length ? `⚠️ ${warnings.join('\n⚠️ ')}` : null,
+      warnings.length ? `\u26A0\uFE0F ${warnings.join('\n\u26A0\uFE0F ')}` : null,
     ].filter(Boolean).join('\n'),
   };
 }

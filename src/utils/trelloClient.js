@@ -274,7 +274,7 @@ async function createSessionCard({ sessionType, dueISO, cardName, cardDesc }) {
   const url = (result.data && (result.data.shortUrl || result.data.url)) || null;
   const id = (result.data && result.data.id) || null;
 
-  // ✅ Auto-sort the target list after adding
+  // \u2705 Auto-sort the target list after adding
   await sortListByDue(listId);
 
   return { ok: true, id, url, listId };
@@ -310,7 +310,7 @@ function describeTimeDiff(dueISO) {
  * - Mark due as complete
  * - Move to COMPLETED list (top) if configured
  * - Append minutes-from-due info to description
- * - ✅ Auto-sorts source and destination lists
+ * - \u2705 Auto-sorts source and destination lists
  */
 async function cancelSessionCard({ cardId, reason }) {
   if (!cardId) return false;
@@ -340,9 +340,9 @@ async function cancelSessionCard({ cardId, reason }) {
   const descLines = [];
   if (card.desc && card.desc.trim().length > 0) descLines.push(card.desc.trim(), "");
 
-  descLines.push("❌ Session canceled.");
+  descLines.push("\u274C Session canceled.");
   if (reason && reason.trim().length > 0) descLines.push(`Reason: ${reason.trim()}`);
-  if (timeDiffStr) descLines.push(`⏱️ Canceled ${timeDiffStr}.`);
+  if (timeDiffStr) descLines.push(`\u23F1\uFE0F Canceled ${timeDiffStr}.`);
 
   const res1 = await trelloRequest(`/cards/${cardId}`, "PUT", {
     idLabels: newLabels.length > 0 ? newLabels.join(",") : undefined,
@@ -366,7 +366,7 @@ async function cancelSessionCard({ cardId, reason }) {
     if (moveRes.ok) toListId = TRELLO_LIST_COMPLETED_ID;
   }
 
-  // ✅ Auto-sort affected lists
+  // \u2705 Auto-sort affected lists
   if (fromListId) await sortListByDue(fromListId);
   if (toListId && toListId !== fromListId) await sortListByDue(toListId);
 
@@ -382,7 +382,7 @@ async function cancelSessionCard({ cardId, reason }) {
  * - Mark due as complete
  * - Move to COMPLETED list (top) if configured
  * - Append minutes-from-due info to description
- * - ✅ Auto-sorts source and destination lists
+ * - \u2705 Auto-sorts source and destination lists
  */
 async function completeSessionCard({ cardId }) {
   if (!cardId) return false;
@@ -412,8 +412,8 @@ async function completeSessionCard({ cardId }) {
   const descLines = [];
   if (card.desc && card.desc.trim().length > 0) descLines.push(card.desc.trim(), "");
 
-  descLines.push("✅ Session marked complete.");
-  if (timeDiffStr) descLines.push(`⏱️ Completed ${timeDiffStr}.`);
+  descLines.push("\u2705 Session marked complete.");
+  if (timeDiffStr) descLines.push(`\u23F1\uFE0F Completed ${timeDiffStr}.`);
 
   const res1 = await trelloRequest(`/cards/${cardId}`, "PUT", {
     idLabels: newLabels.length > 0 ? newLabels.join(",") : undefined,
@@ -436,7 +436,7 @@ async function completeSessionCard({ cardId }) {
     if (moveRes.ok) toListId = TRELLO_LIST_COMPLETED_ID;
   }
 
-  // ✅ Auto-sort affected lists
+  // \u2705 Auto-sort affected lists
   if (fromListId) await sortListByDue(fromListId);
   if (toListId && toListId !== fromListId) await sortListByDue(toListId);
 
@@ -446,7 +446,7 @@ async function completeSessionCard({ cardId }) {
 
 /**
  * Move a card directly to Completed list (if configured).
- * ✅ Auto-sorts source + destination.
+ * \u2705 Auto-sorts source + destination.
  */
 async function moveToCompletedList(cardId) {
   if (!cardId || !TRELLO_LIST_COMPLETED_ID) return false;

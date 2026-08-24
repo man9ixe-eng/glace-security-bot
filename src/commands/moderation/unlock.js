@@ -74,7 +74,7 @@ module.exports = {
       );
 
       await interaction.reply({
-        content: `🔓 Unlocked ${targetChannel}.\nReason: ${reason}`,
+        content: `\uD83D\uDD13 Unlocked ${targetChannel}.\nReason: ${reason}`,
       });
 
       await logModerationAction(interaction, {

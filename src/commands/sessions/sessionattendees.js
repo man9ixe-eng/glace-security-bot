@@ -17,7 +17,7 @@ module.exports = {
     ),
 
   /**
-   * /sessionattendees – Tier 4+ can manually post the live attendees message
+   * /sessionattendees \u2013 Tier 4+ can manually post the live attendees message
    * using the queue data already stored in memory.
    */
   async execute(interaction) {

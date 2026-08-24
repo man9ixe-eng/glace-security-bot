@@ -9,7 +9,7 @@ module.exports = {
     .setDMPermission(false),
 
   async execute(interaction) {
-    // ✅ fast ack
+    // \u2705 fast ack
     try {
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ ephemeral: true });
@@ -22,7 +22,7 @@ module.exports = {
     // but since we deferred in this command, ensure we end the defer cleanly:
     try {
       if (interaction.deferred && !interaction.replied) {
-        await interaction.editReply({ content: "✅ Close prompt sent." });
+        await interaction.editReply({ content: "\u2705 Close prompt sent." });
       }
     } catch {}
   },

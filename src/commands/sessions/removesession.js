@@ -30,7 +30,7 @@ module.exports = {
     ),
 
   /**
-   * /removesession – Tier 6+ (Corporate and up)
+   * /removesession \u2013 Tier 6+ (Corporate and up)
    */
   async execute(interaction) {
     if (!atLeastTier(interaction.member, 6)) {
@@ -47,7 +47,7 @@ module.exports = {
 
     if (!cardId) {
       return interaction.editReply(
-        '⚠️ I could not parse that Trello card link/ID. Please provide a valid Trello card URL or short ID.',
+        '\u26A0\uFE0F I could not parse that Trello card link/ID. Please provide a valid Trello card URL or short ID.',
       );
     }
 
@@ -58,7 +58,7 @@ module.exports = {
 
     if (!cardRes.ok || !cardRes.data) {
       return interaction.editReply(
-        '⚠️ I could not fetch that Trello card. Check the link/ID and my Trello access.',
+        '\u26A0\uFE0F I could not fetch that Trello card. Check the link/ID and my Trello access.',
       );
     }
 
@@ -72,7 +72,7 @@ module.exports = {
 
       if (diffMs > 0 && diffMs <= oneHourMs) {
         return interaction.editReply(
-          '⛔ You cannot use `/removesession` within **1 hour** of the session due time.\n' +
+          '\u26D4 You cannot use `/removesession` within **1 hour** of the session due time.\n' +
             'Please use `/cancelsession` instead.',
         );
       }
@@ -85,14 +85,14 @@ module.exports = {
 
     if (!archiveRes.ok) {
       return interaction.editReply(
-        '⚠️ I tried to archive that session card, but something went wrong. Please verify my Trello configuration.',
+        '\u26A0\uFE0F I tried to archive that session card, but something went wrong. Please verify my Trello configuration.',
       );
     }
 
     const link = card.shortUrl || card.url || cardInput;
 
     return interaction.editReply(
-      `✅ Archived the session card.\nCard: ${link}`,
+      `\u2705 Archived the session card.\nCard: ${link}`,
     );
   },
 };

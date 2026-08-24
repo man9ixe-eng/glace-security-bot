@@ -5,7 +5,7 @@ const { getTier } = require('./permissions');
 const { TIERS } = require('../config/access');
 
 const DEFAULT_CHANNEL_ID = '1474299478675558565';
-const PANEL_FOOTER = 'Glace Hotels • On-Call Roles';
+const PANEL_FOOTER = 'Glace Hotels \u2022 On-Call Roles';
 
 function channelId() {
   return String(
@@ -55,7 +55,7 @@ function roleForTier(tier) {
 
 function panelPayload() {
   const embed = new EmbedBuilder()
-    .setTitle('★ Staff On-Call Roles')
+    .setTitle('\u2605 Staff On-Call Roles')
     .setDescription([
       'Use this panel to control whether you receive ticket and review pings.',
       '',
@@ -93,7 +93,7 @@ async function ensureReviewOnCallPanel(client) {
   const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   const existing = recent?.find(
     (message) => message.author?.id === client.user?.id
-      && ['Glace Hotels • Review On-Call Roles', PANEL_FOOTER].includes(message.embeds?.[0]?.footer?.text),
+      && ['Glace Hotels \u2022 Review On-Call Roles', PANEL_FOOTER].includes(message.embeds?.[0]?.footer?.text),
   );
 
   if (existing) {
@@ -124,7 +124,7 @@ async function handleReviewOnCallInteraction(interaction) {
 
   if (!selected) {
     await interaction.editReply(
-      '❌ Only current Intern Team+ staff may use the on-call panel.',
+      '\u274C Only current Intern Team+ staff may use the on-call panel.',
     );
     return true;
   }
@@ -134,7 +134,7 @@ async function handleReviewOnCallInteraction(interaction) {
 
   if (!selected.id) {
     await interaction.editReply(
-      `❌ The on-call role for **${selected.label}** is not configured in Render yet.`,
+      `\u274C The on-call role for **${selected.label}** is not configured in Render yet.`,
     );
     return true;
   }
@@ -151,7 +151,7 @@ async function handleReviewOnCallInteraction(interaction) {
         await interaction.member.roles.add(selected.id, 'Member selected Go On Call');
       }
       await interaction.editReply(
-        `✅ You are now **On Call** as **${selected.label}** and will receive its ticket/review pings.`,
+        `\u2705 You are now **On Call** as **${selected.label}** and will receive its ticket/review pings.`,
       );
       return true;
     }
@@ -162,12 +162,12 @@ async function handleReviewOnCallInteraction(interaction) {
     }
     await interaction.editReply(
       removable.length
-        ? '✅ You are now **Off Call**. Your on-call role was removed.'
-        : '✅ You are already **Off Call**.',
+        ? '\u2705 You are now **Off Call**. Your on-call role was removed.'
+        : '\u2705 You are already **Off Call**.',
     );
   } catch (error) {
     await interaction.editReply(
-      `❌ I could not update your on-call role. Make sure the bot has **Manage Roles** and is above every on-call role. (${error.message})`,
+      `\u274C I could not update your on-call role. Make sure the bot has **Manage Roles** and is above every on-call role. (${error.message})`,
     );
   }
 

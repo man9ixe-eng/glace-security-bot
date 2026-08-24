@@ -166,7 +166,7 @@ function renderViewer() {
   const pageTierLabel = $('#pageTierLabel');
   const pageEyebrow = $('#pageEyebrow');
   if (profileName) profileName.textContent = displayName;
-  if (profileRole) profileRole.textContent = previewing ? `${realLabel} • previewing ${viewLabel}` : realLabel;
+  if (profileRole) profileRole.textContent = previewing ? `${realLabel} \u2022 previewing ${viewLabel}` : realLabel;
   if (opsBadge) {
     opsBadge.textContent = previewing ? `${viewLabel} Preview` : realLabel;
     opsBadge.className = `role-chip ${roleClass(viewTier)}`;
@@ -221,15 +221,15 @@ function renderDashboard() {
       : [];
 
   const stats = [];
-  if (capabilities.viewPosts) stats.push(['Staff Updates', d.posts.length, `${d.feed.length} recent staff items`, 'role-intern', '✦']);
-  if (capabilities.viewStaffRequests) stats.push(['My Requests', myPendingRequests, `${requestQueue.length} routed to your review level`, 'role-board', '✉']);
-  if (capabilities.viewActivity) stats.push(['Current Activity', d.activity?.self?.current?.source?.total || 0, d.activity?.self?.current?.met ? 'Current quota met' : 'Current quota in progress', 'role-management', '◫']);
-  if (capabilities.viewLoas) stats.push(['Current LOAs', d.loas.length, `${d.loaHistory.length} recent ended records`, 'role-senior', '◔']);
-  if (capabilities.viewDocuments) stats.push(['Documents', d.documents.length, 'Resources available to your role', 'role-management', '▤']);
-  if (capabilities.viewStaffCases) stats.push(['Staff Actions', openCases, `${d.cases.filter((x) => x.status === 'pending_approval').length} awaiting review`, 'role-management', '◇']);
-  if (capabilities.viewPromotions) stats.push(['Promotion Submissions', pendingPromotions, `${awaitingCompletion} awaiting completion`, 'role-corporate', '♛']);
-  if (capabilities.viewRestrictedRecords) stats.push(['Restricted Records', d.restrictedRecords.filter((x) => x.status !== 'archived').length, 'Confidential records available to you', 'role-board', '◆']);
-  if (capabilities.viewAudit) stats.push(['Audit Activity', d.audit.length, 'Protected actions in your view', 'role-presidential', '⌁']);
+  if (capabilities.viewPosts) stats.push(['Staff Updates', d.posts.length, `${d.feed.length} recent staff items`, 'role-intern', '\u2726']);
+  if (capabilities.viewStaffRequests) stats.push(['My Requests', myPendingRequests, `${requestQueue.length} routed to your review level`, 'role-board', '\u2709']);
+  if (capabilities.viewActivity) stats.push(['Current Activity', d.activity?.self?.current?.source?.total || 0, d.activity?.self?.current?.met ? 'Current quota met' : 'Current quota in progress', 'role-management', '\u25EB']);
+  if (capabilities.viewLoas) stats.push(['Current LOAs', d.loas.length, `${d.loaHistory.length} recent ended records`, 'role-senior', '\u25D4']);
+  if (capabilities.viewDocuments) stats.push(['Documents', d.documents.length, 'Resources available to your role', 'role-management', '\u25A4']);
+  if (capabilities.viewStaffCases) stats.push(['Staff Actions', openCases, `${d.cases.filter((x) => x.status === 'pending_approval').length} awaiting review`, 'role-management', '\u25C7']);
+  if (capabilities.viewPromotions) stats.push(['Promotion Submissions', pendingPromotions, `${awaitingCompletion} awaiting completion`, 'role-corporate', '\u265B']);
+  if (capabilities.viewRestrictedRecords) stats.push(['Restricted Records', d.restrictedRecords.filter((x) => x.status !== 'archived').length, 'Confidential records available to you', 'role-board', '\u25C6']);
+  if (capabilities.viewAudit) stats.push(['Audit Activity', d.audit.length, 'Protected actions in your view', 'role-presidential', '\u2301']);
 
   const dashboardStats = $('#dashboardStats');
   if (dashboardStats) dashboardStats.innerHTML = stats.map((item) => statCard(...item)).join('');
@@ -238,7 +238,7 @@ function renderDashboard() {
   const journeyFeed = $('#journeyFeed');
   if (journeyFeed) journeyFeed.innerHTML = feed.length ? feed.map((entry) => `
     <div class="activity-item">
-      <div class="activity-icon ${roleClass(entry.tier || 3)}">${escapeHtml(entry.icon || '★')}</div>
+      <div class="activity-icon ${roleClass(entry.tier || 3)}">${escapeHtml(entry.icon || '\u2605')}</div>
       <div class="activity-copy"><strong>${escapeHtml(entry.title)}</strong><span>${escapeHtml(entry.detail || '')}</span></div>
       <span class="activity-time">${escapeHtml(relativeTime(entry.createdAt))}</span>
     </div>`).join('') : '<div class="empty-state"><strong>No recent updates</strong>Your available staff updates and LOA activity will appear here.</div>';
@@ -265,21 +265,21 @@ function renderDashboard() {
 
   const approvals = [
     ...(canViewPromotions ? d.promotions.filter((x) => ['board_review', 'returned_to_corporate', 'presidential_review', 'approved_awaiting_completion'].includes(x.status)).map((x) => ({
-      title: `${x.candidateUsername || x.candidateId}: ${x.currentRank} → ${x.proposedRank}`,
-      meta: `${x.submissionNumber} • ${prettify(x.status)}`,
+      title: `${x.candidateUsername || x.candidateId}: ${x.currentRank} \u2192 ${x.proposedRank}`,
+      meta: `${x.submissionNumber} \u2022 ${prettify(x.status)}`,
       tier: x.proposedTier,
       tab: 'promotions',
       promotion: x,
     })) : []),
     ...(canViewCases ? d.cases.filter((x) => x.status === 'pending_approval').map((x) => ({
       title: `${x.caseNumber}: ${x.targetUsername || x.targetId}`,
-      meta: `${prettify(x.actionType)} • awaiting review`,
+      meta: `${prettify(x.actionType)} \u2022 awaiting review`,
       tier: effectiveTier(),
       tab: 'cases',
     })) : []),
     ...requestQueue.map((x) => ({
       title: `${x.requestNumber}: ${x.requesterTag || x.requesterId}`,
-      meta: `${requestTypeLabel(x.type)} • ${prettify(x.status)}`,
+      meta: `${requestTypeLabel(x.type)} \u2022 ${prettify(x.status)}`,
       tier: x.requesterTier,
       tab: 'requests',
       staffRequest: x,
@@ -289,7 +289,7 @@ function renderDashboard() {
   if (approvalPreview && canViewQueue) approvalPreview.innerHTML = approvals.length ? approvals.map((item) => `
     <div class="dashboard-queue-item">
       <button class="activity-item" data-go="${item.tab}" style="width:100%;color:inherit;text-align:left;cursor:pointer">
-        <div class="activity-icon ${roleClass(item.tier)}">↗</div>
+        <div class="activity-icon ${roleClass(item.tier)}">\u2197</div>
         <div class="activity-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.meta)}</span></div>
         <span class="tiny-chip ${roleClass(item.tier)}">Open</span>
       </button>
@@ -297,39 +297,39 @@ function renderDashboard() {
     </div>`).join('') : '<div class="empty-state"><strong>You are all caught up</strong>No items are waiting in the queues available to your role.</div>';
 
   const availableTools = [
-    ['⌂', 'Dashboard', true],
-    ['✉', 'Staff Request Center', capabilities.viewStaffRequests],
-    ['◫', 'LI+ Activity', capabilities.viewActivity],
-    ['♚', 'Staff List', capabilities.viewStaffDirectory],
-    ['★', 'Staff Updates', capabilities.viewPosts],
-    ['◔', 'Leave of Absence', capabilities.viewLoas],
-    ['▤', 'Documentation', capabilities.viewDocuments],
-    ['◇', 'Staff Actions', capabilities.viewStaffCases],
-    ['♛', 'Promotion Submissions', capabilities.viewPromotions],
-    ['◆', 'Restricted Records', capabilities.viewRestrictedRecords],
-    ['⌁', 'Audit Log', capabilities.viewAudit],
+    ['\u2302', 'Dashboard', true],
+    ['\u2709', 'Staff Request Center', capabilities.viewStaffRequests],
+    ['\u25EB', 'LI+ Activity', capabilities.viewActivity],
+    ['\u265A', 'Staff List', capabilities.viewStaffDirectory],
+    ['\u2605', 'Staff Updates', capabilities.viewPosts],
+    ['\u25D4', 'Leave of Absence', capabilities.viewLoas],
+    ['\u25A4', 'Documentation', capabilities.viewDocuments],
+    ['\u25C7', 'Staff Actions', capabilities.viewStaffCases],
+    ['\u265B', 'Promotion Submissions', capabilities.viewPromotions],
+    ['\u25C6', 'Restricted Records', capabilities.viewRestrictedRecords],
+    ['\u2301', 'Audit Log', capabilities.viewAudit],
   ].filter(([, , allowed]) => allowed);
   const rankOverview = $('#rankOverview');
   if (rankOverview) rankOverview.innerHTML = availableTools.map(([icon, label]) => `
     <div class="workspace-access-item">
       <span class="workspace-access-icon">${icon}</span>
       <strong>${escapeHtml(label)}</strong>
-      <span class="workspace-access-check">✓</span>
+      <span class="workspace-access-check">\u2713</span>
     </div>`).join('');
   const workspaceTitle = $('#workspaceTitle');
   if (workspaceTitle) workspaceTitle.textContent = `${roleName(effectiveTier())} Workspace`;
 
   const quickActions = $('#quickActions');
   if (quickActions) quickActions.innerHTML = [
-    ['requests', 'submitStaffRequest', '✉', 'Submit Request'],
-    ['activity', 'viewActivity', '◫', 'View Activity'],
-    ['staff', 'viewStaffDirectory', '♚', 'Staff List'],
-    ['promotions', 'submitPromotion', '♛', 'Submit Promotion'],
-    ['cases', 'createRoutineCase', '◇', 'Staff Action'],
-    ['restricted', 'manageRestrictedRecords', '◆', 'Restricted Record'],
-    ['posts', 'publishUpdate', '✦', 'Post Update'],
-    ['loas', 'viewLoas', '◔', 'View LOAs'],
-    ['documents', 'viewDocuments', '▤', 'Open Documents'],
+    ['requests', 'submitStaffRequest', '\u2709', 'Submit Request'],
+    ['activity', 'viewActivity', '\u25EB', 'View Activity'],
+    ['staff', 'viewStaffDirectory', '\u265A', 'Staff List'],
+    ['promotions', 'submitPromotion', '\u265B', 'Submit Promotion'],
+    ['cases', 'createRoutineCase', '\u25C7', 'Staff Action'],
+    ['restricted', 'manageRestrictedRecords', '\u25C6', 'Restricted Record'],
+    ['posts', 'publishUpdate', '\u2726', 'Post Update'],
+    ['loas', 'viewLoas', '\u25D4', 'View LOAs'],
+    ['documents', 'viewDocuments', '\u25A4', 'Open Documents'],
   ].filter(([, cap]) => capabilities[cap]).map(([tab,, icon,label]) => `<button class="quick-action" data-go="${tab}"><b>${icon}</b><span>${label}</span></button>`).join('') || '<div class="empty-state"><strong>Your workspace is ready</strong>Use the navigation to open the pages assigned to your role.</div>';
 }
 
@@ -348,7 +348,7 @@ function promotionActions(item) {
     actions.push(`<button class="btn small danger" data-promotion-action="board:deny" data-id="${escapeHtml(item.id)}">Deny</button>`);
   }
   if (['board_review', 'returned_to_corporate'].includes(item.status) && c.approvePromotionPresidential) {
-    actions.push(`<button class="btn small gold presidential-override-btn" data-promotion-action="presidential:override" data-id="${escapeHtml(item.id)}">Approve Now · Skip Board</button>`);
+    actions.push(`<button class="btn small gold presidential-override-btn" data-promotion-action="presidential:override" data-id="${escapeHtml(item.id)}">Approve Now \u00B7 Skip Board</button>`);
   }
   if (item.status === 'presidential_review' && c.approvePromotionPresidential) {
     actions.push(`<button class="btn small gold" data-promotion-action="presidential:approve" data-id="${escapeHtml(item.id)}">Presidential Approve</button>`);
@@ -381,8 +381,8 @@ function renderPromotions() {
     const approvals = (item.presidentialApprovals || []).map((x) => x.tag).join(', ') || 'None yet';
     return `<article class="record-card">
       <div class="record-head">
-        <div class="record-title"><h3>${escapeHtml(item.submissionNumber)} — ${escapeHtml(item.candidateUsername || item.candidateId)}</h3>
-          <div class="meta">${escapeHtml(item.currentRank)} → <span class="${roleClass(item.proposedTier)}">${escapeHtml(item.proposedRank)}</span> • Submitted ${formatDate(item.submittedAt)}</div>
+        <div class="record-title"><h3>${escapeHtml(item.submissionNumber)} \u2014 ${escapeHtml(item.candidateUsername || item.candidateId)}</h3>
+          <div class="meta">${escapeHtml(item.currentRank)} \u2192 <span class="${roleClass(item.proposedTier)}">${escapeHtml(item.proposedRank)}</span> \u2022 Submitted ${formatDate(item.submittedAt)}</div>
         </div>${statusChip(item.status)}
       </div>
       <div class="flow-track">${[1,2,3,4,5].map((n) => `<span class="flow-step ${n <= done ? 'done' : ''}"></span>`).join('')}</div>
@@ -463,7 +463,7 @@ function requestRouteLabel(item) {
 
 function staffRequestCard(item) {
   return `<article class="record-card" id="request-${escapeHtml(item.id)}">
-    <div class="record-head"><div class="record-title"><h3>${escapeHtml(item.requestNumber)} — ${escapeHtml(requestTypeLabel(item.type))}</h3><div class="meta">${escapeHtml(item.requesterTag || item.requesterId)} • ${escapeHtml(item.requesterTierLabel || roleName(item.requesterTier))} • ${formatDate(item.submittedAt || item.createdAt)}</div></div>${statusChip(item.status)}</div>
+    <div class="record-head"><div class="record-title"><h3>${escapeHtml(item.requestNumber)} \u2014 ${escapeHtml(requestTypeLabel(item.type))}</h3><div class="meta">${escapeHtml(item.requesterTag || item.requesterId)} \u2022 ${escapeHtml(item.requesterTierLabel || roleName(item.requesterTier))} \u2022 ${formatDate(item.submittedAt || item.createdAt)}</div></div>${statusChip(item.status)}</div>
     ${requestDetails(item)}
     ${item.reviewClaimedByTag && item.status.startsWith('pending_') ? `<div class="review-claim"><strong>Current reviewer:</strong> ${escapeHtml(item.reviewClaimedByTag)}</div>` : ''}
     ${item.decisionNote ? `<div class="record-body"><strong>Decision note</strong>\n${escapeHtml(item.decisionNote)}</div>` : ''}
@@ -541,7 +541,7 @@ function renderActivity() {
   if (breakdown) breakdown.innerHTML = metrics.map(([label, value]) => activityMetric(label, value)).join('');
   if (directory) {
     const rows = state.data.activity?.directory || [];
-    directory.innerHTML = rows.length ? rows.map((item) => `<article class="record-card activity-directory-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.displayName || item.username)}</h3><div class="meta">${escapeHtml(item.tierLabel)} • ${escapeHtml(item.quotaProfile?.label || 'Activity profile')}</div></div><span class="status-chip ${item.current?.met ? 'status-approved' : 'status-pending_corporate'}">${item.current?.met ? 'Quota Met' : 'In Progress'}</span></div><div class="record-details"><span>Total: ${escapeHtml(item.current?.source?.total || 0)}</span><span>Interview: ${escapeHtml(item.current?.source?.interview || 0)}</span><span>Training: ${escapeHtml(item.current?.source?.training || 0)}</span><span>Shift: ${escapeHtml(item.current?.source?.shift || 0)}</span></div></article>`).join('') : '<div class="empty-state"><strong>No tracked LI+ activity</strong>Activity appears after the bot can read the configured Discord session logs.</div>';
+    directory.innerHTML = rows.length ? rows.map((item) => `<article class="record-card activity-directory-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.displayName || item.username)}</h3><div class="meta">${escapeHtml(item.tierLabel)} \u2022 ${escapeHtml(item.quotaProfile?.label || 'Activity profile')}</div></div><span class="status-chip ${item.current?.met ? 'status-approved' : 'status-pending_corporate'}">${item.current?.met ? 'Quota Met' : 'In Progress'}</span></div><div class="record-details"><span>Total: ${escapeHtml(item.current?.source?.total || 0)}</span><span>Interview: ${escapeHtml(item.current?.source?.interview || 0)}</span><span>Training: ${escapeHtml(item.current?.source?.training || 0)}</span><span>Shift: ${escapeHtml(item.current?.source?.shift || 0)}</span></div></article>`).join('') : '<div class="empty-state"><strong>No tracked LI+ activity</strong>Activity appears after the bot can read the configured Discord session logs.</div>';
   }
 }
 
@@ -560,7 +560,7 @@ function renderStaffDirectory() {
     return;
   }
   if (status) status.innerHTML = `<strong>${escapeHtml((directory.members || []).length)} current Intern+ staff</strong> synced from Roblox community ${escapeHtml(directory.groupId || '')}.`;
-  if (list) list.innerHTML = (directory.members || []).length ? directory.members.map((item) => `<article class="staff-directory-card ${roleClass(item.tier)}"><div class="staff-directory-badge">${item.tier === 8 ? '♛' : '★'}</div><div><h3>${escapeHtml(item.robloxDisplayName || item.robloxUsername)}</h3><p>@${escapeHtml(item.robloxUsername)} • ${escapeHtml(item.rankName)}</p><span>${escapeHtml(item.tierLabel)}${item.linked ? ` • Discord: ${escapeHtml(item.discordDisplayName || item.discordUserId)}` : ' • Discord not matched'}</span>${item.timezone ? `<small>Timezone: ${escapeHtml(item.timezone)}</small>` : ''}</div></article>`).join('') : '<div class="empty-state"><strong>No Intern+ Roblox members found</strong>Check the group rank names and ROBLOX_GROUP_ID.</div>';
+  if (list) list.innerHTML = (directory.members || []).length ? directory.members.map((item) => `<article class="staff-directory-card ${roleClass(item.tier)}"><div class="staff-directory-badge">${item.tier === 8 ? '\u265B' : '\u2605'}</div><div><h3>${escapeHtml(item.robloxDisplayName || item.robloxUsername)}</h3><p>@${escapeHtml(item.robloxUsername)} \u2022 ${escapeHtml(item.rankName)}</p><span>${escapeHtml(item.tierLabel)}${item.linked ? ` \u2022 Discord: ${escapeHtml(item.discordDisplayName || item.discordUserId)}` : ' \u2022 Discord not matched'}</span>${item.timezone ? `<small>Timezone: ${escapeHtml(item.timezone)}</small>` : ''}</div></article>`).join('') : '<div class="empty-state"><strong>No Intern+ Roblox members found</strong>Check the group rank names and ROBLOX_GROUP_ID.</div>';
 }
 
 function loadReturnedStaffRequest(id) {
@@ -595,30 +595,30 @@ function renderCases() {
       actions.push(`<button class="btn small ghost" data-case-action="closed" data-id="${escapeHtml(item.id)}">Close</button>`);
       actions.push(`<button class="btn small danger" data-case-action="reversed" data-id="${escapeHtml(item.id)}">Reverse</button>`);
     }
-    return `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.caseNumber)} — ${escapeHtml(item.targetUsername || item.targetId)}</h3><div class="meta">${escapeHtml(prettify(item.actionType))} • ${escapeHtml(item.targetRank || 'Rank not recorded')} • ${formatDate(item.createdAt)}</div></div>${statusChip(item.status)}</div><div class="record-body">${escapeHtml(item.reason)}</div><div class="record-details"><span>Issued by ${escapeHtml(item.createdByTag || 'Unknown')}</span>${item.length ? `<span>Length: ${escapeHtml(item.length)}</span>` : ''}${item.staffWarningCount !== null ? `<span>Warnings: ${escapeHtml(item.staffWarningCount)}</span>` : ''}${item.evidence ? `<span>Evidence: ${escapeHtml(item.evidence)}</span>` : ''}</div>${item.decisionReason ? `<div class="record-body"><strong>Decision</strong>\n${escapeHtml(item.decisionReason)}</div>` : ''}<div class="record-actions">${actions.join('')}</div></article>`;
+    return `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.caseNumber)} \u2014 ${escapeHtml(item.targetUsername || item.targetId)}</h3><div class="meta">${escapeHtml(prettify(item.actionType))} \u2022 ${escapeHtml(item.targetRank || 'Rank not recorded')} \u2022 ${formatDate(item.createdAt)}</div></div>${statusChip(item.status)}</div><div class="record-body">${escapeHtml(item.reason)}</div><div class="record-details"><span>Issued by ${escapeHtml(item.createdByTag || 'Unknown')}</span>${item.length ? `<span>Length: ${escapeHtml(item.length)}</span>` : ''}${item.staffWarningCount !== null ? `<span>Warnings: ${escapeHtml(item.staffWarningCount)}</span>` : ''}${item.evidence ? `<span>Evidence: ${escapeHtml(item.evidence)}</span>` : ''}</div>${item.decisionReason ? `<div class="record-body"><strong>Decision</strong>\n${escapeHtml(item.decisionReason)}</div>` : ''}<div class="record-actions">${actions.join('')}</div></article>`;
   }).join('') : '<div class="empty-state"><strong>No staff actions</strong>Approved and pending staff actions will be stored here.</div>';
 }
 
 function renderRestricted() {
-  $('#restrictedList').innerHTML = state.data.restrictedRecords.length ? state.data.restrictedRecords.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.recordNumber)} — ${escapeHtml(item.subjectName || item.subjectId)}</h3><div class="meta">${escapeHtml(item.category)} • ${formatDate(item.createdAt)}</div></div>${statusChip(item.status)}</div><div class="record-body">${escapeHtml(item.summary)}</div>${item.evidence ? `<div class="record-body"><strong>Evidence</strong>\n${escapeHtml(item.evidence)}</div>` : ''}${item.resolution ? `<div class="record-body"><strong>Resolution</strong>\n${escapeHtml(item.resolution)}</div>` : ''}<div class="record-details"><span>Created by ${escapeHtml(item.createdByTag || 'Unknown')}</span><span>Every view and edit is auditable</span></div><div class="record-actions">${isPreviewing() ? '<span class="preview-lock-note">Preview only</span>' : `<button class="btn small ghost" data-restricted-update="${escapeHtml(item.id)}">Update Record</button>`}</div></article>`).join('') : '<div class="empty-state"><strong>No restricted records</strong>Board-level investigations and confidential decisions will remain here.</div>';
+  $('#restrictedList').innerHTML = state.data.restrictedRecords.length ? state.data.restrictedRecords.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.recordNumber)} \u2014 ${escapeHtml(item.subjectName || item.subjectId)}</h3><div class="meta">${escapeHtml(item.category)} \u2022 ${formatDate(item.createdAt)}</div></div>${statusChip(item.status)}</div><div class="record-body">${escapeHtml(item.summary)}</div>${item.evidence ? `<div class="record-body"><strong>Evidence</strong>\n${escapeHtml(item.evidence)}</div>` : ''}${item.resolution ? `<div class="record-body"><strong>Resolution</strong>\n${escapeHtml(item.resolution)}</div>` : ''}<div class="record-details"><span>Created by ${escapeHtml(item.createdByTag || 'Unknown')}</span><span>Every view and edit is auditable</span></div><div class="record-actions">${isPreviewing() ? '<span class="preview-lock-note">Preview only</span>' : `<button class="btn small ghost" data-restricted-update="${escapeHtml(item.id)}">Update Record</button>`}</div></article>`).join('') : '<div class="empty-state"><strong>No restricted records</strong>Board-level investigations and confidential decisions will remain here.</div>';
 }
 
 function renderDocuments() {
   const visibleDocuments = state.data.documents.filter((item) => effectiveTier() >= Number(item.visibilityTier || 4));
-  $('#documentList').innerHTML = visibleDocuments.length ? visibleDocuments.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.title)}</h3><div class="meta">${escapeHtml(item.category)} • Updated ${formatDate(item.updatedAt)}</div></div><span class="tiny-chip ${roleClass(item.visibilityTier)}">${escapeHtml(roleName(item.visibilityTier))}+</span></div><div class="record-body">${escapeHtml(item.content)}</div><div class="record-details"><span>Published by ${escapeHtml(item.createdByTag || 'Unknown')}</span></div></article>`).join('') : '<div class="empty-state"><strong>No documents available</strong>Documents visible to your rank will appear here.</div>';
+  $('#documentList').innerHTML = visibleDocuments.length ? visibleDocuments.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.title)}</h3><div class="meta">${escapeHtml(item.category)} \u2022 Updated ${formatDate(item.updatedAt)}</div></div><span class="tiny-chip ${roleClass(item.visibilityTier)}">${escapeHtml(roleName(item.visibilityTier))}+</span></div><div class="record-body">${escapeHtml(item.content)}</div><div class="record-details"><span>Published by ${escapeHtml(item.createdByTag || 'Unknown')}</span></div></article>`).join('') : '<div class="empty-state"><strong>No documents available</strong>Documents visible to your rank will appear here.</div>';
 }
 
 function renderPosts() {
-  $('#postList').innerHTML = state.data.posts.length ? state.data.posts.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.title)}</h3><div class="meta">${escapeHtml(prettify(item.type))} • ${formatDate(item.createdAt)}</div></div>${statusChip(item.posted ? 'approved' : 'pending_approval')}</div><div class="record-body">${escapeHtml(item.content)}</div><div class="record-details"><span>Created by ${escapeHtml(item.createdByTag || 'Unknown')}</span><span>${item.posted ? 'Posted to Discord' : 'Saved; Discord channel not configured'}</span></div></article>`).join('') : '<div class="empty-state"><strong>No schedules or updates</strong>Published posts will appear here.</div>';
+  $('#postList').innerHTML = state.data.posts.length ? state.data.posts.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.title)}</h3><div class="meta">${escapeHtml(prettify(item.type))} \u2022 ${formatDate(item.createdAt)}</div></div>${statusChip(item.posted ? 'approved' : 'pending_approval')}</div><div class="record-body">${escapeHtml(item.content)}</div><div class="record-details"><span>Created by ${escapeHtml(item.createdByTag || 'Unknown')}</span><span>${item.posted ? 'Posted to Discord' : 'Saved; Discord channel not configured'}</span></div></article>`).join('') : '<div class="empty-state"><strong>No schedules or updates</strong>Published posts will appear here.</div>';
 }
 
 function renderLoas() {
-  $('#loaList').innerHTML = state.data.loas.length ? state.data.loas.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.originalDisplayName || item.staffCardName || item.userId)}</h3><div class="meta">${escapeHtml(item.staffClassLabel || item.loaType || 'Staff')} • ${escapeHtml(item.officialStartDate || 'Unknown')} to ${escapeHtml(item.officialEndDate || 'Unknown')}</div></div>${statusChip('active')}</div><div class="record-body">${escapeHtml(item.reason || 'No reason recorded.')}</div><div class="record-details"><span>Reviewer: ${escapeHtml(item.reviewerUsername || 'Unknown')}</span></div></article>`).join('') : '<div class="empty-state"><strong>No active LOAs</strong>The current LOA display is clear.</div>';
+  $('#loaList').innerHTML = state.data.loas.length ? state.data.loas.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.originalDisplayName || item.staffCardName || item.userId)}</h3><div class="meta">${escapeHtml(item.staffClassLabel || item.loaType || 'Staff')} \u2022 ${escapeHtml(item.officialStartDate || 'Unknown')} to ${escapeHtml(item.officialEndDate || 'Unknown')}</div></div>${statusChip('active')}</div><div class="record-body">${escapeHtml(item.reason || 'No reason recorded.')}</div><div class="record-details"><span>Reviewer: ${escapeHtml(item.reviewerUsername || 'Unknown')}</span></div></article>`).join('') : '<div class="empty-state"><strong>No active LOAs</strong>The current LOA display is clear.</div>';
   $('#loaHistoryList').innerHTML = state.data.loaHistory.length ? state.data.loaHistory.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(item.originalDisplayName || item.staffCardName || item.userId)}</h3><div class="meta">${escapeHtml(item.officialStartDate || 'Unknown')} to ${escapeHtml(item.officialEndDate || 'Unknown')}</div></div>${statusChip('closed')}</div><div class="record-body">${escapeHtml(item.reason || 'No reason recorded.')}</div><div class="record-details"><span>Ended by ${escapeHtml(item.endedByTag || item.endedById || 'Unknown')}</span><span>${formatDate(item.endedAt)}</span></div></article>`).join('') : '<div class="empty-state"><strong>No LOA history yet</strong>Ended LOAs will remain available here.</div>';
 }
 
 function renderAudit() {
-  $('#auditList').innerHTML = state.data.audit.length ? state.data.audit.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(prettify(item.action))}</h3><div class="meta">${escapeHtml(item.actorTag || 'Unknown actor')} • ${formatDate(item.createdAt)}</div></div><span class="tiny-chip role-board">Audit</span></div><div class="record-body">${escapeHtml(JSON.stringify(item.details || {}, null, 2))}</div></article>`).join('') : '<div class="empty-state"><strong>No audit entries</strong>High-impact website and bot activity will appear here.</div>';
+  $('#auditList').innerHTML = state.data.audit.length ? state.data.audit.map((item) => `<article class="record-card"><div class="record-head"><div class="record-title"><h3>${escapeHtml(prettify(item.action))}</h3><div class="meta">${escapeHtml(item.actorTag || 'Unknown actor')} \u2022 ${formatDate(item.createdAt)}</div></div><span class="tiny-chip role-board">Audit</span></div><div class="record-body">${escapeHtml(JSON.stringify(item.details || {}, null, 2))}</div></article>`).join('') : '<div class="empty-state"><strong>No audit entries</strong>High-impact website and bot activity will appear here.</div>';
 }
 
 function renderAll() {

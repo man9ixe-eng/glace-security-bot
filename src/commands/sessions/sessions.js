@@ -112,10 +112,10 @@ function normalizeSessionType(type) {
 
 function sessionEmoji(type) {
   const normalized = normalizeSessionType(type);
-  if (normalized === 'training') return '🔴';
-  if (normalized === 'interview') return '🟡';
-  if (normalized === 'mass_shift') return '🟣';
-  return '🔹';
+  if (normalized === 'training') return '\uD83D\uDD34';
+  if (normalized === 'interview') return '\uD83D\uDFE1';
+  if (normalized === 'mass_shift') return '\uD83D\uDFE3';
+  return '\uD83D\uDD39';
 }
 
 function sessionLabel(type) {
@@ -139,7 +139,7 @@ function formatWindowLabel(range) {
     year: 'numeric',
   });
 
-  return `${formatter.format(new Date(range.startMs))} — ${formatter.format(new Date(range.endMs))}`;
+  return `${formatter.format(new Date(range.startMs))} \u2014 ${formatter.format(new Date(range.endMs))}`;
 }
 
 function getTimeZoneDisplayName(timeZone) {
@@ -176,9 +176,9 @@ module.exports = {
         .setRequired(false)
         .addChoices(
           { name: 'All', value: 'all' },
-          { name: '🟡 Interview', value: 'interview' },
-          { name: '🔴 Training', value: 'training' },
-          { name: '🟣 Mass Shift', value: 'mass_shift' },
+          { name: '\uD83D\uDFE1 Interview', value: 'interview' },
+          { name: '\uD83D\uDD34 Training', value: 'training' },
+          { name: '\uD83D\uDFE3 Mass Shift', value: 'mass_shift' },
         ),
     )
     .addStringOption((option) =>
@@ -208,7 +208,7 @@ module.exports = {
       cards = await listSessionCards();
     } catch (err) {
       console.error('[SESSIONS] Failed to list Trello sessions:', err);
-      await interaction.editReply('❌ I could not load Trello sessions. Please check the Trello env vars/list IDs.');
+      await interaction.editReply('\u274C I could not load Trello sessions. Please check the Trello env vars/list IDs.');
       return;
     }
 
@@ -231,7 +231,7 @@ module.exports = {
     const lines = shown.map((card, index) => {
       const unix = Math.floor(card.dueMs / 1000);
       const url = card.shortUrl || card.url || `https://trello.com/c/${card.id}`;
-      const done = card.dueComplete ? ' ✅' : '';
+      const done = card.dueComplete ? ' \u2705' : '';
       return [
         `**${index + 1}. ${sessionEmoji(card.normalizedType)} ${sessionLabel(card.normalizedType)}${done}**`,
         `Host: ${extractHost(card.name)}`,
@@ -242,13 +242,13 @@ module.exports = {
     });
 
     const embed = new EmbedBuilder()
-      .setTitle(`📅 Sessions • ${range.label}`)
+      .setTitle(`\uD83D\uDCC5 Sessions \u2022 ${range.label}`)
       .setColor(0x3b82f6)
       .setDescription(lines.length ? lines.join('\n\n') : emptyText)
       .addFields(
         {
           name: 'Legend',
-          value: '🟡 Interview • 🔴 Training • 🟣 Mass Shift',
+          value: '\uD83D\uDFE1 Interview \u2022 \uD83D\uDD34 Training \u2022 \uD83D\uDFE3 Mass Shift',
           inline: false,
         },
         {

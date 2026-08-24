@@ -41,7 +41,7 @@ async function requireTicketSystem(interaction) {
   const missing = getTicketConfigMissing();
   if (!missing.length) return true;
   await respondEphemeral(interaction, {
-    content: `âŒ The ticket system is not configured yet. Missing: ${missing.join(', ')}.`,
+    content: `\u274C The ticket system is not configured yet. Missing: ${missing.join(', ')}.`,
   });
   return false;
 }
@@ -233,13 +233,13 @@ function buildTicketPermissions(guild, typeKey, openerId, claimerIdOrNull) {
     PermissionsBitField.Flags.ReadMessageHistory,
     PermissionsBitField.Flags.AttachFiles,
     PermissionsBitField.Flags.EmbedLinks,
-    PermissionsBitField.Flags.UseApplicationCommands, // âœ…
+    PermissionsBitField.Flags.UseApplicationCommands, // \u2705
   ];
 
   const staffView = [
     PermissionsBitField.Flags.ViewChannel,
     PermissionsBitField.Flags.ReadMessageHistory,
-    PermissionsBitField.Flags.UseApplicationCommands, // âœ…
+    PermissionsBitField.Flags.UseApplicationCommands, // \u2705
   ];
 
   const staffTalk = [
@@ -248,7 +248,7 @@ function buildTicketPermissions(guild, typeKey, openerId, claimerIdOrNull) {
     PermissionsBitField.Flags.SendMessages,
     PermissionsBitField.Flags.AttachFiles,
     PermissionsBitField.Flags.EmbedLinks,
-    PermissionsBitField.Flags.UseApplicationCommands, // âœ…
+    PermissionsBitField.Flags.UseApplicationCommands, // \u2705
   ];
 
   const claimerAllow = [
@@ -257,7 +257,7 @@ function buildTicketPermissions(guild, typeKey, openerId, claimerIdOrNull) {
     PermissionsBitField.Flags.ReadMessageHistory,
     PermissionsBitField.Flags.AttachFiles,
     PermissionsBitField.Flags.EmbedLinks,
-    PermissionsBitField.Flags.UseApplicationCommands, // âœ…
+    PermissionsBitField.Flags.UseApplicationCommands, // \u2705
   ];
 
   const viewerRoleIds = getViewerRolesForType(typeKey);
@@ -342,10 +342,10 @@ async function postPanel(interaction, typeKeyRaw) {
   if (!await requireTicketSystem(interaction)) return null;
   const embed = buildPanelEmbed(typeKeyRaw);
   const row = buildPanelRow(typeKeyRaw);
-  if (!embed || !row) return respondEphemeral(interaction, { content: "âŒ Invalid ticket type." });
+  if (!embed || !row) return respondEphemeral(interaction, { content: "\u274C Invalid ticket type." });
 
   await interaction.channel.send({ embeds: [embed], components: [row] });
-  return respondEphemeral(interaction, { content: "âœ… Panel posted." });
+  return respondEphemeral(interaction, { content: "\u2705 Panel posted." });
 }
 
 // -----------------------------
@@ -354,19 +354,19 @@ async function postPanel(interaction, typeKeyRaw) {
 async function createTicketChannel(interaction, typeKeyRaw) {
   if (!await requireTicketSystem(interaction)) return null;
   const { typeKey, type } = getType(typeKeyRaw);
-  if (!type) return respondEphemeral(interaction, { content: "âŒ Unknown ticket type." });
+  if (!type) return respondEphemeral(interaction, { content: "\u274C Unknown ticket type." });
 
   const guild = interaction.guild;
   const opener = interaction.user;
 
   const supportCategory = guild.channels.cache.get(cfg.SUPPORT_CATEGORY_ID);
   if (!supportCategory) {
-    return respondEphemeral(interaction, { content: "âŒ SUPPORT_CATEGORY_ID invalid or bot cannot access it." });
+    return respondEphemeral(interaction, { content: "\u274C SUPPORT_CATEGORY_ID invalid or bot cannot access it." });
   }
 
   const result = await getNextNumberAndBump(guild, typeKey, opener.id);
   if (result.blocked) {
-    return respondEphemeral(interaction, { content: `âŒ You already have an open ticket: <#${result.channelId}>` });
+    return respondEphemeral(interaction, { content: `\u274C You already have an open ticket: <#${result.channelId}>` });
   }
 
   const num = result.number;
@@ -406,18 +406,18 @@ async function createTicketChannel(interaction, typeKeyRaw) {
     )
     .setColor(typeColor(typeKey));
 
-  // âœ… Ping role + opener
+  // \u2705 Ping role + opener
   const pingText = [pingRole ? `<@&${pingRole.id}>` : null, `<@${opener.id}>`].filter(Boolean).join(" ");
 
   await channel.send({ content: pingText, embeds: [openEmbed] });
 
-  // âœ… Make it easy to jump (Discord wonâ€™t auto-switch channels, but link button = instant)
+  // \u2705 Make it easy to jump (Discord won\u2019t auto-switch channels, but link button = instant)
   const jumpRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel("Go to your ticket").setURL(channel.url)
   );
 
   return respondEphemeral(interaction, {
-    content: `âœ… Ticket created: ${channel}`,
+    content: `\u2705 Ticket created: ${channel}`,
     components: [jumpRow],
   });
 }
@@ -428,22 +428,22 @@ async function createTicketChannel(interaction, typeKeyRaw) {
 async function claimTicket(interaction) {
   if (!await requireTicketSystem(interaction)) return null;
   const channel = interaction.channel;
-  if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "âŒ Use inside a ticket." });
+  if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "\u274C Use inside a ticket." });
 
   const meta = parseTicketTopic(channel.topic);
   const typeKey = meta.typeKey || normalizeTypeKey(channel.name.split("-")[0]);
   const type = cfg.TYPES[typeKey];
-  if (!type) return respondEphemeral(interaction, { content: "âŒ Could not determine ticket type." });
+  if (!type) return respondEphemeral(interaction, { content: "\u274C Could not determine ticket type." });
 
   if (!canClaimType(interaction.member, typeKey)) {
-    return respondEphemeral(interaction, { content: "âŒ You canâ€™t claim this ticket type." });
+    return respondEphemeral(interaction, { content: "\u274C You can\u2019t claim this ticket type." });
   }
 
   if (meta.claimerId && meta.claimerId !== interaction.user.id) {
-    return respondEphemeral(interaction, { content: "âŒ Already claimed by someone else." });
+    return respondEphemeral(interaction, { content: "\u274C Already claimed by someone else." });
   }
 
-  // âœ… Rebuild overwrites so staff becomes VIEW ONLY after claim
+  // \u2705 Rebuild overwrites so staff becomes VIEW ONLY after claim
   await channel.permissionOverwrites.set(
     buildTicketPermissions(interaction.guild, typeKey, meta.openerId || interaction.user.id, interaction.user.id)
   );
@@ -468,7 +468,7 @@ async function claimTicket(interaction) {
   await channel.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle("Ticket Claimed âœ…")
+        .setTitle("Ticket Claimed \u2705")
         .setDescription(`**Claimed by:** <@${interaction.user.id}>\n**Type:** ${type.label}`)
         .setColor(typeColor(typeKey)),
     ],
@@ -483,7 +483,7 @@ async function claimTicket(interaction) {
     }).catch(() => {});
   }
 
-  return respondEphemeral(interaction, { content: "âœ… Ticket claimed." });
+  return respondEphemeral(interaction, { content: "\u2705 Ticket claimed." });
 }
 
 // -----------------------------
@@ -492,12 +492,12 @@ async function claimTicket(interaction) {
 async function promptClose(interaction) {
   if (!await requireTicketSystem(interaction)) return null;
   const channel = interaction.channel;
-  if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "âŒ Use inside a ticket." });
+  if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "\u274C Use inside a ticket." });
 
   const meta = parseTicketTopic(channel.topic);
-  if (!meta.openerId) return respondEphemeral(interaction, { content: "âŒ Opener not found in topic." });
+  if (!meta.openerId) return respondEphemeral(interaction, { content: "\u274C Opener not found in topic." });
 
-  // Dedupe: donâ€™t spam close prompts
+  // Dedupe: don\u2019t spam close prompts
   try {
     const recent = await channel.messages.fetch({ limit: 25 });
     const already = recent.find((m) => {
@@ -507,7 +507,7 @@ async function promptClose(interaction) {
         row.components?.some((c) => String(c.customId || "").startsWith("ticket:closeyes:"))
       );
     });
-    if (already) return respondEphemeral(interaction, { content: "âœ… Close prompt already sent in this ticket." });
+    if (already) return respondEphemeral(interaction, { content: "\u2705 Close prompt already sent in this ticket." });
   } catch {}
 
   const row = new ActionRowBuilder().addComponents(
@@ -526,7 +526,7 @@ async function promptClose(interaction) {
     components: [row],
   });
 
-  return respondEphemeral(interaction, { content: "âœ… Close prompt sent." });
+  return respondEphemeral(interaction, { content: "\u2705 Close prompt sent." });
 }
 
 // -----------------------------
@@ -591,7 +591,7 @@ async function forceCloseTicket(interaction, reason = "No reason provided") {
 
   const channel = interaction.channel;
   if (!isTicketChannel(channel)) {
-    await respondEphemeral(interaction, { content: "âŒ Use inside a ticket." });
+    await respondEphemeral(interaction, { content: "\u274C Use inside a ticket." });
     return;
   }
 
@@ -605,7 +605,7 @@ async function forceCloseTicket(interaction, reason = "No reason provided") {
   const isClaimer = meta.claimerId && meta.claimerId === interaction.user.id;
 
   if (!(isClaimer || isAdmin || isReviewer)) {
-    await interaction.editReply({ content: "âŒ Only claimer (or Admin/Reviewer) can force close." }).catch(() => {});
+    await interaction.editReply({ content: "\u274C Only claimer (or Admin/Reviewer) can force close." }).catch(() => {});
     return;
   }
 
@@ -617,8 +617,8 @@ async function forceCloseTicket(interaction, reason = "No reason provided") {
   await interaction
     .editReply({
       content: logged
-        ? "âœ… Closing ticketâ€¦ transcript logged."
-        : "âœ… Closing ticketâ€¦ (âš ï¸ No log channel configured/found).",
+        ? "\u2705 Closing ticket\u2026 transcript logged."
+        : "\u2705 Closing ticket\u2026 (\u26A0\uFE0F No log channel configured/found).",
     })
     .catch(() => {});
 
@@ -629,7 +629,7 @@ async function forceCloseTicket(interaction, reason = "No reason provided") {
     await interaction
       .editReply({
         content:
-          "âŒ Transcript logged, but I **could not delete the channel**. Ensure bot role is ABOVE any ticket roles and has Manage Channels (Administrator usually covers this).",
+          "\u274C Transcript logged, but I **could not delete the channel**. Ensure bot role is ABOVE any ticket roles and has Manage Channels (Administrator usually covers this).",
       })
       .catch(() => {});
   }
@@ -641,7 +641,7 @@ async function forceCloseTicket(interaction, reason = "No reason provided") {
 async function addUserToTicket(interaction, user, reason = "No reason provided") {
   if (!await requireTicketSystem(interaction)) return null;
   const channel = interaction.channel;
-  if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "âŒ Use inside a ticket." });
+  if (!isTicketChannel(channel)) return respondEphemeral(interaction, { content: "\u274C Use inside a ticket." });
 
   const meta = parseTicketTopic(channel.topic);
 
@@ -651,7 +651,7 @@ async function addUserToTicket(interaction, user, reason = "No reason provided")
   const isClaimer = meta.claimerId && meta.claimerId === interaction.user.id;
 
   if (!(isClaimer || isAdmin || isReviewer)) {
-    return respondEphemeral(interaction, { content: "âŒ Only claimer (or Admin/Reviewer) can add users." });
+    return respondEphemeral(interaction, { content: "\u274C Only claimer (or Admin/Reviewer) can add users." });
   }
 
   await channel.permissionOverwrites.edit(user.id, {
@@ -663,8 +663,8 @@ async function addUserToTicket(interaction, user, reason = "No reason provided")
     UseApplicationCommands: true,
   });
 
-  await channel.send(`âœ… Added <@${user.id}> to this ticket.\n**Reason:** ${reason}`);
-  return respondEphemeral(interaction, { content: "âœ… User added." });
+  await channel.send(`\u2705 Added <@${user.id}> to this ticket.\n**Reason:** ${reason}`);
+  return respondEphemeral(interaction, { content: "\u2705 User added." });
 }
 
 // -----------------------------
@@ -681,23 +681,23 @@ async function handleTicketControlButton(interaction) {
   const openerId = parts[3];
 
   if (interaction.channelId !== channelId) {
-    await respondEphemeral(interaction, { content: "âŒ Wrong channel." });
+    await respondEphemeral(interaction, { content: "\u274C Wrong channel." });
     return true;
   }
   if (interaction.user.id !== openerId) {
-    await respondEphemeral(interaction, { content: "âŒ Only the opener can answer this." });
+    await respondEphemeral(interaction, { content: "\u274C Only the opener can answer this." });
     return true;
   }
 
   if (action === "closeno") {
-    await interaction.update({ content: "âœ… Okay â€” please type what you still need help with.", components: [] }).catch(() => {});
+    await interaction.update({ content: "\u2705 Okay \u2014 please type what you still need help with.", components: [] }).catch(() => {});
     const meta = parseTicketTopic(interaction.channel.topic);
     if (meta.claimerId) await interaction.channel.send(`<@${meta.claimerId}>, opener still needs help.`).catch(() => {});
     return true;
   }
 
   // YES
-  await interaction.update({ content: "âœ… Closing ticketâ€¦", components: [] }).catch(() => {});
+  await interaction.update({ content: "\u2705 Closing ticket\u2026", components: [] }).catch(() => {});
   const channel = interaction.channel;
   const meta = parseTicketTopic(channel.topic);
   const typeKey = meta.typeKey || normalizeTypeKey(channel.name.split("-")[0]);
@@ -711,7 +711,7 @@ async function handleTicketControlButton(interaction) {
     await channel.delete("Ticket closed by opener (YES)");
   } catch (e) {
     console.error("[TICKETS] Delete failed:", e);
-    await channel.send("âŒ Transcript logged, but I **canâ€™t delete this channel**.").catch(() => {});
+    await channel.send("\u274C Transcript logged, but I **can\u2019t delete this channel**.").catch(() => {});
   }
 
   return true;

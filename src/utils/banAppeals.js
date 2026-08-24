@@ -59,7 +59,7 @@ const RULES = [
   ["5", "Rule 5 - Allowed languages", "Allowed languages", "Please explain what happened and how you will make sure you only use the allowed languages in Glace moving forward."],
   ["6", "Rule 6 - No swearing", "No swearing", "Please explain what happened in general terms and how you will control your language in Glace moving forward."],
   ["7", "Rule 7 - No inappropriate content", "No inappropriate content", "Without reposting or describing anything graphic in detail, please explain what happened in general terms and why it was not okay for Glace."],
-  ["8", "Rule 8 - No personal information", "No personal information", "Without repeating any personal or private information, please explain what happened in general terms and how you will protect others’ privacy if allowed back."],
+  ["8", "Rule 8 - No personal information", "No personal information", "Without repeating any personal or private information, please explain what happened in general terms and how you will protect others\u2019 privacy if allowed back."],
   ["9", "Rule 9 - No advertising", "No advertising", "Please explain what kind of promotion happened and how you will avoid advertising or self-promotion in Glace moving forward."],
   ["10", "Rule 10 - No spamming", "No spamming", "Please explain what happened in general terms and how you will avoid spam or disruptive behavior if allowed back."],
   ["11", "Rule 11 - Voice channel conduct", "Voice channel conduct", "Please explain what happened in voice chat and how you will behave respectfully in voice channels if allowed back."],
@@ -72,7 +72,7 @@ const RULES = [
   ["18", "Rule 18 - No fake or edited evidence", "No fake or edited evidence", "Without reposting evidence or naming anyone involved, please explain what happened in general terms and why false evidence is harmful."],
   ["19", "Rule 19 - Reporter confidentiality", "Reporter confidentiality", "Without naming the reporter or sharing confidential details, please explain what happened and how you will respect private reports moving forward."],
   ["20", "Rule 20 - Discord Terms/Guidelines", "Discord Terms/Guidelines", "Please explain what happened in general terms and how you will follow Discord policies inside Glace moving forward."],
-  ["21", "Rule 21 - Age requirement", "Age requirement", "Please explain why this ban should be reviewed and confirm that you understand Discord’s age requirement."],
+  ["21", "Rule 21 - Age requirement", "Age requirement", "Please explain why this ban should be reviewed and confirm that you understand Discord\u2019s age requirement."],
 ].map(([id, label, title, customQuestion]) => ({ id, label, title, customQuestion }));
 
 const SECOND_QUESTION =
@@ -374,7 +374,7 @@ function buildAppealPanelEmbed() {
         "",
         "The bot will check your Discord account automatically. If you have an eligible ban appeal, a private appeal channel will be created for you.",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         `${getAppealsServerEmoji("approved")} **Before You Start**`,
         "",
@@ -391,7 +391,7 @@ function buildAppealPanelEmbed() {
         "Your answers should focus on what happened in general terms, what you learned, and how you will improve.",
       ].join("\n")
     )
-    .setFooter({ text: "Glace Hotels • Ban Appeals" })
+    .setFooter({ text: "Glace Hotels \u2022 Ban Appeals" })
     .setTimestamp(new Date());
 }
 
@@ -485,20 +485,20 @@ function buildAppealQuestionsEmbed(record) {
         "",
         "This private channel was created for your ban appeal. Please read everything carefully before answering.",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "## Your Ban Information",
         "",
         `**Rule Broken:** ${record.ruleLabel}`,
         `**Appeal Opened:** ${formatDateShort(record.availableAt || Date.now())}`,
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "## Privacy Reminder",
         "",
         PRIVACY_WARNING,
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "## Appeal Questions",
         "",
@@ -508,9 +508,9 @@ function buildAppealQuestionsEmbed(record) {
         "",
         `**2. ${SECOND_QUESTION}**`,
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
-        "Once you send your answers, I’ll ask you to confirm before your appeal is submitted.",
+        "Once you send your answers, I\u2019ll ask you to confirm before your appeal is submitted.",
       ].join("\n")
     )
     .setFooter({ text: `Appeal Case ${record.id}` })
@@ -538,7 +538,7 @@ function buildConfirmEmbed(record, answer) {
       [
         "Please review your answers before submitting.",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "## Before You Submit",
         "",
@@ -548,7 +548,7 @@ function buildConfirmEmbed(record, answer) {
         "",
         "If Discord blocks the DM, your appeal will still be reviewed here. DMs are only for result notifications.",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "Once you submit your appeal:",
         "",
@@ -556,7 +556,7 @@ function buildConfirmEmbed(record, answer) {
         "- Your appeal will be sent to the Glace Hotels Corporate Team.",
         "- A private review thread will be created in the main Glace server.",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "**Your Response:**",
         trimEmbedValue(answer, 3500),
@@ -733,7 +733,7 @@ function buildReviewEmbed(record) {
       [
         "A new ban appeal has been submitted.",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "## User Information",
         "",
@@ -744,7 +744,7 @@ function buildReviewEmbed(record) {
         `**Appeal Opened:** ${formatDateShort(record.availableAt || record.bannedAt)}`,
         `**Appeal Submitted:** ${formatDateShort(record.submittedAt || Date.now())}`,
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         "## Appeal Response",
         "",
@@ -752,7 +752,7 @@ function buildReviewEmbed(record) {
         "",
         `**User Response:**\n${trimEmbedValue(record.finalAnswer || record.pendingAnswer || "No answer saved.", 2600)}`,
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
         "",
         `React with ${approved} to approve and unban.`,
         `React with ${denied} to deny the appeal.`,
@@ -769,7 +769,7 @@ async function createMainReviewThread(client, record) {
   if (!reviewChannel?.send) throw new Error("I could not find the main #Ban-Appeals review channel.");
 
   const starter = await reviewChannel.send({
-    content: `${GLACE} New ban appeal submitted for **${record.userTag || record.userId}** — ${record.ruleLabel}`,
+    content: `${GLACE} New ban appeal submitted for **${record.userTag || record.userId}** \u2014 ${record.ruleLabel}`,
   });
 
   const threadName = `Appeal - ${(record.username || "User").slice(0, 30)} - Rule ${record.ruleId}`.slice(0, 90);
@@ -881,7 +881,7 @@ async function editAppeal(interaction, recordId) {
       new EmbedBuilder()
         .setColor(COLORS.glace)
         .setTitle(`${GLACE} Edit Your Appeal`)
-        .setDescription("No problem. Please send your updated full appeal response in this channel. I’ll ask you to confirm again once it is ready."),
+        .setDescription("No problem. Please send your updated full appeal response in this channel. I\u2019ll ask you to confirm again once it is ready."),
     ],
     components: [],
   }).catch(async () => {
@@ -973,7 +973,7 @@ async function dmDecision(client, record, approved) {
             "",
             "Your ban appeal has been reviewed and approved. You have been unbanned from the Glace Hotels Discord server.",
             "",
-            "Please make sure to follow our rules moving forward. We’re giving you another chance, and we truly hope you use it respectfully.",
+            "Please make sure to follow our rules moving forward. We\u2019re giving you another chance, and we truly hope you use it respectfully.",
             invite ? `\n${invite}` : "",
           ].join("\n")
         : [

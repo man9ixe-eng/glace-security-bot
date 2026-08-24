@@ -79,12 +79,12 @@ module.exports = {
     if (!parsed) {
       return interaction.reply({
         content: [
-          '❌ I could not understand that date, time, or timezone.',
+          '\u274C I could not understand that date, time, or timezone.',
           '',
           '**Examples**',
-          '• `08/12/2026` and `3:00 PM CET`',
-          '• `08/12/2026` and `15:00 GMT`',
-          '• `08/12/2026` and `2 PM America/Chicago`',
+          '\u2022 `08/12/2026` and `3:00 PM CET`',
+          '\u2022 `08/12/2026` and `15:00 GMT`',
+          '\u2022 `08/12/2026` and `2 PM America/Chicago`',
           '',
           supportedTimeZoneSummary(),
         ].join('\n'),
@@ -112,13 +112,13 @@ module.exports = {
 
       return interaction.editReply({
         content: [
-          `✅ **${sessionTypeDisplay(sessionType)} ADDED** ✅`,
+          `\u2705 **${sessionTypeDisplay(sessionType)} ADDED** \u2705`,
           '',
           `Thank you, <@${interaction.user.id}> ! Your session information is below:`,
           '',
-          `• Host: ${hostName}`,
-          `• Date: ${parsed.source.dateDisplay}`,
-          `• Time: ${clockDisplayWithSeconds(parsed.source.clockDisplay)}`,
+          `\u2022 Host: ${hostName}`,
+          `\u2022 Date: ${parsed.source.dateDisplay}`,
+          `\u2022 Time: ${clockDisplayWithSeconds(parsed.source.clockDisplay)}`,
           '',
           `Card Link: ${result.url || '(no link returned)'}`,
         ].join('\n'),
