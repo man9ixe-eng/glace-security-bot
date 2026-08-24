@@ -14,6 +14,7 @@ const { handleQueueButtonInteraction } = require('./utils/sessionQueueManager');
 const { handleEditActivityReply } = require('./utils/editActivityManager');
 const { runWeeklyMaintenance } = require('./utils/activityTracker');
 const ticketSystem = require('./utils/ticketSystem');
+const { handleRestrictedPrefixCommand } = require('./utils/prefixCommandSystem');
 const PriorityStore = require('./utils/priorityStore');
 const { enforceCommandAccess, denyAccess } = require('./utils/commandAccess');
 const { auditCommand } = require('./utils/operationsAudit');
@@ -300,6 +301,11 @@ if (ENABLE_MESSAGE_CONTENT) {
     }
 
     if (message.author?.bot) return;
+    try {
+      if (await handleRestrictedPrefixCommand(message)) return;
+    } catch (error) {
+      console.error('[PREFIX COMMAND] Message handling failed:', error);
+    }
 
     try {
       if (banAppeals?.handleAppealTicketMessage && await banAppeals.handleAppealTicketMessage(message)) return;
@@ -314,7 +320,6 @@ if (ENABLE_MESSAGE_CONTENT) {
     try { await handleMessageAutomod(message); }
     catch (error) { console.error('[AUTOMOD] Message processing failed:', error); }
 
-    if (message.content === '!ping') message.reply('Pong!').catch(() => null);
   });
 }
 
